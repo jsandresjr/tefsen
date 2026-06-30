@@ -3,70 +3,145 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Tefsen builds education and technology tools for students, creators, and learning communities." />
+  <meta name="description" content="Tefsen builds smart digital tools for education, students, and communities." />
+  <meta name="theme-color" content="#07111f" />
   <title>Tefsen | Education & Technology</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div class="noise"></div>
+  <div class="cursor-glow" aria-hidden="true"></div>
   <header class="site-header">
-    <a class="logo" href="#home" aria-label="Tefsen home"><span>T</span>Tefsen</a>
-    <button class="menu-btn" id="menuBtn" aria-label="Open navigation">☰</button>
-    <nav class="nav" id="nav">
-      <a href="#apps">Apps</a><a href="#platform">Platform</a><a href="#about">About</a><a href="#contact">Contact</a><a href="privacy.html">Privacy</a>
+    <a class="brand" href="#home" aria-label="Tefsen home">
+      <img src="assets/tefsen-logo.png" alt="Tefsen logo" />
+      <span>Tefsen</span>
+    </a>
+    <button class="menu-btn" aria-label="Open menu">☰</button>
+    <nav class="nav-links">
+      <a href="#apps">Apps</a>
+      <a href="#platform">Platform</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+      <a href="privacy.html">Privacy</a>
+      <a class="nav-cta" href="#contact">Get Started</a>
     </nav>
   </header>
 
   <main id="home">
-    <section class="hero section">
-      <div class="orb orb-one"></div><div class="orb orb-two"></div>
-      <div class="hero-content reveal">
-        <p class="eyebrow">Official Tefsen Website</p>
-        <h1>Building smart digital tools for education, students, and communities.</h1>
-        <p class="hero-text">Tefsen helps learners connect, share knowledge, discover educational content, and grow through modern mobile and web experiences.</p>
-        <div class="hero-actions">
-          <a class="btn primary" href="#apps">Explore Tefsen</a>
-          <a class="btn ghost" href="privacy.html">Privacy Policy</a>
+    <section class="hero section-pad">
+      <div class="hero-bg"></div>
+      <div class="hero-grid container">
+        <div class="hero-copy reveal">
+          <p class="pill">Official Tefsen Website</p>
+          <h1>Building smart digital tools for <span>education</span>, <span>students</span>, and <span>communities</span>.</h1>
+          <p class="hero-text">Tefsen helps learners connect, share knowledge, discover educational content, and grow through modern mobile and web experiences.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="#apps">Explore Tefsen <span>→</span></a>
+            <a class="btn ghost" href="#platform">Learn More</a>
+          </div>
+          <div class="feature-row">
+            <div><strong>✓</strong><span>Student friendly</span></div>
+            <div><strong>✓</strong><span>Fast & secure</span></div>
+            <div><strong>✓</strong><span>Mobile first</span></div>
+          </div>
         </div>
-        <div class="stats">
-          <div><strong>24/7</strong><span>Learning access</span></div>
-          <div><strong>Mobile</strong><span>First design</span></div>
-          <div><strong>Secure</strong><span>Privacy focused</span></div>
+
+        <div class="hero-visual reveal delay-1" aria-label="Tefsen digital globe visual">
+          <div class="globe-wrap">
+            <div class="globe">
+              <span class="orbit one"></span>
+              <span class="orbit two"></span>
+              <span class="orbit three"></span>
+              <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span><span class="dot d4"></span>
+            </div>
+            <div class="app-card glass">
+              <img src="assets/tefsen-logo.png" alt="Tefsen app icon" />
+              <h3>Tefsen App</h3>
+              <p>Your all-in-one education companion.</p>
+              <div class="store-row">
+                <span>Google Play</span>
+                <span>Web App</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stats container reveal delay-2">
+        <div><b data-count="10000">0</b><span>Students Goal</span></div>
+        <div><b data-count="500">0</b><span>Articles Goal</span></div>
+        <div><b data-count="5000">0</b><span>App Downloads Goal</span></div>
+        <div><b data-count="25">0</b><span>Countries Goal</span></div>
+      </div>
+    </section>
+
+    <section id="apps" class="section-pad container">
+      <div class="section-head reveal">
+        <p class="pill">Apps</p>
+        <h2>Made for learners on every device.</h2>
+        <p>Launch your Android app, web platform, and future tools from one professional brand home.</p>
+      </div>
+      <div class="cards three">
+        <article class="card reveal"><span class="icon">📱</span><h3>Android App</h3><p>Google Play ready with privacy policy, app information, and clean branding.</p></article>
+        <article class="card reveal delay-1"><span class="icon">🌐</span><h3>Web Platform</h3><p>Fast website for articles, student features, and community content.</p></article>
+        <article class="card reveal delay-2"><span class="icon">🎓</span><h3>Education Hub</h3><p>Designed for students to learn, publish, discuss, and grow together.</p></article>
+      </div>
+    </section>
+
+    <section id="platform" class="section-pad platform">
+      <div class="container split">
+        <div class="reveal">
+          <p class="pill">Platform</p>
+          <h2>Simple, fast, and ready to grow.</h2>
+          <p>Tefsen is being built as a modern education platform with student accounts, educational articles, community discussions, and mobile-first learning experiences.</p>
+          <ul class="check-list">
+            <li>Student-friendly interface</li>
+            <li>Educational article publishing</li>
+            <li>Community discussion features</li>
+            <li>Mobile-first performance</li>
+          </ul>
+        </div>
+        <div class="glass info-panel reveal delay-1">
+          <div class="bar"></div>
+          <h3>Google Play Ready</h3>
+          <p>This website includes a public privacy policy page for Play Console requirements.</p>
+          <a href="privacy.html">View Privacy Policy →</a>
         </div>
       </div>
     </section>
 
-    <section class="section" id="apps">
-      <div class="section-head reveal"><p class="eyebrow">Our Apps</p><h2>Digital products designed for real student needs.</h2></div>
-      <div class="cards">
-        <article class="card reveal"><div class="icon">🎓</div><h3>Tefsen Student</h3><p>A student-focused space for learning, updates, educational tools, and knowledge sharing.</p></article>
-        <article class="card reveal"><div class="icon">📚</div><h3>Education Hub</h3><p>Publish articles, guides, and community content that helps students make better decisions.</p></article>
-        <article class="card reveal"><div class="icon">🌍</div><h3>Community Platform</h3><p>Connect learners, university students, and education-focused contributors in one place.</p></article>
+    <section id="about" class="section-pad container about-grid">
+      <div class="section-head reveal">
+        <p class="pill">About</p>
+        <h2>Tefsen connects education and technology.</h2>
+        <p>Our mission is to create useful digital products that help students access knowledge, share experience, and build stronger learning communities.</p>
+      </div>
+      <div class="timeline reveal delay-1">
+        <div><b>01</b><h3>Learn</h3><p>Access educational articles and learning resources.</p></div>
+        <div><b>02</b><h3>Connect</h3><p>Build student-focused community experiences.</p></div>
+        <div><b>03</b><h3>Grow</h3><p>Use technology to support long-term educational success.</p></div>
       </div>
     </section>
 
-    <section class="split section" id="platform">
-      <div class="reveal"><p class="eyebrow">Platform</p><h2>Simple, fast, and ready to grow.</h2><p>Tefsen is being built as a modern education platform with student accounts, articles, community features, and app-based learning experiences.</p><ul class="checklist"><li>Student-friendly interface</li><li>Educational article publishing</li><li>Community discussion features</li><li>Mobile-first performance</li></ul></div>
-      <div class="panel reveal"><div class="panel-line"></div><h3>Google Play Ready</h3><p>This website includes a public privacy policy page for Play Console requirements.</p><a href="privacy.html">View Privacy Policy →</a></div>
-    </section>
-
-    <section class="section" id="about">
-      <div class="about-box reveal"><p class="eyebrow">About Tefsen</p><h2>Education meets technology.</h2><p>Tefsen is focused on creating useful digital tools and learning experiences for students. Our goal is to make education easier to access, easier to share, and more connected through technology.</p></div>
-    </section>
-
-    <section class="section contact" id="contact">
-      <div class="section-head reveal"><p class="eyebrow">Contact</p><h2>Get in touch with Tefsen.</h2></div>
-      <div class="contact-grid reveal">
-        <a class="contact-card" href="mailto:developer@tefsen.com"><span>✉️</span><div><strong>Email</strong><p>developer@tefsen.com</p></div></a>
-        <a class="contact-card" href="https://tefsen.com"><span>🌐</span><div><strong>Website</strong><p>tefsen.com</p></div></a>
+    <section id="contact" class="section-pad container contact-section">
+      <div class="contact-card glass reveal">
+        <div>
+          <p class="pill">Contact</p>
+          <h2>Ready to build with Tefsen?</h2>
+          <p>For support, app questions, or partnership inquiries, contact the Tefsen team.</p>
+        </div>
+        <a class="btn primary" href="mailto:developer@tefsen.com">developer@tefsen.com</a>
       </div>
     </section>
   </main>
 
-  <footer><p>© <span id="year"></span> Tefsen. All rights reserved.</p><div><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></div></footer>
-  <script src="script.js"></script>
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div><a class="brand" href="#home"><img src="assets/tefsen-logo.png" alt="Tefsen logo" /><span>Tefsen</span></a><p>Education & Technology</p></div>
+      <div class="footer-links"><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><a href="#contact">Contact</a></div>
+    </div>
+    <p class="copy">© 2026 Tefsen. All rights reserved.</p>
+  </footer>
+  <script src="js/main.js"></script>
 </body>
 </html>
