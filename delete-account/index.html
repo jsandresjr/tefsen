@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delete Account | Tefsen</title>
+  <meta name="description" content="Request deletion of your Tefsen account and associated data." />
+  <style>
+    :root {
+      --bg: #071426;
+      --card: rgba(255,255,255,0.07);
+      --border: rgba(255,255,255,0.14);
+      --text: #f5f8ff;
+      --muted: #a9b8d0;
+      --accent: #37c7ff;
+      --accent2: #6df3a5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(55,199,255,.22), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(109,243,165,.14), transparent 30%),
+        var(--bg);
+      line-height: 1.65;
+    }
+    header {
+      padding: 28px 22px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(3,10,20,.65);
+      backdrop-filter: blur(16px);
+    }
+    .nav, main, footer {
+      width: min(1000px, 92%);
+      margin: auto;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .logo {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #2ba7ff, #6df3a5);
+      color: white;
+      font-weight: 900;
+    }
+    main { padding: 56px 0; }
+    .hero {
+      padding: 38px;
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      background: var(--card);
+      box-shadow: 0 25px 80px rgba(0,0,0,.25);
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(34px, 6vw, 64px);
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+    }
+    h2 {
+      margin-top: 38px;
+      font-size: 26px;
+    }
+    p, li { color: var(--muted); font-size: 17px; }
+    .pill {
+      display: inline-flex;
+      padding: 9px 14px;
+      border-radius: 999px;
+      color: #c8f3ff;
+      border: 1px solid rgba(55,199,255,.35);
+      background: rgba(55,199,255,.10);
+      margin-bottom: 22px;
+      font-weight: 700;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+      margin-top: 24px;
+    }
+    .card {
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.055);
+    }
+    .highlight { color: var(--accent2); font-weight: 800; }
+    a { color: var(--accent); }
+    .button {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 14px 20px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #2ba7ff, #18d4a0);
+      color: #001221;
+      text-decoration: none;
+      font-weight: 900;
+    }
+    footer {
+      padding: 30px 0 50px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav">
+      <div class="brand">
+        <div class="logo">T</div>
+        <span>Tefsen</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="pill">Account & Data Deletion</div>
+      <h1>Delete your Tefsen account</h1>
+      <p>
+        You can request deletion of your Tefsen account and associated personal data at any time.
+        This page explains how to request deletion, what data is deleted, what data may be retained,
+        and how long the process may take.
+      </p>
+
+      <a class="button" href="mailto:support@tefsen.com?subject=Tefsen%20Account%20Deletion%20Request">Request account deletion</a>
+
+      <h2>How to request account deletion</h2>
+      <p>Send an email to <a href="mailto:support@tefsen.com">support@tefsen.com</a> with the subject line:</p>
+      <p><strong>Tefsen Account Deletion Request</strong></p>
+      <p>Please include the email address or username connected to your Tefsen account so we can identify the account.</p>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Data we delete</h2>
+          <ul>
+            <li>Account profile information</li>
+            <li>Name, username, and email address</li>
+            <li>Profile photo, if uploaded</li>
+            <li>School or university profile details</li>
+            <li>Posts, questions, comments, and answers where deletion is technically possible</li>
+            <li>Verification-related profile information</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>Data we may retain</h2>
+          <ul>
+            <li>Records required for security, fraud prevention, or legal compliance</li>
+            <li>Payment or subscription records handled by Google Play, where required</li>
+            <li>Moderation logs needed to keep the community safe</li>
+            <li>Anonymous or aggregated data that no longer identifies you</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Deletion timeline</h2>
+      <p>
+        We aim to process account deletion requests within <span class="highlight">30 days</span>.
+        Some limited records may be retained for a longer period where required by law, security,
+        fraud prevention, dispute resolution, or payment processing requirements.
+      </p>
+
+      <h2>Subscription note</h2>
+      <p>
+        If you purchased a Tefsen subscription through Google Play, deleting your Tefsen account does
+        not automatically cancel your Google Play subscription. You should cancel the subscription from
+        your Google Play account if you no longer want to be charged.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        For account deletion or privacy questions, contact us at
+        <a href="mailto:support@tefsen.com">support@tefsen.com</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    © 2026 Tefsen. All rights reserved.
+  </footer>
+</body>
+</html>
