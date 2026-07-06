@@ -13,6 +13,7 @@ window.TEFSEN_FIREBASE_CONFIG = {
   storageBucket: "tefsen-fa2b5.firebasestorage.app",
   messagingSenderId: "76407763303",
   appId: "1:76407763303:web:1c0efe04b5f6636815ffc2",
+  measurementId: "G-VQ8W2H5YD2"
 };
 
 // Optional: reCAPTCHA Enterprise or v3 site key for Firebase App Check.
