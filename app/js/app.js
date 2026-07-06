@@ -23,6 +23,9 @@ let currentComments = [];
 let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
 let currentProfileView = null;
+let settingsTab = 'profile';
+const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
+const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
 
 const navItems = [
@@ -55,8 +58,9 @@ function verifiedMark(value, role = 'Student') {
   if (!active) return '';
   const normalized = normalizeRole(role || 'Student');
   const lower = normalized.toLowerCase();
-  const tone = lower.includes('admin') ? 'admin' : lower.includes('university') ? 'university' : 'student';
-  const label = lower.includes('admin') ? 'Admin verified' : lower.includes('university') ? 'University student verified' : 'Student verified';
+  const isUniversity = lower.includes('university') || /(^|\s)uni(\s|$)/.test(lower) || lower.includes('campus student');
+  const tone = lower.includes('admin') ? 'admin' : isUniversity ? 'university' : 'student';
+  const label = lower.includes('admin') ? 'Admin verified' : isUniversity ? 'University student verified' : 'Student verified';
   return `<span class="verified-badge verified-${tone}" title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path class="verified-badge-fill" d="M12 2.3l2.2 1.5 2.7-.2 1.1 2.5 2.4 1.3-.5 2.7 1.5 2.2-1.5 2.2.5 2.7-2.4 1.3-1.1 2.5-2.7-.2L12 21.7l-2.2-1.5-2.7.2L6 17.9l-2.4-1.3.5-2.7L2.6 12l1.5-2.2-.5-2.7L6 5.8l1.1-2.5 2.7.2L12 2.3Z"/><path class="verified-badge-check" d="m8.1 12.2 2.4 2.4 5.4-5.5"/></svg></span>`;
 }
 
@@ -451,27 +455,35 @@ async function renderSubscription() {
   let usage = { textPosts: 0, imagePosts: 0 };
   try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
   const textLimit = Number.isFinite(policy.dailyTextPosts) ? policy.dailyTextPosts : 'Unlimited';
+  const playAction = policy.subscribed
+    ? `<a class="btn btn-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
+    : `<a class="btn btn-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Subscribe with Google Play</a>`;
   const content = `${demoBanner()}<header class="page-head"><div><h1>Subscription</h1><p>Your web limits follow the subscription status on the same Tefsen account.</p></div></header>
     <section class="panel subscription-hero ${policy.subscribed ? 'is-subscribed' : ''}">
-      <div><span class="subscription-kicker">${policy.subscribed ? 'ACTIVE PLAN' : 'CURRENT PLAN'}</span><h2>${escapeHTML(policy.name)}</h2><p>${policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Text questions are available without a subscription.'}</p></div>
-      <span class="subscription-status">${policy.subscribed ? 'Active' : 'Free'}</span>
+      <div><span class="subscription-kicker">${policy.subscribed ? 'ACTIVE PLAN' : 'UPGRADE OPTION'}</span><h2>${policy.subscribed ? 'Subscribed Student' : 'Tefsen Student Plus'}</h2><p>${policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Unlock higher image limits and unlimited text posts.'}</p></div>
+      <div class="subscription-price-wrap"><strong class="subscription-price">$2.99</strong><span>/ month</span></div>
     </section>
     <div class="subscription-grid">
       <section class="panel subscription-card"><h3>Image posts</h3><b>${policy.dailyImagePosts} per day</b><p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p><small>Today: ${usage.imagePosts}/${policy.dailyImagePosts}</small></section>
       <section class="panel subscription-card"><h3>Text posts</h3><b>${textLimit} per day</b><p>Questions and knowledge posts without images.</p><small>Today: ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? `/${policy.dailyTextPosts}` : ''}</small></section>
     </div>
-    <section class="panel subscription-note"><h3>Same subscription as the Tefsen app</h3><p>The web app reads the subscription state stored on your Tefsen account. Purchase, renewal and billing remain managed by your existing mobile-app subscription system.</p><button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></section>`;
+    <section class="panel subscription-note subscription-play-card"><div><h3>Google Play billing</h3><p>Subscribe through the Tefsen Android app on Google Play. After purchase, return here and sync the same Tefsen account.</p></div><div class="subscription-actions">${playAction}<button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div></section>`;
   renderShell(content, { wide: true });
 }
 
 function renderSettings() {
   const p = state.profile || {};
+  const compact = localStorage.getItem('tefsen_pref_compact') === '1';
+  const motion = localStorage.getItem('tefsen_pref_motion') === '1';
+  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" aria-selected="${settingsTab === id}">${label}</button>`;
+  const panelClass = id => `settings-panel ${settingsTab === id ? 'active' : ''}`;
   const content = `${demoBanner()}<header class="page-head"><div><h1>Settings</h1><p>Manage your profile and web experience.</p></div></header>
-    <div class="settings-grid"><aside class="panel settings-nav"><button class="active">Profile</button><button>Preferences</button><button>Account</button></aside>
-    <section class="panel settings-section"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form>
-    <div class="nav-divider"></div><h3>Preferences</h3><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle" type="button" data-pref="compact"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle" type="button" data-pref="motion"></button></div>
-    <div class="nav-divider"></div><h3>Subscription</h3><div class="setting-row"><span><b>${p.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><p>Web posting limits sync with your Tefsen account.</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div>
-    <div class="nav-divider"></div><h3>Account</h3><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></section></div>`;
+    <div class="settings-grid"><aside class="panel settings-nav" role="tablist">${tabButton('profile','Profile')}${tabButton('preferences','Preferences')}${tabButton('account','Account')}</aside>
+    <section class="panel settings-section">
+      <div class="${panelClass('profile')}" data-settings-panel="profile"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>
+      <div class="${panelClass('preferences')}" data-settings-panel="preferences"><h2 style="margin-top:0">Preferences</h2><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle ${compact ? 'active' : ''}" type="button" data-pref="compact" aria-pressed="${compact}"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle ${motion ? 'active' : ''}" type="button" data-pref="motion" aria-pressed="${motion}"></button></div></div>
+      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${p.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><p>Web posting limits sync with your Tefsen account.</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
+    </section></div>`;
   renderShell(content,{wide:true});
 }
 
@@ -552,6 +564,18 @@ function openDemoInfo() {
 }
 
 async function handleClick(event) {
+  const settingsTabEl = event.target.closest('[data-settings-tab]');
+  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'profile'; renderSettings(); return; }
+  const prefEl = event.target.closest('[data-pref]');
+  if (prefEl) {
+    const key = prefEl.dataset.pref;
+    const storageKey = key === 'compact' ? 'tefsen_pref_compact' : 'tefsen_pref_motion';
+    const next = localStorage.getItem(storageKey) !== '1';
+    localStorage.setItem(storageKey, next ? '1' : '0');
+    document.documentElement.classList.toggle(key === 'compact' ? 'pref-compact' : 'pref-reduced-motion', next);
+    renderSettings();
+    return;
+  }
   const routeEl = event.target.closest('[data-route]');
   const syncSubscription = event.target.closest('[data-sync-subscription]');
   if (syncSubscription) {

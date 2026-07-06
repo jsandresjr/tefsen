@@ -619,3 +619,28 @@ img { max-width: 100%; }
   .subscription-hero { align-items: flex-start; }
   .post-image-grid .post-image { min-height: 180px; }
 }
+
+
+/* Settings tabs, Google Play subscription CTA, and role badge polish */
+.settings-panel { display: none; }
+.settings-panel.active { display: block; animation: settings-panel-in .16s ease; }
+@keyframes settings-panel-in { from { opacity: .35; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.settings-nav button { cursor: pointer; }
+.settings-nav button.active { background: rgba(42, 157, 214, .18); color: #f3f9fd; }
+.account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.toggle.active { background: linear-gradient(135deg, #25a7ff, #2bd79b); border-color: transparent; }
+.toggle.active::after { transform: translateX(20px); background: #041522; }
+.pref-compact .post-card { padding-top: 14px; padding-bottom: 14px; }
+.pref-reduced-motion *, .pref-reduced-motion *::before, .pref-reduced-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+.subscription-price-wrap { display: flex; align-items: baseline; gap: 5px; flex: 0 0 auto; }
+.subscription-price { font-size: clamp(28px, 4vw, 42px); line-height: 1; letter-spacing: -.045em; color: #f2fbff; }
+.subscription-price-wrap span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.subscription-play-card { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.subscription-play-card > div:first-child { min-width: 0; }
+.subscription-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.verified-badge.verified-university .verified-badge-fill { fill: #168dff; stroke: #7bcfff; }
+@media (max-width: 760px) {
+  .subscription-play-card { align-items: flex-start; flex-direction: column; }
+  .subscription-actions { width: 100%; justify-content: stretch; }
+  .subscription-actions .btn { flex: 1 1 180px; }
+}

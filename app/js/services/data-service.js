@@ -13,6 +13,21 @@ const S = SCHEMA.subcollections;
 
 const userProfileCache = new Map();
 
+function likedCacheKey(userId) { return `tefsen_liked_${String(userId || 'guest')}`; }
+function readLikedCache(userId) {
+  try { return new Set(JSON.parse(localStorage.getItem(likedCacheKey(userId)) || '[]')); }
+  catch { return new Set(); }
+}
+function writeLikedCache(userId, set) {
+  try { localStorage.setItem(likedCacheKey(userId), JSON.stringify([...set].slice(-500))); }
+  catch { /* storage can be unavailable in private contexts */ }
+}
+function updateLikedCache(userId, postId, active) {
+  const cached = readLikedCache(userId);
+  active ? cached.add(postId) : cached.delete(postId);
+  writeLikedCache(userId, cached);
+}
+
 function toBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
@@ -408,7 +423,9 @@ export async function getReactionIds(mode, userId) {
   if (!userId) return { saved: new Set(), liked: new Set() };
   if (mode === 'demo') return { saved: new Set(demoSaved), liked: new Set(demoLiked) };
   const saved = new Set();
-  const liked = new Set();
+  // Seed from local cache so the heart state survives refresh even when a
+  // collection-group query is temporarily blocked by rules/indexing.
+  const liked = readLikedCache(userId);
   try {
     const savedSnap = await getDocs(collection(db, C.users, userId, S.savedPosts));
     savedSnap.forEach(d => saved.add(d.id));
@@ -419,7 +436,8 @@ export async function getReactionIds(mode, userId) {
       const parentPost = d.ref.parent.parent;
       if (parentPost?.id) liked.add(parentPost.id);
     });
-  } catch (e) { console.warn('Liked posts unavailable:', e); }
+    writeLikedCache(userId, liked);
+  } catch (e) { console.warn('Liked posts unavailable; using local cache:', e); }
   return { saved, liked };
 }
 
@@ -438,10 +456,12 @@ export async function toggleLike(mode, userId, postId) {
   if (snap.exists()) {
     await deleteDoc(likeRef);
     await updateDoc(postRef, { likeCount: increment(-1) }).catch(() => {});
+    updateLikedCache(userId, postId, false);
     return false;
   }
   await setDoc(likeRef, { userId, createdAt: serverTimestamp() });
   await updateDoc(postRef, { likeCount: increment(1) }).catch(() => {});
+  updateLikedCache(userId, postId, true);
   return true;
 }
 
