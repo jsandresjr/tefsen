@@ -561,21 +561,37 @@ export async function toggleLike(mode, userId, postId) {
     if (active) demoLiked.delete(postId); else demoLiked.add(postId);
     if (post) post.likeCount = Math.max(0, Number(post.likeCount || 0) + (active ? -1 : 1));
     persistDemo();
-    return !active;
+    return { liked: !active, count: Math.max(0, Number(post?.likeCount || 0)) };
   }
+
   const likeRef = doc(db, C.posts, postId, S.likes, userId);
+  const likesRef = collection(db, C.posts, postId, S.likes);
   const postRef = doc(db, C.posts, postId);
   const snap = await getDoc(likeRef);
-  if (snap.exists()) {
+  const liked = !snap.exists();
+
+  // The like document is the source of truth. Keep this write independent
+  // from the denormalized post counter so stricter post-update rules do not
+  // make a valid like disappear after refresh.
+  if (liked) {
+    await setDoc(likeRef, { userId, createdAt: serverTimestamp() });
+  } else {
     await deleteDoc(likeRef);
-    await updateDoc(postRef, { likeCount: increment(-1) }).catch(() => {});
-    updateLikedCache(userId, postId, false);
-    return false;
   }
-  await setDoc(likeRef, { userId, createdAt: serverTimestamp() });
-  await updateDoc(postRef, { likeCount: increment(1) }).catch(() => {});
-  updateLikedCache(userId, postId, true);
-  return true;
+  updateLikedCache(userId, postId, liked);
+
+  let exactCount = null;
+  try {
+    const aggregate = await getCountFromServer(likesRef);
+    exactCount = Math.max(0, Number(aggregate.data().count || 0));
+    // Best effort only: older Android clients may still read likeCount.
+    await updateDoc(postRef, { likeCount: exactCount }).catch(() => {});
+  } catch (error) {
+    // Fall back to a counter increment, but never roll back the real like doc.
+    await updateDoc(postRef, { likeCount: increment(liked ? 1 : -1) }).catch(() => {});
+  }
+
+  return { liked, count: exactCount };
 }
 
 export async function toggleSave(mode, userId, postId) {
@@ -628,8 +644,46 @@ export async function addComment(mode, user, profile, postId, text) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
+  // Primary web path. Keep this because the web app listens to nested comments.
   const added = await addDoc(collection(db, C.posts, postId, S.comments), item);
-  await updateDoc(doc(db, C.posts, postId), { commentCount: increment(1), answerCount: increment(1) }).catch(() => {});
+
+  // Cross-platform compatibility bridge for the Android app.
+  // Older/mobile builds may read replies from top-level `comments` or `answers`
+  // instead of `posts/{postId}/comments`. Use the same document id and include
+  // common field aliases so both clients can resolve the same answer.
+  const mobileItem = {
+    ...item,
+    id: added.id,
+    postId,
+    questionId: postId,
+    parentPostId: postId,
+    parentId: postId,
+    uid: user.uid,
+    authorUid: user.uid,
+    profileImageUrl: profile?.photoUrl || user.photoURL || '',
+    role: profile?.role || 'Student',
+    verified: Boolean(profile?.verified),
+    answer: text,
+    reply: text,
+    type: 'answer',
+    sourcePlatform: 'web'
+  };
+
+  // Best-effort dual write: do not break the web reply if one legacy mobile
+  // collection is not allowed by current Firestore rules.
+  await Promise.allSettled([
+    setDoc(doc(db, 'comments', added.id), mobileItem),
+    setDoc(doc(db, 'answers', added.id), mobileItem)
+  ]);
+
+  // Maintain common counter aliases used by different Android/web builds.
+  await updateDoc(doc(db, C.posts, postId), {
+    commentCount: increment(1),
+    commentsCount: increment(1),
+    answerCount: increment(1),
+    answersCount: increment(1)
+  }).catch(() => {});
+
   return { id: added.id, ...item };
 }
 
