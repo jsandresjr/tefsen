@@ -21,6 +21,7 @@ let stopMessages = null;
 let reactionState = { saved: new Set(), liked: new Set() };
 let currentComments = [];
 let currentSearch = { users: [], posts: [] };
+const likeRequests = new Set();
 let currentProfileView = null;
 let appStarted = false;
 
@@ -602,13 +603,54 @@ async function handleCompose(form) {
   });
 }
 
+function syncLikeButtons(postId, active, count, pending = false) {
+  document.querySelectorAll('[data-like]').forEach((button) => {
+    if (button.dataset.like !== postId) return;
+    button.classList.toggle('active', active);
+    button.classList.toggle('is-pending', pending);
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = pending;
+    button.innerHTML = `<span>${icon('heart',17)}</span>${formatCount(count)}`;
+  });
+}
+
 async function handleLike(postId) {
+  if (!postId || likeRequests.has(postId)) return;
+
+  const post = state.posts.find(item => item.id === postId);
+  const wasLiked = reactionState.liked.has(postId);
+  const optimisticLiked = !wasLiked;
+  const previousCount = Math.max(0, Number(post?.likeCount || 0));
+  const optimisticCount = Math.max(0, previousCount + (optimisticLiked ? 1 : -1));
+
+  // Optimistic UI: update immediately so the interaction feels native,
+  // then reconcile with Firebase in the background.
+  optimisticLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+  if (post) post.likeCount = optimisticCount;
+  likeRequests.add(postId);
+  syncLikeButtons(postId, optimisticLiked, optimisticCount, true);
+
   try {
-    const active = await toggleLike(state.mode,state.user.uid,postId);
-    active ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
-    const p=state.posts.find(x=>x.id===postId); if(p) p.likeCount=Math.max(0,Number(p.likeCount||0)+(active?1:-1));
-    renderRoute();
-  } catch(e){ toast(humanError(e),'error'); }
+    const serverLiked = await toggleLike(state.mode, state.user.uid, postId);
+    const finalCount = Math.max(0, optimisticCount + (serverLiked === optimisticLiked ? 0 : (serverLiked ? 1 : -1)));
+    serverLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+    if (post) post.likeCount = finalCount;
+    syncLikeButtons(postId, serverLiked, finalCount, false);
+
+    // The Liked tab needs an immediate list refresh when an item is removed.
+    if (state.activeFeedTab === 'liked') renderRoute();
+  } catch (error) {
+    // Roll back the optimistic change if Firebase rejects the write.
+    wasLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+    if (post) post.likeCount = previousCount;
+    syncLikeButtons(postId, wasLiked, previousCount, false);
+    toast(humanError(error), 'error');
+  } finally {
+    likeRequests.delete(postId);
+    document.querySelectorAll('[data-like]').forEach((button) => {
+      if (button.dataset.like === postId) button.disabled = false;
+    });
+  }
 }
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
