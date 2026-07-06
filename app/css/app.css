@@ -685,3 +685,144 @@ img { max-width: 100%; }
   .profile-actions { width: 100%; justify-content: stretch; }
   .profile-actions .btn { flex: 1 1 140px; }
 }
+
+/* Mobile quality pass: header, profile, action counts, menu and spacing */
+.profile-dropdown {
+  position: fixed;
+  top: calc(var(--top) + 8px);
+  right: 12px;
+  width: min(280px, calc(100vw - 24px));
+  padding: 9px;
+}
+.dropdown-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px 10px;
+  min-width: 0;
+}
+.dropdown-user > div:last-child { min-width: 0; }
+.dropdown-user b,
+.dropdown-user small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dropdown-user small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.dropdown-separator { height: 1px; margin: 5px 4px; background: var(--line); }
+.profile-dropdown button { display: flex; align-items: center; gap: 10px; }
+.profile-dropdown button span { min-width: 0; }
+.profile-dropdown .dropdown-danger { color: #ff8da3; }
+.profile-dropdown .dropdown-danger:hover { background: rgba(239, 68, 101, .10); }
+
+.action-btn { min-width: 0; overflow: hidden; }
+.action-btn .action-icon { display: inline-grid; place-items: center; flex: 0 0 auto; }
+.action-btn .action-count {
+  display: inline-block;
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: currentColor;
+  line-height: 1;
+}
+
+@media (max-width: 860px) {
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .topbar-brand {
+    display: flex;
+    padding-left: 0;
+    gap: 7px;
+    min-width: 0;
+    font-size: 17px;
+    letter-spacing: -.02em;
+  }
+  .topbar-brand img { width: 30px; height: 30px; border-radius: 9px; }
+  .topbar-center { min-width: 0; padding: 0; }
+  .mobile-top-brand { display: none !important; }
+  .global-search { width: 100%; min-width: 0; max-width: none; }
+  .global-search input {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 12px 0 38px;
+    font-size: 13.5px;
+  }
+  .global-search .search-icon { left: 12px; }
+  .topbar-actions { padding-right: 0; gap: 6px; }
+  .top-avatar { width: 40px; height: 40px; flex: 0 0 40px; }
+  .profile-dropdown { top: calc(var(--top) + 6px); right: 8px; }
+}
+
+@media (max-width: 640px) {
+  .content-wrap { padding: 12px 11px calc(88px + env(safe-area-inset-bottom)); }
+
+  .topbar { gap: 7px; padding-inline: 8px; }
+  .topbar-brand { font-size: 16px; gap: 5px; }
+  .topbar-brand img { width: 28px; height: 28px; }
+  .global-search input { height: 38px; font-size: 13px; }
+  .top-avatar { width: 38px; height: 38px; flex-basis: 38px; }
+
+  /* Compact, native-feeling mobile profile instead of an oversized card. */
+  .profile-cover { height: 112px; border-radius: 18px 18px 0 0; }
+  .profile-main { margin-top: -31px; padding: 0 14px 15px; }
+  .profile-main .avatar.lg { width: 72px; height: 72px; border-width: 3px; box-shadow: 0 0 0 4px rgba(13, 32, 52, .98), 0 10px 25px rgba(0,0,0,.22); }
+  .profile-topline { align-items: flex-end; gap: 9px; }
+  .profile-topline > div:last-child { min-width: 0; }
+  .profile-topline > div:last-child > .btn,
+  .profile-actions .btn {
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  .profile-actions { width: auto; justify-content: flex-end; gap: 7px; }
+  .profile-actions .btn { flex: 0 1 auto; }
+  .profile-info h1 { margin: 10px 0 2px; font-size: 23px; line-height: 1.15; }
+  .profile-info .handle { font-size: 13px; }
+  .profile-info p { margin: 12px 0; font-size: 14px; line-height: 1.48; }
+  .profile-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 13px;
+  }
+  .profile-stats span {
+    min-width: 0;
+    padding: 8px 2px;
+    text-align: center;
+    border: 1px solid rgba(103, 180, 224, .10);
+    border-radius: 11px;
+    background: rgba(10, 29, 48, .44);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  .profile-stats b { margin-bottom: 3px; font-size: 16px; }
+  .profile-tabs { margin: 11px 0; }
+  .profile-tabs .feed-tab { min-height: 42px; }
+
+  /* Keep engagement numbers visible on narrow screens. */
+  .post-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+  .action-btn { min-height: 40px; padding: 0 5px; gap: 5px; font-size: 11.5px; }
+  .action-btn .action-count { display: inline-block !important; font-size: 11.5px; }
+  .post-card { padding: 14px; border-radius: 18px; }
+  .post-head { gap: 9px; }
+  .post-head-main small { font-size: 10.5px; }
+  .post-body h3 { font-size: 17px; line-height: 1.3; }
+  .post-body p { font-size: 13.5px; line-height: 1.55; }
+
+  .mobile-bottom { height: calc(62px + env(safe-area-inset-bottom)); padding-top: 6px; }
+  .mobile-bottom .create-mobile { width: 44px; height: 44px; border-radius: 14px; }
+}
+
+@media (max-width: 430px) {
+  .topbar-brand span { font-size: 15px; }
+  .global-search input { padding-left: 34px; font-size: 12.5px; }
+  .global-search input::placeholder { color: #7d93aa; }
+  .profile-topline > div:last-child > .btn,
+  .profile-actions .btn { padding-inline: 10px; }
+  .profile-info h1 { font-size: 21px; }
+  .profile-stats span { font-size: 9.5px; }
+  .action-btn { gap: 4px; font-size: 10.5px; }
+  .action-btn svg { width: 16px; height: 16px; }
+}

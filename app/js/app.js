@@ -248,10 +248,15 @@ function mobileNavButton(id, ic, route, label) {
 }
 
 function renderProfileDropdown() {
-  return `<div class="dropdown" data-dropdown>
-    <button type="button" data-route="profile">${icon('user',17)} &nbsp; View profile</button>
-    <button type="button" data-route="settings">${icon('settings',17)} &nbsp; Settings</button>
-    <button type="button" data-logout>${icon('logout',17)} &nbsp; Sign out</button>
+  const p = state.profile || {};
+  return `<div class="dropdown profile-dropdown" data-dropdown>
+    <div class="dropdown-user">${avatar(p,'sm')}<div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(p.role || 'Student'))}</small></div></div>
+    <div class="dropdown-separator"></div>
+    <button type="button" data-route="profile">${icon('user',17)} <span>View profile</span></button>
+    <button type="button" data-route="subscription">${icon('info',17)} <span>Subscription</span></button>
+    <button type="button" data-route="settings">${icon('settings',17)} <span>Settings</span></button>
+    <div class="dropdown-separator"></div>
+    <button type="button" class="dropdown-danger" data-logout>${icon('logout',17)} <span>Sign out</span></button>
   </div>`;
 }
 
@@ -272,6 +277,16 @@ function renderRightbar() {
 }
 
 function scorePost(p) { return Number(p.trendingScore || 0) || Number(p.likeCount || 0) * 2 + Number(p.commentCount || 0) * 3; }
+
+function postBelongsToUser(post, userId) {
+  const target = String(userId || '').trim();
+  if (!target) return false;
+  const ids = [
+    post?.authorId, post?.userId, post?.uid, post?.ownerId,
+    post?.createdBy, post?.authorUid, post?.user?.uid, post?.author?.uid
+  ].map(value => String(value || '').trim()).filter(Boolean);
+  return ids.includes(target);
+}
 
 function getFilteredPosts(tab = state.activeFeedTab) {
   const posts = [...state.posts];
@@ -299,8 +314,8 @@ function postCard(post) {
       ${post.tags?.length ? `<div class="tag-row">${post.tags.slice(0,6).map(t => `<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>` : ''}
     </div>
     <footer class="post-actions">
-      <button class="action-btn like ${liked ? 'active' : ''}" data-like="${escapeHTML(post.id)}"><span>${icon('heart',17)}</span>${formatCount(post.likeCount + (liked && !post._likedIncluded ? 0 : 0))}</button>
-      <button class="action-btn" data-route="post/${encodeURIComponent(post.id)}"><span>${icon('comment',17)}</span>${formatCount(post.commentCount)}</button>
+      <button class="action-btn like ${liked ? 'active' : ''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+      <button class="action-btn" data-route="post/${encodeURIComponent(post.id)}" aria-label="Open comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(post.commentCount)}</span></button>
       <button class="action-btn ${saved ? 'active' : ''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved ? 'Saved' : 'Save'}</button>
       <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
     </footer>
@@ -356,7 +371,7 @@ async function renderPostDetail(postId) {
       <article class="panel detail-card">
         <header class="post-head"><button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button><div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
         <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
-        <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}"><span>${icon('heart',17)}</span>${formatCount(post.likeCount)}</button><button class="action-btn"><span>${icon('comment',17)}</span>${formatCount(currentComments.length || post.commentCount)}</button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
+        <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button><button class="action-btn" aria-label="Comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(currentComments.length || post.commentCount)}</span></button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
       </article>
       <section class="panel answer-form"><div class="panel-title"><h3>Add an answer</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Publish answer</button></div></form></section>
       <div class="answers-head"><h2 style="margin:0">${currentComments.length} ${currentComments.length===1?'Answer':'Answers'}</h2></div>
@@ -440,7 +455,7 @@ async function renderProfile(userId = '') {
   }
   currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
-  const posts = state.posts.filter(p => String(p.authorId || '') === String(profile?.uid || ''));
+  const posts = state.posts.filter(p => postBelongsToUser(p, profile?.uid || ''));
   let follow = { following: false, followersCount: Number(profile?.followersCount || 0), followingCount: Number(profile?.followingCount || 0) };
   try { follow = await getFollowState(state.mode, state.user.uid, profile?.uid || ''); } catch { /* keep profile available */ }
   const actions = own
@@ -702,7 +717,7 @@ function syncLikeButtons(postId, active, count, pending = false) {
     button.classList.toggle('is-pending', pending);
     button.setAttribute('aria-pressed', String(active));
     button.disabled = pending;
-    button.innerHTML = `<span>${icon('heart',17)}</span>${formatCount(count)}`;
+    button.innerHTML = `<span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(count)}</span>`;
   });
 }
 
