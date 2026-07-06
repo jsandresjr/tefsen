@@ -24,6 +24,52 @@ function isAdminRole(role = '') {
   return String(role || '').trim().toLowerCase() === 'admin';
 }
 
+function resolveSubscription(raw = {}) {
+  const nested = raw.subscription && typeof raw.subscription === 'object' ? raw.subscription : (raw.premiumSubscription && typeof raw.premiumSubscription === 'object' ? raw.premiumSubscription : {});
+  const direct = toBoolean(pick(raw, FIELD_ALIASES.subscriptionActive, false)) || toBoolean(nested.active) || toBoolean(nested.isActive) || toBoolean(nested.subscribed);
+  const status = String(pick(raw, FIELD_ALIASES.subscriptionStatus, '') || nested.status || '').trim().toLowerCase();
+  const plan = String(pick(raw, FIELD_ALIASES.subscriptionPlan, '') || nested.plan || nested.tier || nested.productId || '').trim();
+  const expiresAt = pick(raw, FIELD_ALIASES.subscriptionExpiresAt, null) || nested.expiresAt || nested.expiryDate || nested.endAt || null;
+  const expiresDate = timestampToDate(expiresAt);
+  const statusActive = ['active', 'trialing', 'trial', 'subscribed', 'premium', 'paid'].includes(status);
+  const notExpired = expiresDate ? expiresDate.getTime() > Date.now() : false;
+  return {
+    active: Boolean(direct || statusActive || notExpired),
+    status: status || (direct ? 'active' : ''),
+    plan: plan || (direct || statusActive || notExpired ? 'Subscribed Student' : 'Free Student'),
+    expiresAt
+  };
+}
+
+export function getWebPostingPolicy(profile = {}) {
+  const subscribed = Boolean(profile?.subscriptionActive);
+  return subscribed ? {
+    subscribed: true,
+    name: 'Subscribed Student',
+    maxImagesPerPost: 2,
+    maxTotalImageBytes: 6 * 1024 * 1024,
+    dailyImagePosts: 6,
+    dailyTextPosts: Infinity
+  } : {
+    subscribed: false,
+    name: 'Free Student',
+    maxImagesPerPost: 1,
+    maxTotalImageBytes: 2 * 1024 * 1024,
+    dailyImagePosts: 2,
+    dailyTextPosts: 20
+  };
+}
+
+function utcDayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function isWebPostForToday(post, dayKey) {
+  const created = timestampToDate(post.createdAt);
+  if (!created || utcDayKey(created) !== dayKey) return false;
+  return post.webPost === true || String(post.sourcePlatform || '').toLowerCase() === 'web';
+}
+
 async function enrichPostAuthor(mode, post) {
   if (!post?.authorId) return post;
   try {
@@ -86,6 +132,7 @@ function persistDemo() {
 }
 
 export function normalizeUser(raw = {}, id = '') {
+  const subscription = resolveSubscription(raw);
   return {
     ...raw,
     id: id || raw.id || raw.uid || '',
@@ -94,6 +141,10 @@ export function normalizeUser(raw = {}, id = '') {
     photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
     role: pick(raw, FIELD_ALIASES.userRole, 'Student'),
     verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
+    subscriptionActive: subscription.active,
+    subscriptionStatus: subscription.status,
+    subscriptionPlan: subscription.plan,
+    subscriptionExpiresAt: subscription.expiresAt,
     username: raw.username || raw.handle || (raw.email ? String(raw.email).split('@')[0] : ''),
     bio: raw.bio || raw.about || '',
     points: Number(raw.points || raw.score || raw.reputation || 0),
@@ -105,12 +156,17 @@ export function normalizeUser(raw = {}, id = '') {
 export function normalizePost(raw = {}, id = '') {
   const likesValue = pick(raw, FIELD_ALIASES.likeCount, 0);
   const commentsValue = pick(raw, FIELD_ALIASES.commentCount, 0);
+  const primaryImage = pick(raw, FIELD_ALIASES.postImage, '');
+  const rawImages = pick(raw, FIELD_ALIASES.postImages, []);
+  const imageUrls = Array.isArray(rawImages) ? rawImages.filter(Boolean).slice(0, 2) : [];
+  if (!imageUrls.length && primaryImage) imageUrls.push(primaryImage);
   return {
     ...raw,
     id: id || raw.id || '',
     title: pick(raw, FIELD_ALIASES.postTitle, ''),
     content: pick(raw, FIELD_ALIASES.postBody, ''),
-    imageUrl: pick(raw, FIELD_ALIASES.postImage, ''),
+    imageUrl: primaryImage || imageUrls[0] || '',
+    imageUrls,
     authorId: pick(raw, FIELD_ALIASES.postAuthorId, ''),
     authorName: pick(raw, FIELD_ALIASES.postAuthorName, 'Tefsen User'),
     authorPhotoUrl: pick(raw, FIELD_ALIASES.postAuthorPhoto, ''),
@@ -184,32 +240,88 @@ export function subscribePosts(mode, callback, errorCallback = console.error) {
   return () => { unsub?.(); fallbackUnsub?.(); };
 }
 
-export async function createPost(mode, user, profile, payload) {
+export async function getDailyPostUsage(mode, userId) {
+  const dayKey = utcDayKey();
+  if (!userId) return { dayKey, textPosts: 0, imagePosts: 0, totalPosts: 0 };
+
   if (mode === 'demo') {
-    let imageUrl = '';
-    if (payload.imageFile) imageUrl = URL.createObjectURL(payload.imageFile);
+    const rows = demoPosts.map(p => normalizePost(p, p.id)).filter(p => String(p.authorId) === String(userId) && isWebPostForToday(p, dayKey));
+    const imagePosts = rows.filter(p => (p.imageUrls?.length || 0) > 0 || Boolean(p.imageUrl)).length;
+    return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
+  }
+
+  const found = new Map();
+  const collect = snap => snap.forEach(d => found.set(d.id, normalizePost(d.data(), d.id)));
+  const queries = [
+    query(collection(db, C.posts), where('authorId', '==', userId), limit(100)),
+    query(collection(db, C.posts), where('userId', '==', userId), limit(100))
+  ];
+  const results = await Promise.allSettled(queries.map(qry => getDocs(qry)));
+  let success = false;
+  for (const result of results) {
+    if (result.status === 'fulfilled') { success = true; collect(result.value); }
+  }
+  if (!success) {
+    const error = new Error('Could not verify today\'s web posting limits. Please try again.');
+    error.code = 'quota-check-failed';
+    throw error;
+  }
+  const rows = [...found.values()].filter(p => isWebPostForToday(p, dayKey));
+  const imagePosts = rows.filter(p => (p.imageUrls?.length || 0) > 0 || Boolean(p.imageUrl)).length;
+  return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
+}
+
+export async function createPost(mode, user, profile, payload) {
+  const policy = getWebPostingPolicy(profile);
+  const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile]).filter(file => file && file.size);
+  const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  const totalImageBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
+
+  if (imageFiles.length > policy.maxImagesPerPost) {
+    throw new Error(`${policy.name} can add up to ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`);
+  }
+  for (const file of imageFiles) {
+    if (!allowedTypes.has(file.type)) throw new Error('Only PNG, JPG and WebP images are allowed.');
+  }
+  if (totalImageBytes > policy.maxTotalImageBytes) {
+    throw new Error(`${policy.name} image uploads are limited to ${Math.round(policy.maxTotalImageBytes / 1024 / 1024)} MB total per post.`);
+  }
+
+  const usage = await getDailyPostUsage(mode, user.uid);
+  const isImagePost = imageFiles.length > 0;
+  if (isImagePost && usage.imagePosts >= policy.dailyImagePosts) {
+    throw new Error(`Daily image-post limit reached (${policy.dailyImagePosts}). Try again tomorrow.`);
+  }
+  if (!isImagePost && Number.isFinite(policy.dailyTextPosts) && usage.textPosts >= policy.dailyTextPosts) {
+    throw new Error(`Daily text-post limit reached (${policy.dailyTextPosts}). Try again tomorrow.`);
+  }
+
+  if (mode === 'demo') {
+    const imageUrls = imageFiles.map(file => URL.createObjectURL(file));
     const post = normalizePost({
       id: `local-${uid('post')}`,
       authorId: user.uid,
+      userId: user.uid,
       authorName: profile?.fullName || user.displayName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
       role: profile?.role || 'Student', verified: profile?.verified || false,
       title: payload.title, content: payload.content, subject: payload.subject,
-      tags: payload.tags, imageUrl, createdAt: new Date().toISOString(), likeCount: 0, commentCount: 0, saveCount: 0
+      tags: payload.tags, imageUrl: imageUrls[0] || '', imageUrls,
+      createdAt: new Date().toISOString(), likeCount: 0, commentCount: 0, saveCount: 0,
+      webPost: true, sourcePlatform: 'web', webPlan: policy.subscribed ? 'subscribed' : 'free',
+      imageCount: imageUrls.length, totalImageBytes, quotaDay: usage.dayKey
     });
     demoPosts.unshift(post); persistDemo(); return post;
   }
 
-  let imageUrl = '';
-  if (payload.imageFile) {
-    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
-    if (!allowedTypes.has(payload.imageFile.type)) throw new Error('Only PNG, JPG and WebP images are allowed.');
-    if (payload.imageFile.size > 8 * 1024 * 1024) throw new Error('Image must be under 8 MB.');
-    const cleanName = payload.imageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectRef = ref(storage, `post_images/${user.uid}/${Date.now()}-${cleanName}`);
-    const upload = await uploadBytes(objectRef, payload.imageFile, { contentType: payload.imageFile.type });
-    imageUrl = await getDownloadURL(upload.ref);
+  const imageUrls = [];
+  for (const file of imageFiles) {
+    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const objectRef = ref(storage, `post_images/${user.uid}/${Date.now()}-${uid('img')}-${cleanName}`);
+    const upload = await uploadBytes(objectRef, file, { contentType: file.type });
+    imageUrls.push(await getDownloadURL(upload.ref));
   }
+
   const base = {
     title: payload.title,
     questionTitle: payload.title,
@@ -217,7 +329,10 @@ export async function createPost(mode, user, profile, payload) {
     description: payload.content,
     subject: payload.subject || 'General',
     tags: payload.tags || [],
-    imageUrl,
+    imageUrl: imageUrls[0] || '',
+    imageUrls,
+    imageCount: imageUrls.length,
+    totalImageBytes,
     authorId: user.uid,
     userId: user.uid,
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
@@ -226,6 +341,10 @@ export async function createPost(mode, user, profile, payload) {
     authorVerified: Boolean(profile?.verified),
     type: 'question',
     status: 'published',
+    sourcePlatform: 'web',
+    webPost: true,
+    webPlan: policy.subscribed ? 'subscribed' : 'free',
+    quotaDay: usage.dayKey,
     likeCount: 0,
     commentCount: 0,
     answerCount: 0,

@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v1';
+const CACHE = 'tefsen-web-shell-v5-subscription';
 const SHELL = [
   './', './index.html', './css/app.css', './js/app.js',
   './js/config/firebase-config.js', './assets/tefsen-logo.png', './assets/favicon.png'

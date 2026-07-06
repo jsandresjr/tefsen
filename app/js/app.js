@@ -5,7 +5,7 @@ import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
   subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
-  startConversation, normalizeUser, getUserById
+  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage
 } from './services/data-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
@@ -32,6 +32,7 @@ const navItems = [
   ['messages', 'Messages', 'message'],
   ['leaderboard', 'Leaderboard', 'trophy'],
   ['saved', 'Saved', 'bookmark'],
+  ['subscription', 'Subscription', 'info'],
   ['profile', 'Profile', 'user'],
   ['settings', 'Settings', 'settings']
 ];
@@ -49,10 +50,14 @@ function rolePill(role = 'Student') {
   return `<span class="role-pill ${roleClass(role)}">${escapeHTML(normalizeRole(role))}</span>`;
 }
 
-function verifiedMark(value) {
+function verifiedMark(value, role = 'Student') {
   const active = value === true || value === 1 || ['true', '1', 'yes', 'verified'].includes(String(value || '').trim().toLowerCase());
   if (!active) return '';
-  return `<span class="verified-badge" title="Verified" aria-label="Verified"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path class="verified-badge-fill" d="M12 2.3l2.2 1.5 2.7-.2 1.1 2.5 2.4 1.3-.5 2.7 1.5 2.2-1.5 2.2.5 2.7-2.4 1.3-1.1 2.5-2.7-.2L12 21.7l-2.2-1.5-2.7.2L6 17.9l-2.4-1.3.5-2.7L2.6 12l1.5-2.2-.5-2.7L6 5.8l1.1-2.5 2.7.2L12 2.3Z"/><path class="verified-badge-check" d="m8.1 12.2 2.4 2.4 5.4-5.5"/></svg></span>`;
+  const normalized = normalizeRole(role || 'Student');
+  const lower = normalized.toLowerCase();
+  const tone = lower.includes('admin') ? 'admin' : lower.includes('university') ? 'university' : 'student';
+  const label = lower.includes('admin') ? 'Admin verified' : lower.includes('university') ? 'University student verified' : 'Student verified';
+  return `<span class="verified-badge verified-${tone}" title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path class="verified-badge-fill" d="M12 2.3l2.2 1.5 2.7-.2 1.1 2.5 2.4 1.3-.5 2.7 1.5 2.2-1.5 2.2.5 2.7-2.4 1.3-1.1 2.5-2.7-.2L12 21.7l-2.2-1.5-2.7.2L6 17.9l-2.4-1.3.5-2.7L2.6 12l1.5-2.2-.5-2.7L6 5.8l1.1-2.5 2.7.2L12 2.3Z"/><path class="verified-badge-check" d="m8.1 12.2 2.4 2.4 5.4-5.5"/></svg></span>`;
 }
 
 function currentRoute() { return routeParts()[0] || 'home'; }
@@ -256,6 +261,7 @@ function renderRightbar() {
       <h3>Your Tefsen</h3>
       <div class="widget-link">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(state.profile?.role || 'Student'))} · ${formatCount(state.profile?.points || 0)} points</small></div></div>
       <div class="widget-link"><span class="notification-icon">${icon('bookmark',17)}</span><div><b>${reactionState.saved.size} saved items</b><small>Knowledge for later</small></div></div>
+      <button class="widget-link subscription-widget-link" type="button" data-route="subscription"><span class="notification-icon">${icon('info',17)}</span><div><b>${state.profile?.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><small>${state.profile?.subscriptionActive ? '2 images · 6 MB · 6 image posts/day' : '1 image · 2 MB · 2 image posts/day'}</small></div></button>
     </section>
     <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
 }
@@ -277,14 +283,14 @@ function postCard(post) {
   return `<article class="panel post-card" data-post-id="${escapeHTML(post.id)}">
     <header class="post-head">
       <button style="border:0;background:none;padding:0;cursor:pointer" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({ fullName: post.authorName, photoUrl: post.authorPhotoUrl }, '', '')}</button>
-      <div class="post-head-main"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
+      <div class="post-head-main"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified, post.role)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
       <button class="post-menu" type="button" data-post-menu="${escapeHTML(post.id)}" aria-label="Post options">${icon('more',20)}</button>
     </header>
     <div class="post-body" data-route="post/${encodeURIComponent(post.id)}">
       <span class="post-subject">${escapeHTML(post.subject || 'General')}</span>
       <h3>${escapeHTML(displayTitle)}</h3>
       ${post.content && post.content !== post.title ? `<p>${nl2br(post.content.length > 460 ? post.content.slice(0,460) + '…' : post.content)}</p>` : ''}
-      ${post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image" loading="lazy">` : ''}
+      ${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}" loading="lazy" decoding="async">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image" loading="lazy" decoding="async">` : '')}
       ${post.tags?.length ? `<div class="tag-row">${post.tags.slice(0,6).map(t => `<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>` : ''}
     </div>
     <footer class="post-actions">
@@ -343,8 +349,8 @@ async function renderPostDetail(postId) {
     const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
     const content = `<button class="btn btn-ghost" style="margin-bottom:14px" data-back>${icon('back',17)} Back</button>
       <article class="panel detail-card">
-        <header class="post-head">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}<div class="post-head-main"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
-        <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : ''}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
+        <header class="post-head">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}<div class="post-head-main"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
+        <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
         <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}"><span>${icon('heart',17)}</span>${formatCount(post.likeCount)}</button><button class="action-btn"><span>${icon('comment',17)}</span>${formatCount(currentComments.length || post.commentCount)}</button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
       </article>
       <section class="panel answer-form"><div class="panel-title"><h3>Add an answer</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Publish answer</button></div></form></section>
@@ -358,7 +364,7 @@ async function renderPostDetail(postId) {
 
 function answerCard(answer) {
   const user = { fullName: answer.authorName || answer.userName || 'Tefsen User', photoUrl: answer.authorPhotoUrl || answer.profileImageUrl || '' };
-  return `<article class="panel answer-card"><header class="post-head">${avatar(user,'sm')}<div class="post-head-main"><b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified)}</b><small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
+  return `<article class="panel answer-card"><header class="post-head">${avatar(user,'sm')}<div class="post-head-main"><b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b><small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
 }
 
 async function renderNotifications() {
@@ -414,7 +420,7 @@ function messageBubble(m) { return `<div class="bubble ${m.senderId === state.us
 async function renderLeaderboard() {
   if (!state.leaderboard.length) setState({ leaderboard: await getLeaderboard(state.mode).catch(()=>[]) });
   const content = `${demoBanner()}<header class="page-head"><div><h1>Leaderboard</h1><p>Recognising useful contributions across the community.</p></div></header>
-    <section class="panel">${state.leaderboard.length ? state.leaderboard.map((u,i)=>`<button class="leaderboard-row" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}"><span class="rank ${i<3?'top':''}">${i+1}</span><span class="user-inline">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified)}</b><small>${escapeHTML(normalizeRole(u.role))}</small></span></span><span class="points">${formatCount(u.points)} pts</span></button>`).join('') : emptyState('trophy','Leaderboard is empty','Points will appear as members contribute.')}</section>`;
+    <section class="panel">${state.leaderboard.length ? state.leaderboard.map((u,i)=>`<button class="leaderboard-row" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}"><span class="rank ${i<3?'top':''}">${i+1}</span><span class="user-inline">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small>${escapeHTML(normalizeRole(u.role))}</small></span></span><span class="points">${formatCount(u.points)} pts</span></button>`).join('') : emptyState('trophy','Leaderboard is empty','Points will appear as members contribute.')}</section>`;
   renderShell(content);
 }
 
@@ -431,12 +437,31 @@ async function renderProfile(userId = '') {
     <div class="profile-cover"></div>
     <div class="profile-main">
       <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${own ? `<button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit profile</button>` : `<button class="btn btn-primary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button>`}</div></div>
-      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
+      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
       <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(profile?.followersCount || 0)}</b>Followers</span><span><b>${formatCount(profile?.followingCount || 0)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
     </div></section>
     <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
     <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Ask your first question or share something useful.':'This member has not published yet.')}</div>`;
   renderShell(content);
+}
+
+async function renderSubscription() {
+  const p = state.profile || {};
+  const policy = getWebPostingPolicy(p);
+  let usage = { textPosts: 0, imagePosts: 0 };
+  try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
+  const textLimit = Number.isFinite(policy.dailyTextPosts) ? policy.dailyTextPosts : 'Unlimited';
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Subscription</h1><p>Your web limits follow the subscription status on the same Tefsen account.</p></div></header>
+    <section class="panel subscription-hero ${policy.subscribed ? 'is-subscribed' : ''}">
+      <div><span class="subscription-kicker">${policy.subscribed ? 'ACTIVE PLAN' : 'CURRENT PLAN'}</span><h2>${escapeHTML(policy.name)}</h2><p>${policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Text questions are available without a subscription.'}</p></div>
+      <span class="subscription-status">${policy.subscribed ? 'Active' : 'Free'}</span>
+    </section>
+    <div class="subscription-grid">
+      <section class="panel subscription-card"><h3>Image posts</h3><b>${policy.dailyImagePosts} per day</b><p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p><small>Today: ${usage.imagePosts}/${policy.dailyImagePosts}</small></section>
+      <section class="panel subscription-card"><h3>Text posts</h3><b>${textLimit} per day</b><p>Questions and knowledge posts without images.</p><small>Today: ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? `/${policy.dailyTextPosts}` : ''}</small></section>
+    </div>
+    <section class="panel subscription-note"><h3>Same subscription as the Tefsen app</h3><p>The web app reads the subscription state stored on your Tefsen account. Purchase, renewal and billing remain managed by your existing mobile-app subscription system.</p><button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></section>`;
+  renderShell(content, { wide: true });
 }
 
 function renderSettings() {
@@ -445,6 +470,7 @@ function renderSettings() {
     <div class="settings-grid"><aside class="panel settings-nav"><button class="active">Profile</button><button>Preferences</button><button>Account</button></aside>
     <section class="panel settings-section"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form>
     <div class="nav-divider"></div><h3>Preferences</h3><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle" type="button" data-pref="compact"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle" type="button" data-pref="motion"></button></div>
+    <div class="nav-divider"></div><h3>Subscription</h3><div class="setting-row"><span><b>${p.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><p>Web posting limits sync with your Tefsen account.</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div>
     <div class="nav-divider"></div><h3>Account</h3><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></section></div>`;
   renderShell(content,{wide:true});
 }
@@ -454,7 +480,7 @@ async function renderSearch(term = '') {
   renderShell(`<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header><div class="loading-card"></div>`);
   currentSearch = term ? await searchAll(state.mode, term).catch(()=>({users:[],posts:[]})) : {users:[],posts:[]};
   const content = `${demoBanner()}<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header>
-    ${currentSearch.users.length ? `<section class="panel section-card" style="margin-bottom:16px"><div class="panel-title"><h2>People</h2><small>${currentSearch.users.length} results</small></div><div class="search-results">${currentSearch.users.map(u=>`<button class="search-user" type="button" style="width:100%;border:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified)}</b><small style="display:block;color:var(--muted)">${escapeHTML(normalizeRole(u.role))}</small></span></button>`).join('')}</div></section>`:''}
+    ${currentSearch.users.length ? `<section class="panel section-card" style="margin-bottom:16px"><div class="panel-title"><h2>People</h2><small>${currentSearch.users.length} results</small></div><div class="search-results">${currentSearch.users.map(u=>`<button class="search-user" type="button" style="width:100%;border:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small style="display:block;color:var(--muted)">${escapeHTML(normalizeRole(u.role))}</small></span></button>`).join('')}</div></section>`:''}
     <div class="feed-list">${currentSearch.posts.length ? currentSearch.posts.map(postCard).join('') : emptyState('search',term?'No matching discussions':'Start searching','Try a name, subject or question keyword.')}</div>`;
   renderShell(content);
 }
@@ -474,6 +500,7 @@ function renderRoute() {
     case 'leaderboard': renderLeaderboard(); break;
     case 'profile': renderProfile(param || ''); break;
     case 'settings': renderSettings(); break;
+    case 'subscription': renderSubscription(); break;
     case 'post': renderPostDetail(param || ''); break;
     case 'search': renderSearch(param || new URLSearchParams(location.hash.split('?')[1] || '').get('q') || ''); break;
     default: renderHome();
@@ -481,7 +508,15 @@ function renderRoute() {
 }
 
 function openComposer() {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form><div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required placeholder="What would you like to ask or explain?"></div><div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="8000" required placeholder="Add context, what you tried, or a useful explanation…"></textarea></div><div class="input-row"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="60" placeholder="e.g. Physics"></div><div class="field"><label>Tags</label><input class="input" name="tags" maxlength="150" placeholder="circuits, electricity"></div></div><div class="file-drop">${icon('image',24)}<br><b>Add an image</b><br><span class="form-help">PNG, JPG or WebP</span><input type="file" name="image" accept="image/png,image/jpeg,image/webp"></div><div class="image-preview hidden" data-image-preview></div><div class="form-error" data-compose-error></div><div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish</button></div></form></div></section></div>`;
+  const policy = getWebPostingPolicy(state.profile || {});
+  const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
+    <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${policy.dailyImagePosts} image posts/day · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
+    <div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required placeholder="What would you like to ask or explain?"></div>
+    <div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="8000" required placeholder="Add context, what you tried, or a useful explanation…"></textarea></div>
+    <div class="input-row"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="60" placeholder="e.g. Physics"></div><div class="field"><label>Tags</label><input class="input" name="tags" maxlength="150" placeholder="circuits, electricity"></div></div>
+    <div class="file-drop">${icon('image',24)}<br><b>Add ${policy.maxImagesPerPost > 1 ? 'images' : 'an image'}</b><br><span class="form-help">PNG, JPG or WebP · max ${policy.maxImagesPerPost} · ${mb} MB total</span><input type="file" name="images" accept="image/png,image/jpeg,image/webp" ${policy.maxImagesPerPost > 1 ? 'multiple' : ''}></div>
+    <div class="image-preview image-preview-grid hidden" data-image-preview></div><div class="form-error" data-compose-error></div><div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish</button></div></form></div></section></div>`;
 }
 
 function openReportModal(postId) {
@@ -518,6 +553,12 @@ function openDemoInfo() {
 
 async function handleClick(event) {
   const routeEl = event.target.closest('[data-route]');
+  const syncSubscription = event.target.closest('[data-sync-subscription]');
+  if (syncSubscription) {
+    try { const profile = await getProfile(state.mode, state.user); state.profile = profile; toast('Subscription status synced.', 'success'); renderSubscription(); }
+    catch (error) { toast(humanError(error), 'error'); }
+    return;
+  }
   if (routeEl) { event.preventDefault(); go(routeEl.dataset.route); return; }
   const switchEl = event.target.closest('[data-auth-switch]');
   if (switchEl) { renderAuth(switchEl.dataset.authSwitch); return; }
@@ -592,11 +633,16 @@ async function handleForgot() {
 
 async function handleCompose(form) {
   const fd = new FormData(form), errorEl = form.querySelector('[data-compose-error]'), submit = form.querySelector('button[type="submit"]');
+  const imageFiles = fd.getAll('images').filter(file => file && file.size);
   const payload = {
     title: String(fd.get('title')||'').trim(), content: String(fd.get('content')||'').trim(), subject: String(fd.get('subject')||'General').trim() || 'General',
-    tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFile: fd.get('image')?.size ? fd.get('image') : null
+    tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFiles
   };
   if (!payload.title || !payload.content) return;
+  const policy = getWebPostingPolicy(state.profile || {});
+  const totalBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
+  if (imageFiles.length > policy.maxImagesPerPost) { errorEl.textContent = `Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`; return; }
+  if (totalBytes > policy.maxTotalImageBytes) { errorEl.textContent = `Your plan allows ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total images per post.`; return; }
   await withButton(submit, async()=>{
     try { const post = await createPost(state.mode,state.user,state.profile,payload); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
     catch(e){ errorEl.textContent=humanError(e); }
@@ -713,13 +759,24 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
-  const file = event.target.matches('[data-compose-form] input[type="file"]') ? event.target : null;
-  if (file) {
-    const preview=file.form.querySelector('[data-image-preview]'), f=file.files?.[0];
-    if(!f){preview.classList.add('hidden');preview.innerHTML='';return;}
-    if(f.size>8*1024*1024){toast('Image must be under 8 MB.','error');file.value='';return;}
-    const url=URL.createObjectURL(f); preview.innerHTML=`<img src="${url}" alt="Selected image preview">`;preview.classList.remove('hidden');
-  }
+  const fileInput = event.target.matches('[data-compose-form] input[type="file"]') ? event.target : null;
+  if (!fileInput) return;
+  const preview = fileInput.form.querySelector('[data-image-preview]');
+  const files = [...(fileInput.files || [])];
+  const policy = getWebPostingPolicy(state.profile || {});
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+
+  if (!files.length) { preview.classList.add('hidden'); preview.innerHTML = ''; return; }
+  if (files.length > policy.maxImagesPerPost) { toast(`Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`, 'error'); fileInput.value = ''; return; }
+  if (files.some(file => !allowed.has(file.type))) { toast('Only PNG, JPG and WebP images are allowed.', 'error'); fileInput.value = ''; return; }
+  if (totalBytes > policy.maxTotalImageBytes) { toast(`Images must be within ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total for your plan.`, 'error'); fileInput.value = ''; return; }
+
+  preview.innerHTML = files.map((file, index) => {
+    const url = URL.createObjectURL(file);
+    return `<figure><img src="${url}" alt="Selected image ${index + 1}"><figcaption>${(file.size/1024/1024).toFixed(1)} MB</figcaption></figure>`;
+  }).join('');
+  preview.classList.remove('hidden');
 }
 
 document.addEventListener('error', event => {
