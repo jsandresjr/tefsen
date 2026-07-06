@@ -436,3 +436,73 @@ img { max-width: 100%; }
   .modal-backdrop { padding: 0; place-items: end center; }
   .modal { width: 100%; max-height: 92vh; border-radius: 24px 24px 0 0; }
 }
+
+/* Tefsen identity + avatar reliability patch */
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 3px;
+  vertical-align: -3px;
+  flex: 0 0 auto;
+}
+.verified-badge svg { display: block; overflow: visible; }
+.verified-badge-fill { fill: #21a7ff; stroke: #65d7ff; stroke-width: .45; }
+.verified-badge-check { fill: none; stroke: #fff; stroke-width: 2.45; stroke-linecap: round; stroke-linejoin: round; }
+
+.avatar {
+  position: relative;
+  border-radius: 50%;
+  border: 1px solid rgba(104, 211, 255, .30);
+  box-shadow: 0 0 0 2px rgba(8, 25, 42, .92), 0 8px 24px rgba(0, 0, 0, .16);
+  isolation: isolate;
+}
+.avatar.sm { border-radius: 50%; }
+.avatar.lg { border-radius: 50%; }
+.avatar-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 0;
+  color: #fff;
+  font: inherit;
+  font-weight: 850;
+  background: linear-gradient(135deg, #148fe8, #20d7b0);
+}
+.avatar img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: inherit;
+  background: #0d2034;
+}
+.profile-main .avatar.lg {
+  border-radius: 50%;
+  border: 3px solid rgba(75, 202, 255, .74);
+  box-shadow: 0 0 0 5px rgba(13, 32, 52, .98), 0 14px 34px rgba(0, 0, 0, .24);
+}
+.top-avatar {
+  border-radius: 50%;
+  border-color: rgba(92, 209, 255, .42);
+}
+.top-avatar img { border-radius: 50%; object-position: center; }
+.top-avatar { position: relative; isolation: isolate; }
+.top-avatar-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #148fe8, #20d7b0);
+  color: #fff;
+  font-weight: 850;
+}
+.top-avatar img { position: absolute; inset: 0; z-index: 1; }

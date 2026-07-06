@@ -38,15 +38,21 @@ const navItems = [
 function avatar(user, size = '', extra = '') {
   const name = user?.fullName || user?.displayName || user?.authorName || 'Tefsen User';
   const photo = user?.photoUrl || user?.profileImageUrl || user?.photoURL || user?.authorPhotoUrl || '';
-  const cls = `avatar ${size} ${extra}`.trim();
-  return photo ? `<div class="${cls}"><img src="${safeUrl(photo)}" alt="${escapeHTML(name)}"></div>` : `<div class="${cls}" aria-label="${escapeHTML(name)}">${escapeHTML(initials(name))}</div>`;
+  const safePhoto = safeUrl(photo);
+  const cls = `avatar ${size} ${extra} ${safePhoto ? 'has-photo' : ''}`.trim();
+  const fallback = `<span class="avatar-fallback" aria-hidden="true">${escapeHTML(initials(name))}</span>`;
+  return `<div class="${cls}" aria-label="${escapeHTML(name)}">${fallback}${safePhoto ? `<img src="${safePhoto}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</div>`;
 }
 
 function rolePill(role = 'Student') {
   return `<span class="role-pill ${roleClass(role)}">${escapeHTML(normalizeRole(role))}</span>`;
 }
 
-function verifiedMark(value) { return value ? `<span class="verified" title="Verified">${icon('check', 14)}</span>` : ''; }
+function verifiedMark(value) {
+  const active = value === true || value === 1 || ['true', '1', 'yes', 'verified'].includes(String(value || '').trim().toLowerCase());
+  if (!active) return '';
+  return `<span class="verified-badge" title="Verified" aria-label="Verified"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path class="verified-badge-fill" d="M12 2.3l2.2 1.5 2.7-.2 1.1 2.5 2.4 1.3-.5 2.7 1.5 2.2-1.5 2.2.5 2.7-2.4 1.3-1.1 2.5-2.7-.2L12 21.7l-2.2-1.5-2.7.2L6 17.9l-2.4-1.3.5-2.7L2.6 12l1.5-2.2-.5-2.7L6 5.8l1.1-2.5 2.7.2L12 2.3Z"/><path class="verified-badge-check" d="m8.1 12.2 2.4 2.4 5.4-5.5"/></svg></span>`;
+}
 
 function currentRoute() { return routeParts()[0] || 'home'; }
 
@@ -59,7 +65,9 @@ function humanError(error) {
     'auth/weak-password': 'Use a stronger password with at least 6 characters.',
     'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
     'auth/unauthorized-domain': 'Add this website domain to Firebase Authentication authorized domains.',
-    'auth/too-many-requests': 'Too many attempts. Please wait and try again.'
+    'auth/too-many-requests': 'Too many attempts. Please wait and try again.',
+    'permission-denied': 'You do not have permission to do that.',
+    'firestore/permission-denied': 'You do not have permission to do that.'
   };
   return map[code] || error?.message?.replace(/^Firebase:\s*/i, '') || 'Something went wrong. Please try again.';
 }
@@ -185,7 +193,7 @@ function renderShell(content, options = {}) {
         <div class="topbar-actions">
           <button class="icon-button desktop-only" type="button" data-route="messages" aria-label="Messages">${icon('message',19)}</button>
           <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
-          <button class="top-avatar" type="button" data-profile-menu aria-label="Profile menu">${p.photoUrl ? `<img src="${safeUrl(p.photoUrl)}" alt="">` : escapeHTML(initials(p.fullName || 'TU'))}</button>
+          <button class="top-avatar" type="button" data-profile-menu aria-label="Profile menu"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
         </div>
       </header>
 
@@ -481,8 +489,10 @@ function openReportModal(postId) {
 
 function canDeletePost(post) {
   if (!post || !state.user?.uid) return false;
-  const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || '');
-  return Boolean(ownerId) && ownerId === String(state.user.uid);
+  const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || post.authorUid || post.creatorId || '');
+  const ownPost = Boolean(ownerId) && ownerId === String(state.user.uid);
+  const admin = String(state.profile?.role || '').trim().toLowerCase() === 'admin';
+  return ownPost || admin;
 }
 
 async function openPostMenu(postId) {
@@ -669,6 +679,13 @@ function handleInput(event) {
     const url=URL.createObjectURL(f); preview.innerHTML=`<img src="${url}" alt="Selected image preview">`;preview.classList.remove('hidden');
   }
 }
+
+document.addEventListener('error', event => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.closest('.avatar, .top-avatar')) {
+    img.remove();
+  }
+}, true);
 
 window.addEventListener('hashchange', renderRoute);
 document.addEventListener('click', handleClick);

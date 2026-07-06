@@ -11,6 +11,61 @@ import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/fireba
 const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
 
+const userProfileCache = new Map();
+
+function toBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') return ['true', '1', 'yes', 'verified'].includes(value.trim().toLowerCase());
+  return false;
+}
+
+function isAdminRole(role = '') {
+  return String(role || '').trim().toLowerCase() === 'admin';
+}
+
+async function enrichPostAuthor(mode, post) {
+  if (!post?.authorId) return post;
+  try {
+    const user = await getUserById(mode, post.authorId);
+    if (!user) return post;
+    return {
+      ...post,
+      authorName: user.fullName || post.authorName,
+      authorPhotoUrl: user.photoUrl || post.authorPhotoUrl,
+      role: user.role || post.role,
+      verified: Boolean(user.verified || post.verified)
+    };
+  } catch {
+    return post;
+  }
+}
+
+async function enrichPostAuthors(mode, posts = []) {
+  return Promise.all(posts.map(post => enrichPostAuthor(mode, post)));
+}
+
+async function enrichAuthorRecord(mode, item = {}) {
+  const authorId = String(item.authorId || item.userId || item.uid || '');
+  if (!authorId) return item;
+  try {
+    const user = await getUserById(mode, authorId);
+    if (!user) return item;
+    return {
+      ...item,
+      authorId,
+      authorName: user.fullName || item.authorName || item.userName,
+      authorPhotoUrl: user.photoUrl || item.authorPhotoUrl || item.profileImageUrl,
+      authorRole: user.role || item.authorRole || item.role,
+      role: user.role || item.role || item.authorRole,
+      authorVerified: Boolean(user.verified || item.authorVerified || item.verified),
+      verified: Boolean(user.verified || item.verified || item.authorVerified)
+    };
+  } catch {
+    return item;
+  }
+}
+
 let demoPosts = (() => {
   try {
     const saved = JSON.parse(localStorage.getItem('tefsen_demo_posts') || 'null');
@@ -38,7 +93,7 @@ export function normalizeUser(raw = {}, id = '') {
     fullName: pick(raw, FIELD_ALIASES.userName, 'Tefsen User'),
     photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
     role: pick(raw, FIELD_ALIASES.userRole, 'Student'),
-    verified: Boolean(pick(raw, FIELD_ALIASES.userVerified, false)),
+    verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
     username: raw.username || raw.handle || (raw.email ? String(raw.email).split('@')[0] : ''),
     bio: raw.bio || raw.about || '',
     points: Number(raw.points || raw.score || raw.reputation || 0),
@@ -65,20 +120,26 @@ export function normalizePost(raw = {}, id = '') {
     saveCount: Number(pick(raw, FIELD_ALIASES.saveCount, 0) || 0),
     subject: raw.subject || raw.category || raw.topic || 'General',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
-    role: raw.role || raw.authorRole || 'Student',
-    verified: Boolean(raw.verified || raw.authorVerified || false)
+    role: raw.authorRole || raw.role || raw.userRole || 'Student',
+    verified: toBoolean(raw.authorVerified) || toBoolean(raw.verified) || toBoolean(raw.isVerified) || toBoolean(raw.hasVerifiedBadge)
   };
 }
 
 
 export async function getUserById(mode, userId) {
   if (!userId) return null;
+  const key = `${mode}:${userId}`;
+  if (userProfileCache.has(key)) return userProfileCache.get(key);
   if (mode === 'demo') {
     const user = DEMO_USERS.find(u => u.uid === userId || u.id === userId);
-    return user ? normalizeUser(user, userId) : null;
+    const normalized = user ? normalizeUser(user, userId) : null;
+    if (normalized) userProfileCache.set(key, normalized);
+    return normalized;
   }
   const snap = await getDoc(doc(db, C.users, userId));
-  return snap.exists() ? normalizeUser(snap.data(), snap.id) : null;
+  const normalized = snap.exists() ? normalizeUser(snap.data(), snap.id) : null;
+  if (normalized) userProfileCache.set(key, normalized);
+  return normalized;
 }
 
 export async function getProfile(mode, user) {
@@ -98,18 +159,25 @@ export async function getProfile(mode, user) {
 
 export function subscribePosts(mode, callback, errorCallback = console.error) {
   if (mode === 'demo') {
-    callback(demoPosts.map(p => normalizePost(p, p.id)).sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0)));
+    const rows = demoPosts.map(p => normalizePost(p, p.id)).sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
+    void enrichPostAuthors(mode, rows).then(callback).catch(() => callback(rows));
     return () => {};
   }
   let fallbackUnsub = null;
+  const emit = rows => {
+    void enrichPostAuthors(mode, rows).then(callback).catch(error => {
+      console.warn('Post author enrichment failed:', error);
+      callback(rows);
+    });
+  };
   const q = query(collection(db, C.posts), orderBy('createdAt', 'desc'), limit(50));
-  const unsub = onSnapshot(q, snap => callback(snap.docs.map(d => normalizePost(d.data(), d.id))), err => {
+  const unsub = onSnapshot(q, snap => emit(snap.docs.map(d => normalizePost(d.data(), d.id))), err => {
     console.warn('Ordered posts listener failed; trying collection fallback.', err);
     try {
       fallbackUnsub = onSnapshot(query(collection(db, C.posts), limit(50)), snap => {
         const rows = snap.docs.map(d => normalizePost(d.data(), d.id));
         rows.sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
-        callback(rows);
+        emit(rows);
       }, errorCallback);
     } catch (fallbackError) { errorCallback(fallbackError); }
   });
@@ -134,6 +202,9 @@ export async function createPost(mode, user, profile, payload) {
 
   let imageUrl = '';
   if (payload.imageFile) {
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+    if (!allowedTypes.has(payload.imageFile.type)) throw new Error('Only PNG, JPG and WebP images are allowed.');
+    if (payload.imageFile.size > 8 * 1024 * 1024) throw new Error('Image must be under 8 MB.');
     const cleanName = payload.imageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const objectRef = ref(storage, `post_images/${user.uid}/${Date.now()}-${cleanName}`);
     const upload = await uploadBytes(objectRef, payload.imageFile, { contentType: payload.imageFile.type });
@@ -167,9 +238,9 @@ export async function createPost(mode, user, profile, payload) {
 }
 
 export async function getPost(mode, postId) {
-  if (mode === 'demo') return normalizePost(demoPosts.find(p => p.id === postId) || {}, postId);
+  if (mode === 'demo') return enrichPostAuthor(mode, normalizePost(demoPosts.find(p => p.id === postId) || {}, postId));
   const snap = await getDoc(doc(db, C.posts, postId));
-  return snap.exists() ? normalizePost(snap.data(), snap.id) : null;
+  return snap.exists() ? enrichPostAuthor(mode, normalizePost(snap.data(), snap.id)) : null;
 }
 
 export async function deletePost(mode, userId, postId) {
@@ -198,7 +269,10 @@ export async function deletePost(mode, userId, postId) {
 
   const raw = snap.data();
   const ownerId = String(pick(raw, FIELD_ALIASES.postAuthorId, '') || '');
-  if (!ownerId || ownerId !== String(userId)) {
+  const actorSnap = await getDoc(doc(db, C.users, userId));
+  const actorRole = actorSnap.exists() ? pick(actorSnap.data(), FIELD_ALIASES.userRole, '') : '';
+  const actorIsAdmin = isAdminRole(actorRole);
+  if ((!ownerId || ownerId !== String(userId)) && !actorIsAdmin) {
     const error = new Error('You can delete only your own posts.');
     error.code = 'permission-denied';
     throw error;
@@ -271,11 +345,14 @@ export function subscribeComments(mode, postId, callback, errorCallback = consol
     return () => {};
   }
   const commentsRef = collection(db, C.posts, postId, S.comments);
+  const emit = rows => {
+    void Promise.all(rows.map(item => enrichAuthorRecord(mode, item))).then(callback).catch(() => callback(rows));
+  };
   return onSnapshot(query(commentsRef, orderBy('createdAt', 'asc'), limit(100)), snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    emit(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   }, err => {
     console.warn('Ordered comments listener failed:', err);
-    onSnapshot(query(commentsRef, limit(100)), snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))), errorCallback);
+    onSnapshot(query(commentsRef, limit(100)), snap => emit(snap.docs.map(d => ({ id: d.id, ...d.data() }))), errorCallback);
   });
 }
 
@@ -337,15 +414,17 @@ export function subscribeMessages(mode, conversationId, callback, errorCallback 
 }
 
 export async function sendMessage(mode, userId, conversationId, text) {
+  const cleanText = String(text || '').trim().slice(0, 3000);
+  if (!cleanText) throw new Error('Message cannot be empty.');
   if (mode === 'demo') {
-    const item = { id: uid('message'), senderId: userId, text, createdAt: new Date().toISOString() };
+    const item = { id: uid('message'), senderId: userId, text: cleanText, createdAt: new Date().toISOString() };
     demoMessages[conversationId] = [...(demoMessages[conversationId] || []), item];
-    const conv = demoConversations.find(c => c.id === conversationId); if (conv) { conv.lastMessage = text; conv.updatedAt = item.createdAt; }
+    const conv = demoConversations.find(c => c.id === conversationId); if (conv) { conv.lastMessage = cleanText; conv.updatedAt = item.createdAt; }
     return item;
   }
-  const message = { senderId: userId, text, createdAt: serverTimestamp() };
+  const message = { senderId: userId, text: cleanText, createdAt: serverTimestamp() };
   const added = await addDoc(collection(db, C.conversations, conversationId, S.messages), message);
-  await updateDoc(doc(db, C.conversations, conversationId), { lastMessage: text, updatedAt: serverTimestamp() }).catch(() => {});
+  await updateDoc(doc(db, C.conversations, conversationId), { lastMessage: cleanText, updatedAt: serverTimestamp() }).catch(() => {});
   return { id: added.id, ...message };
 }
 
@@ -375,7 +454,8 @@ export async function searchAll(mode, term) {
   ]);
   const users = usersSnap.docs.map(d => normalizeUser(d.data(), d.id)).filter(u => `${u.fullName} ${u.username} ${u.bio}`.toLowerCase().includes(qText));
   const posts = postsSnap.docs.map(d => normalizePost(d.data(), d.id)).filter(p => `${p.title} ${p.content} ${p.subject} ${(p.tags || []).join(' ')}`.toLowerCase().includes(qText));
-  return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
+  const enrichedPosts = await enrichPostAuthors(mode, posts.slice(0, 30));
+  return { users: users.slice(0, 20), posts: enrichedPosts };
 }
 
 export async function updateUserProfile(mode, userId, data) {
@@ -383,20 +463,29 @@ export async function updateUserProfile(mode, userId, data) {
     const base = DEMO_USERS.find(u => u.uid === userId) || {};
     Object.assign(base, data); return normalizeUser(base, userId);
   }
+  const fullName = String(data.fullName || '').trim().slice(0, 80);
+  const username = String(data.username || '').trim().replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40);
+  const bio = String(data.bio || '').trim().slice(0, 500);
+  if (!fullName) throw new Error('Full name is required.');
   const payload = {
-    fullName: data.fullName,
-    displayName: data.fullName,
-    username: data.username,
-    bio: data.bio,
+    fullName,
+    displayName: fullName,
+    username,
+    bio,
     updatedAt: serverTimestamp()
   };
   await setDoc(doc(db, C.users, userId), payload, { merge: true });
-  return normalizeUser({ ...data, uid: userId }, userId);
+  userProfileCache.delete(`${mode}:${userId}`);
+  return normalizeUser({ ...data, ...payload, uid: userId }, userId);
 }
 
 export async function reportPost(mode, userId, postId, reason, details = '') {
+  const allowedReasons = new Set(['Spam', 'Harassment', 'Harmful or unsafe content', 'Misinformation concern', 'Copyright concern', 'Other']);
+  const cleanReason = String(reason || '').trim();
+  const cleanDetails = String(details || '').trim().slice(0, 1000);
+  if (!allowedReasons.has(cleanReason)) throw new Error('Choose a valid report reason.');
   if (mode === 'demo') return { id: uid('report') };
-  return addDoc(collection(db, C.reports), { reporterId: userId, postId, reason, details, status: 'open', createdAt: serverTimestamp() });
+  return addDoc(collection(db, C.reports), { reporterId: userId, postId, reason: cleanReason, details: cleanDetails, status: 'open', createdAt: serverTimestamp() });
 }
 
 export async function startConversation(mode, currentUserId, otherUser) {
