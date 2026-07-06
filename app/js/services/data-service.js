@@ -519,6 +519,41 @@ export async function getReactionIds(mode, userId) {
   return { saved, liked };
 }
 
+export async function hydratePostLikeState(mode, userId, postIds = []) {
+  const ids = [...new Set((postIds || []).map(id => String(id || '').trim()).filter(Boolean))].slice(0, 20);
+  const liked = readLikedCache(userId);
+  const counts = new Map();
+  if (!userId || !ids.length) return { liked, counts };
+
+  if (mode === 'demo') {
+    for (const postId of ids) {
+      if (demoLiked.has(postId)) liked.add(postId); else liked.delete(postId);
+      const post = demoPosts.find(row => row.id === postId);
+      counts.set(postId, Math.max(0, Number(post?.likeCount || 0)));
+    }
+    return { liked, counts };
+  }
+
+  await Promise.allSettled(ids.map(async postId => {
+    const likeRef = doc(db, C.posts, postId, S.likes, userId);
+    const likesRef = collection(db, C.posts, postId, S.likes);
+    const [mine, aggregate] = await Promise.allSettled([
+      getDoc(likeRef),
+      getCountFromServer(likesRef)
+    ]);
+
+    if (mine.status === 'fulfilled') {
+      if (mine.value.exists()) liked.add(postId); else liked.delete(postId);
+    }
+    if (aggregate.status === 'fulfilled') {
+      counts.set(postId, Math.max(0, Number(aggregate.value.data().count || 0)));
+    }
+  }));
+
+  writeLikedCache(userId, liked);
+  return { liked, counts };
+}
+
 export async function toggleLike(mode, userId, postId) {
   if (mode === 'demo') {
     const post = demoPosts.find(p => p.id === postId);

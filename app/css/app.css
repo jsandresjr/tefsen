@@ -1050,3 +1050,63 @@ html.profile-menu-open { overflow: hidden; }
   .lux-billing-card { padding: 18px; border-radius: 22px; }
   .lux-billing-mark { width: 44px; height: 44px; border-radius: 14px; }
 }
+
+/* v10: reliable mobile account menu + avatar privacy hardening */
+.topbar-actions {
+  position: relative;
+  z-index: 220;
+}
+.top-avatar {
+  position: relative;
+  z-index: 230;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  isolation: isolate;
+}
+.top-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+}
+.top-avatar img,
+.avatar img,
+.protected-avatar-image {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+  -webkit-touch-callout: none !important;
+}
+.avatar,
+.top-avatar {
+  -webkit-touch-callout: none !important;
+  user-select: none;
+}
+.profile-menu-backdrop { z-index: 3990 !important; }
+.profile-dropdown { z-index: 4000 !important; }
+
+@media (max-width: 760px) {
+  .topbar-center { min-width: 0; }
+  .topbar-actions { flex: 0 0 auto; }
+  .top-avatar {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    flex: 0 0 48px !important;
+  }
+  .profile-dropdown {
+    position: fixed !important;
+    top: 82px !important;
+    right: 12px !important;
+    left: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(72vh, 620px);
+    overflow: auto;
+    border-radius: 24px !important;
+    box-shadow: 0 26px 80px rgba(0,0,0,.58), 0 0 0 1px rgba(92,220,255,.10) inset !important;
+  }
+}

@@ -6,7 +6,7 @@ import {
   subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
   subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
   startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
-  getFollowState, toggleFollow
+  getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
@@ -28,6 +28,9 @@ let settingsTab = 'profile';
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
+let likeHydrationKey = '';
+let likeHydrationAt = 0;
+let likeHydrationRun = 0;
 
 const navItems = [
   ['home', 'Home', 'home'],
@@ -47,7 +50,7 @@ function avatar(user, size = '', extra = '') {
   const safePhoto = safeUrl(photo);
   const cls = `avatar ${size} ${extra} ${safePhoto ? 'has-photo' : ''}`.trim();
   const fallback = `<span class="avatar-fallback" aria-hidden="true">${escapeHTML(initials(name))}</span>`;
-  return `<div class="${cls}" aria-label="${escapeHTML(name)}">${fallback}${safePhoto ? `<img src="${safePhoto}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</div>`;
+  return `<div class="${cls}" aria-label="${escapeHTML(name)}">${fallback}${safePhoto ? `<img class="protected-avatar-image" src="${safePhoto}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false">` : ''}</div>`;
 }
 
 function rolePill(role = 'Student') {
@@ -129,6 +132,30 @@ async function handleAuthChange(user) {
     stopPosts = subscribePosts(state.mode, posts => {
       setState({ posts });
       renderRoute();
+
+      // Reconcile the current user's exact like documents and server counts.
+      // This avoids stale hearts/counts after refresh when collection-group
+      // queries or post counter writes are blocked by Firestore rules.
+      const visibleIds = posts.slice(0, 20).map(post => post.id).filter(Boolean);
+      const hydrationKey = `${state.user?.uid || ''}:${visibleIds.join('|')}`;
+      const now = Date.now();
+      if (visibleIds.length && (hydrationKey !== likeHydrationKey || now - likeHydrationAt > 30000)) {
+        likeHydrationKey = hydrationKey;
+        likeHydrationAt = now;
+        const run = ++likeHydrationRun;
+        void hydratePostLikeState(state.mode, state.user.uid, visibleIds).then(result => {
+          if (run !== likeHydrationRun) return;
+          reactionState.liked = result.liked;
+          let changed = false;
+          for (const post of posts) {
+            if (!result.counts.has(post.id)) continue;
+            const next = result.counts.get(post.id);
+            if (Number(post.likeCount || 0) !== next) { post.likeCount = next; changed = true; }
+          }
+          if (changed) setState({ posts: [...posts] });
+          renderRoute();
+        }).catch(error => console.warn('Like-state reconciliation failed:', error));
+      }
     }, error => {
       console.error(error);
       toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
@@ -958,7 +985,28 @@ document.addEventListener('error', event => {
   }
 }, true);
 
+function handleProfileMenuCapture(event) {
+  const trigger = event.target.closest?.('[data-profile-menu]');
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.ui.profileMenu = !state.ui.profileMenu;
+  syncProfileMenu();
+}
+
+function protectDisplayedAvatarMedia(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (!target.closest('.avatar, .top-avatar')) return;
+  event.preventDefault();
+}
+
 window.addEventListener('hashchange', renderRoute);
+// Capture phase makes the top-right avatar reliable on mobile even when the
+// search/header layers overlap or the image itself receives the tap.
+document.addEventListener('click', handleProfileMenuCapture, true);
+document.addEventListener('contextmenu', protectDisplayedAvatarMedia, true);
+document.addEventListener('dragstart', protectDisplayedAvatarMedia, true);
 document.addEventListener('click', handleClick);
 document.addEventListener('submit', handleSubmit);
 document.addEventListener('change', handleInput);
