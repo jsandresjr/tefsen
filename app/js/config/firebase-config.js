@@ -7,12 +7,12 @@
  * Do not paste service-account JSON or private keys here.
  */
 window.TEFSEN_FIREBASE_CONFIG = {
-  apiKey: "PASTE_FIREBASE_WEB_API_KEY",
-  authDomain: "PASTE_PROJECT.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_STORAGE_BUCKET",
-  messagingSenderId: "PASTE_MESSAGING_SENDER_ID",
-  appId: "PASTE_WEB_APP_ID"
+  apiKey: "AIzaSyDZG1UISLv-Q-l-xTmrytldWO3dp0MPGuY",
+  authDomain: "tefsen-fa2b5.firebaseapp.com",
+  projectId: "tefsen-fa2b5",
+  storageBucket: "tefsen-fa2b5.firebasestorage.app",
+  messagingSenderId: "76407763303",
+  appId: "1:76407763303:web:1c0efe04b5f6636815ffc2",
 };
 
 // Optional: reCAPTCHA Enterprise or v3 site key for Firebase App Check.
