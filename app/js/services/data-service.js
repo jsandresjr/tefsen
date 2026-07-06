@@ -172,6 +172,45 @@ export async function getPost(mode, postId) {
   return snap.exists() ? normalizePost(snap.data(), snap.id) : null;
 }
 
+export async function deletePost(mode, userId, postId) {
+  if (!userId || !postId) throw new Error('Missing user or post ID.');
+
+  if (mode === 'demo') {
+    const index = demoPosts.findIndex(post => post.id === postId);
+    if (index < 0) return false;
+    const post = normalizePost(demoPosts[index], postId);
+    if (post.authorId && String(post.authorId) !== String(userId)) {
+      const error = new Error('You can delete only your own posts.');
+      error.code = 'permission-denied';
+      throw error;
+    }
+    demoPosts.splice(index, 1);
+    delete demoComments[postId];
+    demoSaved.delete(postId);
+    demoLiked.delete(postId);
+    persistDemo();
+    return true;
+  }
+
+  const postRef = doc(db, C.posts, postId);
+  const snap = await getDoc(postRef);
+  if (!snap.exists()) return false;
+
+  const raw = snap.data();
+  const ownerId = String(pick(raw, FIELD_ALIASES.postAuthorId, '') || '');
+  if (!ownerId || ownerId !== String(userId)) {
+    const error = new Error('You can delete only your own posts.');
+    error.code = 'permission-denied';
+    throw error;
+  }
+
+  // Delete the parent post. Firestore does not automatically delete nested
+  // subcollections; production cleanup for comments/likes is best handled by
+  // a trusted backend or Cloud Function.
+  await deleteDoc(postRef);
+  return true;
+}
+
 export async function getReactionIds(mode, userId) {
   if (!userId) return { saved: new Set(), liked: new Set() };
   if (mode === 'demo') return { saved: new Set(demoSaved), liked: new Set(demoLiked) };

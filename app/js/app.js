@@ -2,7 +2,7 @@ import { initFirebase } from './firebase-client.js';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
-  getProfile, subscribePosts, createPost, getPost, getReactionIds, toggleLike, toggleSave,
+  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
   subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
   startConversation, normalizeUser, getUserById
@@ -479,8 +479,21 @@ function openReportModal(postId) {
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Harmful or unsafe content</option><option>Misinformation concern</option><option>Copyright concern</option><option>Other</option></select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000"></textarea></div><button class="btn btn-danger" type="submit">Submit report</button></form></div></section></div>`;
 }
 
-function openPostMenu(postId) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:420px"><header class="modal-head"><h2>Post options</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body" style="display:grid;gap:10px"><button class="btn btn-secondary" data-share="${escapeHTML(postId)}">${icon('share',17)} Copy share link</button><button class="btn btn-danger" data-report="${escapeHTML(postId)}">Report content</button></div></section></div>`;
+function canDeletePost(post) {
+  if (!post || !state.user?.uid) return false;
+  const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || '');
+  return Boolean(ownerId) && ownerId === String(state.user.uid);
+}
+
+async function openPostMenu(postId) {
+  let post = state.posts.find(item => item.id === postId) || null;
+  if (!post) post = await getPost(state.mode, postId).catch(() => null);
+  const ownPost = canDeletePost(post);
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:420px"><header class="modal-head"><h2>Post options</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body" style="display:grid;gap:10px"><button class="btn btn-secondary" data-share="${escapeHTML(postId)}">${icon('share',17)} Copy share link</button>${ownPost ? `<button class="btn btn-danger" data-delete-post="${escapeHTML(postId)}">Delete post</button>` : `<button class="btn btn-danger" data-report="${escapeHTML(postId)}">Report content</button>`}</div></section></div>`;
+}
+
+function openDeletePostModal(postId) {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:440px" role="dialog" aria-modal="true"><header class="modal-head"><h2>Delete post?</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><p style="margin:0 0 18px;color:var(--muted);line-height:1.6">This will permanently remove your post. This action cannot be undone.</p><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-danger" type="button" data-confirm-delete-post="${escapeHTML(postId)}">Delete post</button></div></div></section></div>`;
 }
 
 function openEditProfile() {
@@ -513,7 +526,11 @@ async function handleClick(event) {
   const share = event.target.closest('[data-share]');
   if (share) { await copyText(`${location.origin}${location.pathname}#/post/${share.dataset.share}`); modalRoot.innerHTML=''; return; }
   const postMenu = event.target.closest('[data-post-menu]');
-  if (postMenu) { openPostMenu(postMenu.dataset.postMenu); return; }
+  if (postMenu) { await openPostMenu(postMenu.dataset.postMenu); return; }
+  const deletePostButton = event.target.closest('[data-delete-post]');
+  if (deletePostButton) { openDeletePostModal(deletePostButton.dataset.deletePost); return; }
+  const confirmDeletePost = event.target.closest('[data-confirm-delete-post]');
+  if (confirmDeletePost) { await handleDeletePost(confirmDeletePost.dataset.confirmDeletePost, confirmDeletePost); return; }
   const report = event.target.closest('[data-report]');
   if (report) { openReportModal(report.dataset.report); return; }
   const notification = event.target.closest('[data-notification]');
@@ -586,6 +603,30 @@ async function handleLike(postId) {
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
   catch(e){ toast(humanError(e),'error'); }
+}
+
+async function handleDeletePost(postId, button) {
+  const post = state.posts.find(item => item.id === postId) || await getPost(state.mode, postId).catch(() => null);
+  if (!canDeletePost(post)) {
+    modalRoot.innerHTML = '';
+    toast('You can delete only your own posts.', 'error');
+    return;
+  }
+  await withButton(button, async () => {
+    try {
+      await deletePost(state.mode, state.user.uid, postId);
+      state.posts = state.posts.filter(item => item.id !== postId);
+      reactionState.saved.delete(postId);
+      reactionState.liked.delete(postId);
+      modalRoot.innerHTML = '';
+      toast('Post deleted successfully.', 'success');
+      const [route, param] = routeParts();
+      if (route === 'post' && param === postId) go('profile');
+      else renderRoute();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
 }
 async function handleComment(form) {
   const text=String(new FormData(form).get('content')||'').trim(); if(!text)return;
