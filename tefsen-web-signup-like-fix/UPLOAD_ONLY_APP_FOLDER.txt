@@ -1,0 +1,14 @@
+Upload only the app folder to the root of your GitHub repository.
+
+Updated files:
+- app/js/app.js
+- app/js/services/data-service.js
+- app/css/app.css
+- app/sw.js
+
+This patch does not replace:
+- app/js/config/firebase-config.js
+- privacy.html
+- delete-account.html
+- delete-account/
+- CNAME

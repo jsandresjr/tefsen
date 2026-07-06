@@ -1,0 +1,1066 @@
+import { initFirebase } from './firebase-client.js';
+import { state, setState } from './store.js';
+import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
+import {
+  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
+  subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
+  subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
+  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
+  getFollowState, toggleFollow, hydratePostLikeState
+} from './services/data-service.js';
+import {
+  icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
+  routeParts, go, toast, copyText, roleClass, normalizeRole
+} from './utils.js';
+
+const root = document.getElementById('app-root');
+const modalRoot = document.getElementById('modal-root');
+let stopAuth = null;
+let stopPosts = null;
+let stopComments = null;
+let stopMessages = null;
+let reactionState = { saved: new Set(), liked: new Set() };
+let currentComments = [];
+let currentSearch = { users: [], posts: [] };
+const likeRequests = new Set();
+let currentProfileView = null;
+let settingsTab = 'profile';
+const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
+const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
+let appStarted = false;
+let likeHydrationKey = '';
+let likeHydrationAt = 0;
+let likeHydrationRun = 0;
+
+const navItems = [
+  ['home', 'Home', 'home'],
+  ['explore', 'Explore', 'compass'],
+  ['notifications', 'Notifications', 'bell'],
+  ['messages', 'Messages', 'message'],
+  ['leaderboard', 'Leaderboard', 'trophy'],
+  ['saved', 'Saved', 'bookmark'],
+  ['subscription', 'Subscription', 'info'],
+  ['profile', 'Profile', 'user'],
+  ['settings', 'Settings', 'settings']
+];
+
+function avatar(user, size = '', extra = '') {
+  const name = user?.fullName || user?.displayName || user?.authorName || 'Tefsen User';
+  const photo = user?.photoUrl || user?.profileImageUrl || user?.photoURL || user?.authorPhotoUrl || '';
+  const safePhoto = safeUrl(photo);
+  const cls = `avatar ${size} ${extra} ${safePhoto ? 'has-photo' : ''}`.trim();
+  const fallback = `<span class="avatar-fallback" aria-hidden="true">${escapeHTML(initials(name))}</span>`;
+  return `<div class="${cls}" aria-label="${escapeHTML(name)}">${fallback}${safePhoto ? `<img class="protected-avatar-image" src="${safePhoto}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false">` : ''}</div>`;
+}
+
+function rolePill(role = 'Student') {
+  return `<span class="role-pill ${roleClass(role)}">${escapeHTML(normalizeRole(role))}</span>`;
+}
+
+function verifiedMark(value, role = 'Student') {
+  const active = value === true || value === 1 || ['true', '1', 'yes', 'verified'].includes(String(value || '').trim().toLowerCase());
+  if (!active) return '';
+  const normalized = normalizeRole(role || 'Student');
+  const lower = normalized.toLowerCase();
+  const isUniversity = lower.includes('university') || /(^|\s)uni(\s|$)/.test(lower) || lower.includes('campus student');
+  const tone = lower.includes('admin') ? 'admin' : isUniversity ? 'university' : 'student';
+  const label = lower.includes('admin') ? 'Admin verified' : isUniversity ? 'University student verified' : 'Student verified';
+  return `<span class="verified-badge verified-${tone}" title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path class="verified-badge-fill" d="M12 2.3l2.2 1.5 2.7-.2 1.1 2.5 2.4 1.3-.5 2.7 1.5 2.2-1.5 2.2.5 2.7-2.4 1.3-1.1 2.5-2.7-.2L12 21.7l-2.2-1.5-2.7.2L6 17.9l-2.4-1.3.5-2.7L2.6 12l1.5-2.2-.5-2.7L6 5.8l1.1-2.5 2.7.2L12 2.3Z"/><path class="verified-badge-check" d="m8.1 12.2 2.4 2.4 5.4-5.5"/></svg></span>`;
+}
+
+function currentRoute() { return routeParts()[0] || 'home'; }
+
+function humanError(error) {
+  const code = error?.code || '';
+  const map = {
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/invalid-login-credentials': 'Email or password is incorrect.',
+    'auth/email-already-in-use': 'An account already exists with this email.',
+    'auth/weak-password': 'Use a stronger password with at least 6 characters.',
+    'auth/popup-closed-by-user': 'Google sign-in was closed before completion.',
+    'auth/unauthorized-domain': 'Add this website domain to Firebase Authentication authorized domains.',
+    'auth/too-many-requests': 'Too many attempts. Please wait and try again.',
+    'permission-denied': 'You do not have permission to do that.',
+    'firestore/permission-denied': 'You do not have permission to do that.'
+  };
+  return map[code] || error?.message?.replace(/^Firebase:\s*/i, '') || 'Something went wrong. Please try again.';
+}
+
+async function boot() {
+  if (appStarted) return;
+  appStarted = true;
+  root.innerHTML = loadingScreen();
+  try {
+    const env = await initFirebase();
+    setState({ mode: env.mode, initialized: true });
+    stopAuth = observeAuth(env.mode, handleAuthChange);
+  } catch (error) {
+    console.error(error);
+    setState({ mode: 'demo', initialized: true });
+    toast('Firebase could not initialize. Opening preview mode.', 'error');
+    stopAuth = observeAuth('demo', handleAuthChange);
+  }
+}
+
+async function handleAuthChange(user) {
+  stopPosts?.(); stopPosts = null;
+  stopComments?.(); stopComments = null;
+  stopMessages?.(); stopMessages = null;
+  reactionState = { saved: new Set(), liked: new Set() };
+  setState({ user, profile: null, posts: [], notifications: [], conversations: [], messages: [], unreadCount: 0 });
+
+  if (!user) {
+    renderAuth('login');
+    return;
+  }
+
+  root.innerHTML = loadingScreen('Loading your Tefsen space…');
+  try {
+    const [profile, reactions, notifications, conversations] = await Promise.all([
+      getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
+      getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
+      getNotifications(state.mode, user.uid).catch(() => []),
+      getConversations(state.mode, user.uid).catch(() => [])
+    ]);
+    reactionState = reactions;
+    setState({
+      profile,
+      notifications,
+      conversations,
+      unreadCount: notifications.filter(n => !n.read).length
+    });
+    stopPosts = subscribePosts(state.mode, posts => {
+      setState({ posts });
+      renderRoute();
+
+      // Reconcile the current user's exact like documents and server counts.
+      // This avoids stale hearts/counts after refresh when collection-group
+      // queries or post counter writes are blocked by Firestore rules.
+      const visibleIds = posts.slice(0, 20).map(post => post.id).filter(Boolean);
+      const hydrationKey = `${state.user?.uid || ''}:${visibleIds.join('|')}`;
+      const now = Date.now();
+      if (visibleIds.length && (hydrationKey !== likeHydrationKey || now - likeHydrationAt > 30000)) {
+        likeHydrationKey = hydrationKey;
+        likeHydrationAt = now;
+        const run = ++likeHydrationRun;
+        void hydratePostLikeState(state.mode, state.user.uid, visibleIds).then(result => {
+          if (run !== likeHydrationRun) return;
+          reactionState.liked = result.liked;
+          let changed = false;
+          for (const post of posts) {
+            if (!result.counts.has(post.id)) continue;
+            const next = result.counts.get(post.id);
+            if (Number(post.likeCount || 0) !== next) { post.likeCount = next; changed = true; }
+          }
+          if (changed) setState({ posts: [...posts] });
+          renderRoute();
+        }).catch(error => console.warn('Like-state reconciliation failed:', error));
+      }
+    }, error => {
+      console.error(error);
+      toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
+      renderRoute();
+    });
+    if (!location.hash || location.hash === '#/') go('home'); else renderRoute();
+  } catch (error) {
+    console.error(error);
+    toast(humanError(error), 'error');
+    renderRoute();
+  }
+}
+
+function loadingScreen(text = 'Opening Tefsen Web…') {
+  return `<div style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></div>`;
+}
+
+function renderAuth(mode = 'login') {
+  const isRegister = mode === 'register';
+  root.innerHTML = `
+    <main class="auth-page ${isRegister ? 'auth-page-register' : ''}">
+      <section class="auth-art">
+        <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+        <div class="auth-message">
+          <span class="auth-kicker">TEFSEN STUDENT COMMUNITY</span>
+          <h1>${isRegister ? 'One account.<br><span>Learn everywhere.</span>' : 'Learn. Share.<br><span>Grow together.</span>'}</h1>
+          <p>${isRegister ? 'Create your Tefsen account once and use the same identity across the app and web experience.' : 'Your Tefsen community on the web — the same place for thoughtful questions, useful answers, student profiles and knowledge that moves between people.'}</p>
+          ${isRegister ? `<div class="auth-app-preview" aria-hidden="true">
+            <div class="auth-app-avatar">${icon('user',22)}</div>
+            <div><b>Your student identity</b><small>Questions · Answers · Community</small></div>
+            <span class="auth-app-status">Ready</span>
+          </div>` : ''}
+        </div>
+        <div class="auth-proof"><span>✓ Student focused</span><span>✓ Community powered</span><span>✓ Same Tefsen account</span></div>
+      </section>
+      <section class="auth-panel">
+        <div class="auth-card ${isRegister ? 'auth-card-register' : ''}">
+          <div class="auth-mobile-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></div>
+          ${state.mode === 'demo' ? `<div class="demo-banner"><span><b>Preview mode:</b> Firebase is not connected yet.</span><a href="#" data-demo-info>Setup</a></div>` : ''}
+          <div class="auth-card-heading">
+            <span class="auth-kicker">${isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</span>
+            <h2>${isRegister ? 'Join Tefsen' : 'Welcome back'}</h2>
+            <p>${isRegister ? 'Create a secure student account for the Tefsen app and web.' : 'Sign in to continue to Tefsen Web.'}</p>
+          </div>
+          ${isRegister ? `<div class="signup-account-preview">
+            <span class="signup-preview-icon">${icon('user',18)}</span>
+            <span><b>Student account</b><small>Verification is handled separately for trusted roles.</small></span>
+            <span class="signup-preview-dot"></span>
+          </div>` : ''}
+          <form class="form-grid auth-form-app" data-auth-form="${isRegister ? 'register' : 'login'}">
+            ${isRegister ? `<div class="field"><label for="fullName">Full name</label><input class="input" id="fullName" name="fullName" autocomplete="name" placeholder="Your full name" required maxlength="80"></div>` : ''}
+            <div class="field"><label for="email">Email</label><input class="input" id="email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required></div>
+            <div class="field"><label for="password">Password</label><div class="password-field-wrap"><input class="input" id="password" name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="${isRegister ? 'At least 6 characters' : 'Your password'}" minlength="6" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">Show</button></div></div>
+            ${isRegister ? `<label class="terms-check"><input type="checkbox" name="terms" required><span>I agree to the <a href="../terms.html" target="_blank" rel="noopener">Terms</a> and <a href="../privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>` : ''}
+            <div class="form-error" data-auth-error></div>
+            <button class="btn btn-primary btn-block auth-submit" type="submit">${isRegister ? 'Create Tefsen account' : 'Sign in'}</button>
+          </form>
+          ${!isRegister ? `<button class="btn auth-forgot" type="button" data-forgot>Forgot password?</button>` : ''}
+          <div class="divider">or</div>
+          <button class="btn btn-secondary btn-block auth-google" type="button" data-google><span class="google-mark"></span> Continue with Google</button>
+          ${state.mode === 'demo' ? `<button class="btn btn-ghost btn-block" style="margin-top:10px" type="button" data-demo-login>${icon('eye',18)} Open complete demo</button>` : ''}
+          <div class="auth-switch">${isRegister ? 'Already have an account?' : 'New to Tefsen?'} <button type="button" data-auth-switch="${isRegister ? 'login' : 'register'}">${isRegister ? 'Sign in' : 'Create account'}</button></div>
+          ${isRegister ? `<p class="signup-security-note">${icon('check',14)} University, student and admin verification cannot be self-assigned during sign-up.</p>` : ''}
+        </div>
+      </section>
+    </main>`;
+}
+
+function demoBanner() {
+  if (state.mode !== 'demo') return '';
+  return `<div class="demo-banner"><span><b>Interface preview mode.</b> Add your Firebase Web config to sync real Tefsen accounts and data.</span><a href="#" data-demo-info>View setup</a></div>`;
+}
+
+function renderShell(content, options = {}) {
+  const route = currentRoute();
+  const p = state.profile || {};
+  const rightContent = options.right === false ? '' : renderRightbar();
+  root.innerHTML = `
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="topbar-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+        <div class="topbar-center">
+          <form class="global-search" data-global-search-form>
+            <span class="mobile-top-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></span>
+            <span class="search-icon">${icon('search',18)}</span>
+            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search questions, people, subjects…" aria-label="Search Tefsen">
+            <span class="search-kbd">Ctrl K</span>
+          </form>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button desktop-only" type="button" data-route="messages" aria-label="Messages">${icon('message',19)}</button>
+          <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
+          <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
+        </div>
+      </header>
+
+      <aside class="sidebar">
+        <nav class="nav-list" aria-label="Tefsen navigation">
+          ${navItems.slice(0,6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
+        </nav>
+        <div class="nav-divider"></div>
+        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-action="compose">${icon('plus',18)} Ask a question</button></div>
+        <nav class="nav-list">
+          ${navItems.slice(6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
+        </nav>
+        <button class="sidebar-profile" type="button" data-route="profile">
+          ${avatar(p,'sm')}
+          <span style="min-width:0;text-align:left"><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(p.role || 'Student'))}</small></span>
+        </button>
+      </aside>
+
+      ${rightContent ? `<aside class="rightbar">${rightContent}</aside>` : ''}
+
+      <main class="main-area"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
+
+      <nav class="mobile-bottom" aria-label="Mobile navigation">
+        ${mobileNavButton('home','home',route,'Home')}
+        ${mobileNavButton('explore','compass',route,'Explore')}
+        <button class="create-mobile" type="button" data-action="compose" aria-label="Ask a question">${icon('plus',24)}</button>
+        ${mobileNavButton('notifications','bell',route,'Notifications')}
+        ${mobileNavButton('profile','user',route,'Profile')}
+      </nav>
+    </div>
+    ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
+}
+
+function navButton(id, label, ic, route) {
+  const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
+  return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
+}
+
+function mobileNavButton(id, ic, route, label) {
+  return `<button class="${route === id ? 'active' : ''}" type="button" data-route="${id}" aria-label="${label}">${icon(ic,21)}</button>`;
+}
+
+function renderProfileDropdown() {
+  const p = state.profile || {};
+  const role = normalizeRole(p.role || 'Student');
+  const isAdmin = String(p.role || '').trim().toLowerCase() === 'admin';
+  const plan = isAdmin ? 'Admin Full Access' : (p.subscriptionActive ? 'Student Plus' : 'Free Student');
+  return `<div class="profile-menu-backdrop" data-profile-menu-dismiss aria-hidden="true"></div>
+    <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Tefsen account menu">
+      <div class="dropdown-user dropdown-user-premium">
+        ${avatar(p,'sm')}
+        <div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(role)} · ${escapeHTML(plan)}</small></div>
+      </div>
+      <div class="dropdown-plan-chip">${isAdmin ? icon('check',15) : icon('info',15)} <span>${escapeHTML(plan)}</span></div>
+      <div class="dropdown-separator"></div>
+      <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
+      <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
+      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
+      <div class="dropdown-separator"></div>
+      <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
+    </section>`;
+}
+
+function syncProfileMenu() {
+  document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
+  const trigger = document.querySelector('[data-profile-menu]');
+  if (!state.ui.profileMenu) {
+    trigger?.setAttribute('aria-expanded', 'false');
+    document.documentElement.classList.remove('profile-menu-open');
+    return;
+  }
+  root.insertAdjacentHTML('afterend', renderProfileDropdown());
+  trigger?.setAttribute('aria-expanded', 'true');
+  document.documentElement.classList.add('profile-menu-open');
+}
+
+function renderRightbar() {
+  const trending = [...state.posts].sort((a,b) => scorePost(b) - scorePost(a)).slice(0,4);
+  return `
+    <section class="widget">
+      <h3>Trending discussions</h3>
+      ${trending.length ? trending.map((p,i) => `<button class="widget-link" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left;cursor:pointer" data-route="post/${encodeURIComponent(p.id)}"><span class="trend-number">0${i+1}</span><div><b>${escapeHTML(p.title || p.content.slice(0,60))}</b><small>${escapeHTML(p.subject || 'General')} · ${formatCount(p.likeCount)} likes</small></div></button>`).join('') : '<small style="color:var(--muted)">Discussions will appear here.</small>'}
+    </section>
+    <section class="widget">
+      <h3>Your Tefsen</h3>
+      <div class="widget-link">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(state.profile?.role || 'Student'))} · ${formatCount(state.profile?.points || 0)} points</small></div></div>
+      <div class="widget-link"><span class="notification-icon">${icon('bookmark',17)}</span><div><b>${reactionState.saved.size} saved items</b><small>Knowledge for later</small></div></div>
+      <button class="widget-link subscription-widget-link" type="button" data-route="subscription"><span class="notification-icon">${icon('info',17)}</span><div><b>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (state.profile?.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><small>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Unlimited daily posting · full web access' : (state.profile?.subscriptionActive ? '2 images · 6 MB · 6 image posts/day' : '1 image · 2 MB · 2 image posts/day')}</small></div></button>
+    </section>
+    <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
+}
+
+function scorePost(p) { return Number(p.trendingScore || 0) || Number(p.likeCount || 0) * 2 + Number(p.commentCount || 0) * 3; }
+
+function postBelongsToUser(post, userId) {
+  const target = String(userId || '').trim();
+  if (!target) return false;
+  const ids = [
+    post?.authorId, post?.userId, post?.uid, post?.ownerId,
+    post?.createdBy, post?.authorUid, post?.user?.uid, post?.author?.uid
+  ].map(value => String(value || '').trim()).filter(Boolean);
+  return ids.includes(target);
+}
+
+function getFilteredPosts(tab = state.activeFeedTab) {
+  const posts = [...state.posts];
+  if (tab === 'trending') return posts.sort((a,b) => scorePost(b) - scorePost(a));
+  if (tab === 'saved') return posts.filter(p => reactionState.saved.has(p.id));
+  if (tab === 'liked') return posts.filter(p => reactionState.liked.has(p.id));
+  return posts;
+}
+
+function postCard(post) {
+  const liked = reactionState.liked.has(post.id);
+  const saved = reactionState.saved.has(post.id);
+  const displayTitle = post.title || (post.content ? post.content.slice(0,110) : 'Untitled discussion');
+  return `<article class="panel post-card" data-post-id="${escapeHTML(post.id)}">
+    <header class="post-head">
+      <button style="border:0;background:none;padding:0;cursor:pointer" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({ fullName: post.authorName, photoUrl: post.authorPhotoUrl }, '', '')}</button>
+      <div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
+      <button class="post-menu" type="button" data-post-menu="${escapeHTML(post.id)}" aria-label="Post options">${icon('more',20)}</button>
+    </header>
+    <div class="post-body" data-route="post/${encodeURIComponent(post.id)}">
+      <span class="post-subject">${escapeHTML(post.subject || 'General')}</span>
+      <h3>${escapeHTML(displayTitle)}</h3>
+      ${post.content && post.content !== post.title ? `<p>${nl2br(post.content.length > 460 ? post.content.slice(0,460) + '…' : post.content)}</p>` : ''}
+      ${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}" loading="lazy" decoding="async">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image" loading="lazy" decoding="async">` : '')}
+      ${post.tags?.length ? `<div class="tag-row">${post.tags.slice(0,6).map(t => `<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>` : ''}
+    </div>
+    <footer class="post-actions">
+      <button class="action-btn like ${liked ? 'active' : ''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+      <button class="action-btn" data-route="post/${encodeURIComponent(post.id)}" aria-label="Open comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(post.commentCount)}</span></button>
+      <button class="action-btn ${saved ? 'active' : ''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved ? 'Saved' : 'Save'}</button>
+      <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+    </footer>
+  </article>`;
+}
+
+function renderHome(forcedTab = null) {
+  if (forcedTab) state.activeFeedTab = forcedTab;
+  const posts = getFilteredPosts();
+  const content = `${demoBanner()}
+    <div class="feed-tabs" role="tablist">
+      ${['latest','trending','saved','liked'].map(t => `<button class="feed-tab ${state.activeFeedTab === t ? 'active' : ''}" data-feed-tab="${t}" role="tab">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
+    </div>
+    <section class="panel composer-mini">
+      ${avatar(state.profile,'sm')}
+      <button class="fake-input" type="button" data-action="compose">Ask something or share what you learned…</button>
+      <button class="ask-btn" type="button" data-action="compose">${icon('plus',16)} Ask</button>
+    </section>
+    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState(state.activeFeedTab === 'saved' ? 'bookmark' : 'compass', state.activeFeedTab === 'saved' ? 'No saved posts yet' : 'Nothing here yet', state.activeFeedTab === 'saved' ? 'Save useful discussions and they will appear here.' : 'New discussions will appear as the community contributes.')}</div>`;
+  renderShell(content);
+}
+
+function renderExplore() {
+  const subjects = new Map();
+  state.posts.forEach(p => subjects.set(p.subject || 'General', (subjects.get(p.subject || 'General') || 0) + 1));
+  const topSubjects = [...subjects.entries()].sort((a,b) => b[1]-a[1]).slice(0,8);
+  const content = `${demoBanner()}
+    <header class="page-head"><div><h1>Explore</h1><p>Discover questions, subjects and ideas from across the community.</p></div><button class="btn btn-primary" data-action="compose">${icon('plus',17)} Ask</button></header>
+    <section class="panel section-card" style="margin-bottom:16px">
+      <div class="panel-title"><h2>Subjects</h2><small>${topSubjects.length} active</small></div>
+      <div class="tag-row">${topSubjects.length ? topSubjects.map(([name,count]) => `<button class="btn btn-secondary" style="min-height:38px" data-subject="${escapeHTML(name)}">${escapeHTML(name)} <small>${count}</small></button>`).join('') : '<span style="color:var(--muted)">Subjects appear as posts are published.</span>'}</div>
+    </section>
+    <div class="feed-list">${[...state.posts].sort((a,b)=>scorePost(b)-scorePost(a)).map(postCard).join('') || emptyState('compass','No posts yet','Explore will come alive as the community publishes.')}</div>`;
+  renderShell(content);
+}
+
+function emptyState(ic, title, text) {
+  return `<div class="panel empty-state"><div class="empty-icon">${icon(ic,26)}</div><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`;
+}
+
+async function renderPostDetail(postId) {
+  stopComments?.(); stopComments = null;
+  let post = state.posts.find(p => p.id === postId);
+  if (!post) {
+    renderShell(`<div class="loading-card"></div>`);
+    post = await getPost(state.mode, postId).catch(() => null);
+  }
+  if (!post) { renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.')); return; }
+  currentComments = [];
+  const draw = () => {
+    const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
+    const content = `<button class="btn btn-ghost" style="margin-bottom:14px" data-back>${icon('back',17)} Back</button>
+      <article class="panel detail-card">
+        <header class="post-head"><button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button><div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
+        <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
+        <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button><button class="action-btn" aria-label="Comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(currentComments.length || post.commentCount)}</span></button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
+      </article>
+      <section class="panel answer-form"><div class="panel-title"><h3>Add an answer</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Publish answer</button></div></form></section>
+      <div class="answers-head"><h2 style="margin:0">${currentComments.length} ${currentComments.length===1?'Answer':'Answers'}</h2></div>
+      <div>${currentComments.length ? currentComments.map(answerCard).join('') : emptyState('comment','No answers yet','Be the first to help with a thoughtful answer.')}</div>`;
+    renderShell(content);
+  };
+  draw();
+  stopComments = subscribeComments(state.mode, postId, comments => { currentComments = comments; draw(); }, e => toast(humanError(e),'error'));
+}
+
+function answerCard(answer) {
+  const user = { fullName: answer.authorName || answer.userName || 'Tefsen User', photoUrl: answer.authorPhotoUrl || answer.profileImageUrl || '' };
+  const authorId = answer.authorId || answer.userId || answer.uid || '';
+  const avatarHtml = authorId ? `<button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(authorId)}">${avatar(user,'sm')}</button>` : avatar(user,'sm');
+  const nameHtml = authorId ? `<button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(authorId)}"><b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b></button>` : `<b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b>`;
+  return `<article class="panel answer-card"><header class="post-head">${avatarHtml}<div class="post-head-main">${nameHtml}<small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
+}
+
+async function renderNotifications() {
+  const rows = state.notifications;
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Notifications</h1><p>Updates from your questions, answers and community.</p></div></header>
+    <section class="panel">${rows.length ? rows.map(notificationItem).join('') : emptyState('bell','You are all caught up','New activity will appear here.')}</section>`;
+  renderShell(content);
+}
+
+function notificationItem(n) {
+  const typeIcon = n.type === 'like' ? 'heart' : n.type === 'answer' ? 'comment' : 'bell';
+  return `<button class="notification-item ${n.read ? '' : 'unread'}" type="button" style="width:100%;text-align:left;color:inherit;background:${n.read?'transparent':'rgba(22,173,239,.045)'};border-left:0;border-right:0;border-top:0" data-notification="${escapeHTML(n.id)}" data-post="${escapeHTML(n.postId || '')}"><span class="notification-icon">${icon(typeIcon,18)}</span><span><p><b>${escapeHTML(n.actorName || 'Tefsen')}</b> ${escapeHTML(n.text || n.message || 'sent you an update')}</p><small>${relativeTime(n.createdAt)}</small></span></button>`;
+}
+
+async function renderMessages(conversationId = '') {
+  if (!state.conversations.length) {
+    const conversations = await getConversations(state.mode, state.user.uid).catch(() => []);
+    setState({ conversations });
+  }
+  const selected = state.conversations.find(c => c.id === conversationId) || state.conversations[0] || null;
+  if (selected) {
+    state.selectedConversation = selected;
+    stopMessages?.();
+    stopMessages = subscribeMessages(state.mode, selected.id, messages => {
+      state.messages = messages;
+      drawMessages(selected);
+      requestAnimationFrame(() => document.querySelector('.chat-messages')?.scrollTo(0, 999999));
+    }, e => toast(humanError(e),'error'));
+  } else drawMessages(null);
+}
+
+function drawMessages(selected) {
+  const convs = state.conversations;
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Messages</h1><p>Continue learning conversations privately.</p></div></header>
+    <section class="panel messages-layout ${selected ? 'chat-open' : ''}">
+      <div class="conversation-list"><div class="conversation-list-head"><b>Conversations</b></div>${convs.length ? convs.map(c => conversationItem(c,selected)).join('') : `<div class="empty-state"><h3>No conversations</h3><p>Open a user profile and start a conversation.</p></div>`}</div>
+      <div class="chat-pane">${selected ? `<div class="chat-head"><button class="btn btn-icon btn-ghost" data-messages-back>${icon('back',18)}</button>${avatar({fullName:conversationTitle(selected)},'sm')}<b>${escapeHTML(conversationTitle(selected))}</b></div><div class="chat-messages">${state.messages.map(messageBubble).join('') || '<div class="empty-state"><p>Start the conversation.</p></div>'}</div><form class="chat-form" data-message-form="${escapeHTML(selected.id)}"><input class="input" name="text" maxlength="3000" placeholder="Write a message…" required><button class="btn btn-primary btn-icon" type="submit" aria-label="Send">${icon('send',18)}</button></form>` : `<div class="empty-state"><div class="empty-icon">${icon('message',25)}</div><h3>Select a conversation</h3><p>Your messages will appear here.</p></div>`}</div>
+    </section>`;
+  renderShell(content,{wide:true,right:false});
+}
+
+function conversationTitle(c) {
+  if (c.title) return c.title;
+  if (c.participantNames) {
+    const keys = Object.keys(c.participantNames).filter(k => k !== state.user.uid);
+    if (keys[0]) return c.participantNames[keys[0]] || 'Conversation';
+  }
+  return 'Conversation';
+}
+function conversationItem(c,selected) { return `<button class="conversation-item ${selected?.id===c.id?'active':''}" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;color:inherit;text-align:left" data-conversation="${escapeHTML(c.id)}">${avatar({fullName:conversationTitle(c)},'sm')}<div><b>${escapeHTML(conversationTitle(c))}</b><small>${escapeHTML(c.lastMessage || 'Start a conversation')} · ${relativeTime(c.updatedAt)}</small></div></button>`; }
+function messageBubble(m) { return `<div class="bubble ${m.senderId === state.user.uid ? 'mine' : ''}">${nl2br(m.text || m.content || '')}<small>${relativeTime(m.createdAt)}</small></div>`; }
+
+async function renderLeaderboard() {
+  if (!state.leaderboard.length) setState({ leaderboard: await getLeaderboard(state.mode).catch(()=>[]) });
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Leaderboard</h1><p>Recognising useful contributions across the community.</p></div></header>
+    <section class="panel">${state.leaderboard.length ? state.leaderboard.map((u,i)=>`<button class="leaderboard-row" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}"><span class="rank ${i<3?'top':''}">${i+1}</span><span class="user-inline">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small>${escapeHTML(normalizeRole(u.role))}</small></span></span><span class="points">${formatCount(u.points)} pts</span></button>`).join('') : emptyState('trophy','Leaderboard is empty','Points will appear as members contribute.')}</section>`;
+  renderShell(content);
+}
+
+async function renderProfile(userId = '') {
+  let profile = state.profile;
+  if (userId && userId !== state.user.uid) {
+    profile = await getUserById(state.mode, userId).catch(() => null);
+    profile = profile || state.leaderboard.find(u => u.uid === userId) || { uid:userId, fullName:'Tefsen User', role:'Student' };
+  }
+  currentProfileView = profile;
+  const own = !userId || userId === state.user.uid;
+  const posts = state.posts.filter(p => postBelongsToUser(p, profile?.uid || ''));
+  let follow = { following: false, followersCount: Number(profile?.followersCount || 0), followingCount: Number(profile?.followingCount || 0) };
+  try { follow = await getFollowState(state.mode, state.user.uid, profile?.uid || ''); } catch { /* keep profile available */ }
+  const actions = own
+    ? `<button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit profile</button>`
+    : `<div class="profile-actions"><button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button><button class="btn btn-secondary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button></div>`;
+  const content = `${demoBanner()}<section class="panel" style="overflow:hidden">
+    <div class="profile-cover"></div>
+    <div class="profile-main">
+      <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${actions}</div></div>
+      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
+      <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(follow.followersCount)}</b>Followers</span><span><b>${formatCount(follow.followingCount)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
+    </div></section>
+    <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
+    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Ask your first question or share something useful.':'This member has not published yet.')}</div>`;
+  renderShell(content);
+}
+
+async function renderSubscription() {
+  const p = state.profile || {};
+  const policy = getWebPostingPolicy(p);
+  let usage = { textPosts: 0, imagePosts: 0 };
+  try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
+
+  const isAdmin = Boolean(policy.admin);
+  const isPlus = Boolean(policy.subscribed) && !isAdmin;
+  const planName = isAdmin ? 'Admin Full Access' : (isPlus ? 'Tefsen Student Plus' : 'Free Student');
+  const planEyebrow = isAdmin ? 'TEFSEN ADMIN' : (isPlus ? 'ACTIVE MEMBERSHIP' : 'STUDENT MEMBERSHIP');
+  const planDescription = isAdmin
+    ? 'Complete web access with no student posting quota.'
+    : isPlus
+      ? 'Your premium student limits are active on this Tefsen account.'
+      : 'Learn, ask and share for free — upgrade when you need more image publishing power.';
+  const price = isAdmin
+    ? `<div class="lux-access-token">${icon('check',18)} Full access</div>`
+    : `<div class="lux-price"><strong>$2.99</strong><span>/ month</span></div>`;
+  const primaryAction = isAdmin
+    ? `<button class="btn lux-primary" type="button" data-route="settings">Open admin settings</button>`
+    : isPlus
+      ? `<a class="btn lux-primary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
+      : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Get Student Plus</a>`;
+
+  const imageLimitText = Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} / day` : 'Unlimited';
+  const textLimitText = Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} / day` : 'Unlimited';
+  const imageProgress = Number.isFinite(policy.dailyImagePosts) && policy.dailyImagePosts > 0 ? Math.min(100, Math.round((usage.imagePosts / policy.dailyImagePosts) * 100)) : 0;
+  const textProgress = Number.isFinite(policy.dailyTextPosts) && policy.dailyTextPosts > 0 ? Math.min(100, Math.round((usage.textPosts / policy.dailyTextPosts) * 100)) : 0;
+
+  const content = `${demoBanner()}
+    <div class="subscription-luxury-page">
+      <header class="subscription-luxury-head">
+        <div><span class="lux-overline">TEFSEN MEMBERSHIP</span><h1>Study with fewer limits.</h1><p>A refined membership experience for students who publish, explain and contribute more.</p></div>
+        <div class="lux-secure-note">${icon('check',16)} Same Tefsen account</div>
+      </header>
+
+      <section class="lux-plan-hero ${isAdmin ? 'is-admin' : ''} ${isPlus ? 'is-plus' : ''}">
+        <div class="lux-glow lux-glow-a"></div><div class="lux-glow lux-glow-b"></div>
+        <div class="lux-plan-content">
+          <span class="lux-plan-eyebrow">${planEyebrow}</span>
+          <h2>${planName}</h2>
+          <p>${planDescription}</p>
+          <div class="lux-plan-actions">${primaryAction}<button class="btn lux-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div>
+        </div>
+        <div class="lux-plan-price">${price}<small>${isAdmin ? 'Administrative account' : 'Google Play billing'}</small></div>
+      </section>
+
+      <div class="lux-usage-grid">
+        <section class="lux-usage-card">
+          <div class="lux-icon-orb">${icon('image',20)}</div>
+          <div class="lux-usage-top"><span>Image posts</span><strong>${imageLimitText}</strong></div>
+          <p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p>
+          <div class="lux-meter"><i style="width:${imageProgress}%"></i></div>
+          <small>Today ${usage.imagePosts}${Number.isFinite(policy.dailyImagePosts) ? ` of ${policy.dailyImagePosts}` : ''}</small>
+        </section>
+        <section class="lux-usage-card">
+          <div class="lux-icon-orb">${icon('message',20)}</div>
+          <div class="lux-usage-top"><span>Text posts</span><strong>${textLimitText}</strong></div>
+          <p>Questions and knowledge posts without images.</p>
+          <div class="lux-meter"><i style="width:${textProgress}%"></i></div>
+          <small>Today ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? ` of ${policy.dailyTextPosts}` : ''}</small>
+        </section>
+      </div>
+
+      <section class="lux-compare-section">
+        <div class="lux-section-title"><span>MEMBERSHIP DETAILS</span><h2>Choose the pace that fits you.</h2></div>
+        <div class="lux-compare-grid">
+          <article class="lux-plan-card ${!isPlus && !isAdmin ? 'is-current' : ''}">
+            <div><span class="lux-card-kicker">FREE</span><h3>Free Student</h3><p>Essential access for everyday learning.</p></div>
+            <ul><li>${icon('check',16)} 20 text posts per day</li><li>${icon('check',16)} 2 image posts per day</li><li>${icon('check',16)} 1 image per post</li><li>${icon('check',16)} Up to 2 MB total</li></ul>
+            ${!isPlus && !isAdmin ? '<span class="lux-current-pill">Current plan</span>' : ''}
+          </article>
+          <article class="lux-plan-card lux-plan-card-plus ${isPlus ? 'is-current' : ''}">
+            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>$2.99 <small>/ month</small></h3><p>Designed for students who contribute more.</p></div>
+            <ul><li>${icon('check',16)} Unlimited text posts</li><li>${icon('check',16)} 6 image posts per day</li><li>${icon('check',16)} 2 images per post</li><li>${icon('check',16)} Up to 6 MB total</li></ul>
+            ${isPlus ? '<span class="lux-current-pill">Active plan</span>' : `<a class="lux-card-cta" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Upgrade with Google Play →</a>`}
+          </article>
+        </div>
+      </section>
+
+      <section class="lux-billing-card">
+        <div class="lux-billing-mark">G</div>
+        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here.</p></div>
+        ${isAdmin ? '' : (isPlus ? `<a class="btn lux-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage subscription</a>` : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Open Google Play</a>`)}
+      </section>
+    </div>`;
+  renderShell(content, { wide: true });
+}
+
+function renderSettings() {
+  const p = state.profile || {};
+  const compact = localStorage.getItem('tefsen_pref_compact') === '1';
+  const motion = localStorage.getItem('tefsen_pref_motion') === '1';
+  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" aria-selected="${settingsTab === id}">${label}</button>`;
+  const panelClass = id => `settings-panel ${settingsTab === id ? 'active' : ''}`;
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Settings</h1><p>Manage your profile and web experience.</p></div></header>
+    <div class="settings-grid"><aside class="panel settings-nav" role="tablist">${tabButton('profile','Profile')}${tabButton('preferences','Preferences')}${tabButton('account','Account')}</aside>
+    <section class="panel settings-section">
+      <div class="${panelClass('profile')}" data-settings-panel="profile"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>
+      <div class="${panelClass('preferences')}" data-settings-panel="preferences"><h2 style="margin-top:0">Preferences</h2><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle ${compact ? 'active' : ''}" type="button" data-pref="compact" aria-pressed="${compact}"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle ${motion ? 'active' : ''}" type="button" data-pref="motion" aria-pressed="${motion}"></button></div></div>
+      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (p.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><p>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Administrative web access with no daily posting quota.' : 'Web posting limits sync with your Tefsen account.'}</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
+    </section></div>`;
+  renderShell(content,{wide:true});
+}
+
+async function renderSearch(term = '') {
+  state.searchQuery = term;
+  renderShell(`<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header><div class="loading-card"></div>`);
+  currentSearch = term ? await searchAll(state.mode, term).catch(()=>({users:[],posts:[]})) : {users:[],posts:[]};
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header>
+    ${currentSearch.users.length ? `<section class="panel section-card" style="margin-bottom:16px"><div class="panel-title"><h2>People</h2><small>${currentSearch.users.length} results</small></div><div class="search-results">${currentSearch.users.map(u=>`<button class="search-user" type="button" style="width:100%;border:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small style="display:block;color:var(--muted)">${escapeHTML(normalizeRole(u.role))}</small></span></button>`).join('')}</div></section>`:''}
+    <div class="feed-list">${currentSearch.posts.length ? currentSearch.posts.map(postCard).join('') : emptyState('search',term?'No matching discussions':'Start searching','Try a name, subject or question keyword.')}</div>`;
+  renderShell(content);
+}
+
+function renderRoute() {
+  if (!state.user) return;
+  const [route, param] = routeParts();
+  state.ui.profileMenu = false;
+  document.documentElement.classList.remove('profile-menu-open');
+  document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
+  if (stopComments && route !== 'post') { stopComments(); stopComments = null; }
+  if (stopMessages && route !== 'messages') { stopMessages(); stopMessages = null; }
+  switch (route || 'home') {
+    case 'home': renderHome(); break;
+    case 'explore': renderExplore(); break;
+    case 'saved': renderHome('saved'); break;
+    case 'notifications': renderNotifications(); break;
+    case 'messages': renderMessages(param || ''); break;
+    case 'leaderboard': renderLeaderboard(); break;
+    case 'profile': renderProfile(param || ''); break;
+    case 'settings': renderSettings(); break;
+    case 'subscription': renderSubscription(); break;
+    case 'post': renderPostDetail(param || ''); break;
+    case 'search': renderSearch(param || new URLSearchParams(location.hash.split('?')[1] || '').get('q') || ''); break;
+    default: renderHome();
+  }
+}
+
+function openComposer() {
+  const policy = getWebPostingPolicy(state.profile || {});
+  const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
+    <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} image posts/day` : 'Unlimited image posts'} · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
+    <div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required placeholder="What would you like to ask or explain?"></div>
+    <div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="8000" required placeholder="Add context, what you tried, or a useful explanation…"></textarea></div>
+    <div class="input-row"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="60" placeholder="e.g. Physics"></div><div class="field"><label>Tags</label><input class="input" name="tags" maxlength="150" placeholder="circuits, electricity"></div></div>
+    <div class="file-drop">${icon('image',24)}<br><b>Add ${policy.maxImagesPerPost > 1 ? 'images' : 'an image'}</b><br><span class="form-help">PNG, JPG or WebP · max ${policy.maxImagesPerPost} · ${mb} MB total</span><input type="file" name="images" accept="image/png,image/jpeg,image/webp" ${policy.maxImagesPerPost > 1 ? 'multiple' : ''}></div>
+    <div class="image-preview image-preview-grid hidden" data-image-preview></div><div class="form-error" data-compose-error></div><div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish</button></div></form></div></section></div>`;
+}
+
+function openReportModal(postId) {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Harmful or unsafe content</option><option>Misinformation concern</option><option>Copyright concern</option><option>Other</option></select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000"></textarea></div><button class="btn btn-danger" type="submit">Submit report</button></form></div></section></div>`;
+}
+
+function canDeletePost(post) {
+  if (!post || !state.user?.uid) return false;
+  const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || post.authorUid || post.creatorId || '');
+  const ownPost = Boolean(ownerId) && ownerId === String(state.user.uid);
+  const admin = String(state.profile?.role || '').trim().toLowerCase() === 'admin';
+  return ownPost || admin;
+}
+
+async function openPostMenu(postId) {
+  let post = state.posts.find(item => item.id === postId) || null;
+  if (!post) post = await getPost(state.mode, postId).catch(() => null);
+  const ownPost = canDeletePost(post);
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:420px"><header class="modal-head"><h2>Post options</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body" style="display:grid;gap:10px"><button class="btn btn-secondary" data-share="${escapeHTML(postId)}">${icon('share',17)} Copy share link</button>${ownPost ? `<button class="btn btn-danger" data-delete-post="${escapeHTML(postId)}">Delete post</button>` : `<button class="btn btn-danger" data-report="${escapeHTML(postId)}">Report content</button>`}</div></section></div>`;
+}
+
+function openDeletePostModal(postId) {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:440px" role="dialog" aria-modal="true"><header class="modal-head"><h2>Delete post?</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><p style="margin:0 0 18px;color:var(--muted);line-height:1.6">This will permanently remove your post. This action cannot be undone.</p><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-danger" type="button" data-confirm-delete-post="${escapeHTML(postId)}">Delete post</button></div></div></section></div>`;
+}
+
+function openEditProfile() {
+  const p = state.profile || {};
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal"><header class="modal-head"><h2>Edit profile</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-profile-form data-profile-modal><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><button class="btn btn-primary" type="submit">Save profile</button></form></div></section></div>`;
+}
+
+function openDemoInfo() {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal"><header class="modal-head"><h2>Connect the real Tefsen Firebase project</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><p style="color:var(--muted)">This package is fully interactive in preview mode. To use the same real accounts and data as your Android app:</p><ol style="line-height:1.9;color:#cbd9e5"><li>Firebase Console → Project settings → General.</li><li>Add/select the Web app.</li><li>Copy its <code>firebaseConfig</code> values.</li><li>Edit <code>app/js/config/firebase-config.js</code>.</li><li>Confirm collection names in <code>app/js/config/schema.js</code>.</li><li>Add <code>tefsen.com</code> to Firebase Authentication authorized domains.</li></ol><p style="color:#ffda91"><b>Never</b> paste a service-account private key into GitHub.</p><button class="btn btn-primary" data-close-modal>Got it</button></div></section></div>`;
+}
+
+async function handleClick(event) {
+  const passwordToggle = event.target.closest('[data-password-toggle]');
+  if (passwordToggle) {
+    const wrap = passwordToggle.closest('.password-field-wrap');
+    const input = wrap?.querySelector('input[type="password"], input[type="text"]');
+    if (input) {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      passwordToggle.textContent = show ? 'Hide' : 'Show';
+      passwordToggle.setAttribute('aria-pressed', String(show));
+      passwordToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      input.focus({ preventScroll: true });
+    }
+    return;
+  }
+  const settingsTabEl = event.target.closest('[data-settings-tab]');
+  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'profile'; renderSettings(); return; }
+  const prefEl = event.target.closest('[data-pref]');
+  if (prefEl) {
+    const key = prefEl.dataset.pref;
+    const storageKey = key === 'compact' ? 'tefsen_pref_compact' : 'tefsen_pref_motion';
+    const next = localStorage.getItem(storageKey) !== '1';
+    localStorage.setItem(storageKey, next ? '1' : '0');
+    document.documentElement.classList.toggle(key === 'compact' ? 'pref-compact' : 'pref-reduced-motion', next);
+    renderSettings();
+    return;
+  }
+  const routeEl = event.target.closest('[data-route]');
+  const syncSubscription = event.target.closest('[data-sync-subscription]');
+  if (syncSubscription) {
+    try { const profile = await getProfile(state.mode, state.user); state.profile = profile; toast('Subscription status synced.', 'success'); renderSubscription(); }
+    catch (error) { toast(humanError(error), 'error'); }
+    return;
+  }
+  if (routeEl) { event.preventDefault(); state.ui.profileMenu = false; document.documentElement.classList.remove('profile-menu-open'); document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove()); go(routeEl.dataset.route); return; }
+  const switchEl = event.target.closest('[data-auth-switch]');
+  if (switchEl) { renderAuth(switchEl.dataset.authSwitch); return; }
+  if (event.target.closest('[data-google]')) { await withButton(event.target.closest('[data-google]'), () => signInGoogle(state.mode).catch(e=>toast(humanError(e),'error'))); return; }
+  if (event.target.closest('[data-demo-login]')) { await signIn(state.mode,'demo@tefsen.com','demo123'); return; }
+  if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
+  if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
+  if (event.target.closest('[data-action="compose"]')) { openComposer(); return; }
+  if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
+  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
+  const tab = event.target.closest('[data-feed-tab]');
+  if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
+  const like = event.target.closest('[data-like]');
+  if (like) { await handleLike(like.dataset.like); return; }
+  const save = event.target.closest('[data-save]');
+  if (save) { await handleSave(save.dataset.save); return; }
+  const share = event.target.closest('[data-share]');
+  if (share) { await copyText(`${location.origin}${location.pathname}#/post/${share.dataset.share}`); modalRoot.innerHTML=''; return; }
+  const postMenu = event.target.closest('[data-post-menu]');
+  if (postMenu) { await openPostMenu(postMenu.dataset.postMenu); return; }
+  const deletePostButton = event.target.closest('[data-delete-post]');
+  if (deletePostButton) { openDeletePostModal(deletePostButton.dataset.deletePost); return; }
+  const confirmDeletePost = event.target.closest('[data-confirm-delete-post]');
+  if (confirmDeletePost) { await handleDeletePost(confirmDeletePost.dataset.confirmDeletePost, confirmDeletePost); return; }
+  const report = event.target.closest('[data-report]');
+  if (report) { openReportModal(report.dataset.report); return; }
+  const notification = event.target.closest('[data-notification]');
+  if (notification) { await handleNotification(notification); return; }
+  const conv = event.target.closest('[data-conversation]');
+  if (conv) { go(`messages/${conv.dataset.conversation}`); return; }
+  if (event.target.closest('[data-messages-back]')) { drawMessages(null); return; }
+  if (event.target.closest('[data-back]')) { history.length > 1 ? history.back() : go('home'); return; }
+  if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; syncProfileMenu(); return; }
+  if (event.target.closest('[data-profile-menu-dismiss]')) { state.ui.profileMenu = false; syncProfileMenu(); return; }
+  if (event.target.closest('[data-logout]')) { await logout(state.mode); return; }
+  if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
+  const followUser = event.target.closest('[data-follow-user]');
+  if (followUser) { await handleFollow(followUser); return; }
+  const messageUser = event.target.closest('[data-message-user]');
+  if (messageUser) { await handleStartConversation(currentProfileView); return; }
+  const subject = event.target.closest('[data-subject]');
+  if (subject) { state.searchQuery = subject.dataset.subject; go(`search/${encodeURIComponent(subject.dataset.subject)}`); return; }
+}
+
+async function handleSubmit(event) {
+  const form = event.target;
+  if (form.matches('[data-auth-form]')) { event.preventDefault(); await handleAuthForm(form); return; }
+  if (form.matches('[data-global-search-form]')) { event.preventDefault(); const term = new FormData(form).get('q')?.trim(); if (term) go(`search/${encodeURIComponent(term)}`); return; }
+  if (form.matches('[data-compose-form]')) { event.preventDefault(); await handleCompose(form); return; }
+  if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
+  if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
+  if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
+  if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
+}
+
+async function handleAuthForm(form) {
+  const fd = new FormData(form), mode = form.dataset.authForm;
+  const errorEl = form.querySelector('[data-auth-error]');
+  errorEl.textContent = '';
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      if (mode === 'register') await register(state.mode, { fullName: fd.get('fullName').trim(), email: fd.get('email').trim(), password: fd.get('password') });
+      else await signIn(state.mode, fd.get('email').trim(), fd.get('password'));
+    } catch (error) { errorEl.textContent = humanError(error); }
+  });
+}
+
+async function handleForgot() {
+  const email = document.querySelector('[data-auth-form] input[name="email"]')?.value?.trim();
+  if (!email) { toast('Enter your email first.', 'error'); return; }
+  try { await resetPassword(state.mode,email); toast(state.mode==='demo'?'Preview: password reset is ready when Firebase is connected.':'Password reset email sent.','success'); }
+  catch(e){ toast(humanError(e),'error'); }
+}
+
+async function handleCompose(form) {
+  const fd = new FormData(form), errorEl = form.querySelector('[data-compose-error]'), submit = form.querySelector('button[type="submit"]');
+  const imageFiles = fd.getAll('images').filter(file => file && file.size);
+  const payload = {
+    title: String(fd.get('title')||'').trim(), content: String(fd.get('content')||'').trim(), subject: String(fd.get('subject')||'General').trim() || 'General',
+    tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFiles
+  };
+  if (!payload.title || !payload.content) return;
+  const policy = getWebPostingPolicy(state.profile || {});
+  const totalBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
+  if (imageFiles.length > policy.maxImagesPerPost) { errorEl.textContent = `Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`; return; }
+  if (totalBytes > policy.maxTotalImageBytes) { errorEl.textContent = `Your plan allows ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total images per post.`; return; }
+  await withButton(submit, async()=>{
+    try { const post = await createPost(state.mode,state.user,state.profile,payload); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
+    catch(e){ errorEl.textContent=humanError(e); }
+  });
+}
+
+function syncLikeButtons(postId, active, count, pending = false) {
+  document.querySelectorAll('[data-like]').forEach((button) => {
+    if (button.dataset.like !== postId) return;
+    button.classList.toggle('active', active);
+    button.classList.toggle('is-pending', pending);
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = pending;
+    button.innerHTML = `<span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(count)}</span>`;
+  });
+}
+
+async function handleLike(postId) {
+  if (!postId || likeRequests.has(postId)) return;
+
+  const post = state.posts.find(item => item.id === postId);
+  const wasLiked = reactionState.liked.has(postId);
+  const optimisticLiked = !wasLiked;
+  const previousCount = Math.max(0, Number(post?.likeCount || 0));
+  const optimisticCount = Math.max(0, previousCount + (optimisticLiked ? 1 : -1));
+
+  // Native-feeling response: update immediately, then reconcile with the
+  // exact Firebase like document and aggregate count.
+  optimisticLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+  if (post) post.likeCount = optimisticCount;
+  likeRequests.add(postId);
+  syncLikeButtons(postId, optimisticLiked, optimisticCount, true);
+
+  try {
+    const result = await toggleLike(state.mode, state.user.uid, postId);
+    const serverLiked = typeof result === 'object' ? Boolean(result.liked) : Boolean(result);
+    const exactCount = typeof result === 'object' && Number.isFinite(result.count)
+      ? Math.max(0, Number(result.count))
+      : Math.max(0, optimisticCount + (serverLiked === optimisticLiked ? 0 : (serverLiked ? 1 : -1)));
+
+    serverLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+    if (post) post.likeCount = exactCount;
+    syncLikeButtons(postId, serverLiked, exactCount, false);
+
+    // Keep the Liked tab correct immediately and refresh exact state in the
+    // background so a reload shows the same heart and count.
+    if (state.activeFeedTab === 'liked') renderRoute();
+    void hydratePostLikeState(state.mode, state.user.uid, [postId]).then(summary => {
+      const current = state.posts.find(item => item.id === postId);
+      const hydratedLiked = summary.liked.has(postId);
+      const hydratedCount = summary.counts.has(postId)
+        ? Math.max(0, Number(summary.counts.get(postId) || 0))
+        : Number(current?.likeCount || exactCount);
+      hydratedLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+      if (current) current.likeCount = hydratedCount;
+      syncLikeButtons(postId, hydratedLiked, hydratedCount, false);
+    }).catch(error => console.warn('Like reconciliation failed:', error));
+  } catch (error) {
+    wasLiked ? reactionState.liked.add(postId) : reactionState.liked.delete(postId);
+    if (post) post.likeCount = previousCount;
+    syncLikeButtons(postId, wasLiked, previousCount, false);
+    toast(humanError(error), 'error');
+  } finally {
+    likeRequests.delete(postId);
+    document.querySelectorAll('[data-like]').forEach((button) => {
+      if (button.dataset.like === postId) button.disabled = false;
+    });
+  }
+}
+async function handleFollow(button) {
+  const targetUserId = button?.dataset?.followUser || currentProfileView?.uid || '';
+  if (!targetUserId || targetUserId === state.user.uid) return;
+  const previous = button.getAttribute('aria-pressed') === 'true';
+  button.disabled = true;
+  button.textContent = previous ? 'Follow' : 'Following';
+  button.classList.toggle('btn-primary', previous);
+  button.classList.toggle('btn-secondary', !previous);
+  button.classList.toggle('is-following', !previous);
+  button.setAttribute('aria-pressed', String(!previous));
+  try {
+    const active = await toggleFollow(state.mode, state.user.uid, targetUserId);
+    button.textContent = active ? 'Following' : 'Follow';
+    button.classList.toggle('btn-primary', !active);
+    button.classList.toggle('btn-secondary', active);
+    button.classList.toggle('is-following', active);
+    button.setAttribute('aria-pressed', String(active));
+    await renderProfile(targetUserId);
+  } catch (error) {
+    button.textContent = previous ? 'Following' : 'Follow';
+    button.classList.toggle('btn-primary', !previous);
+    button.classList.toggle('btn-secondary', previous);
+    button.classList.toggle('is-following', previous);
+    button.setAttribute('aria-pressed', String(previous));
+    toast(humanError(error), 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handleSave(postId) {
+  try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
+  catch(e){ toast(humanError(e),'error'); }
+}
+
+async function handleDeletePost(postId, button) {
+  const post = state.posts.find(item => item.id === postId) || await getPost(state.mode, postId).catch(() => null);
+  if (!canDeletePost(post)) {
+    modalRoot.innerHTML = '';
+    toast('You can delete only your own posts.', 'error');
+    return;
+  }
+  await withButton(button, async () => {
+    try {
+      await deletePost(state.mode, state.user.uid, postId);
+      state.posts = state.posts.filter(item => item.id !== postId);
+      reactionState.saved.delete(postId);
+      reactionState.liked.delete(postId);
+      modalRoot.innerHTML = '';
+      toast('Post deleted successfully.', 'success');
+      const [route, param] = routeParts();
+      if (route === 'post' && param === postId) go('profile');
+      else renderRoute();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+async function handleComment(form) {
+  const text=String(new FormData(form).get('content')||'').trim(); if(!text)return;
+  const submit=form.querySelector('button[type="submit"]');
+  await withButton(submit,async()=>{ try { const item=await addComment(state.mode,state.user,state.profile,form.dataset.commentForm,text); if(state.mode==='demo'){currentComments=[...currentComments,item]; renderPostDetail(form.dataset.commentForm);} form.reset(); toast('Answer published','success'); } catch(e){toast(humanError(e),'error');} });
+}
+async function handleMessage(form) {
+  const text=String(new FormData(form).get('text')||'').trim(); if(!text)return;
+  const input=form.elements.text; input.value='';
+  try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
+  catch(e){ input.value=text; toast(humanError(e),'error'); }
+}
+async function handleProfileSave(form) {
+  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]');
+  await withButton(submit,async()=>{ try { const profile=await updateUserProfile(state.mode,state.user.uid,{fullName:String(fd.get('fullName')||'').trim(),username:String(fd.get('username')||'').trim(),bio:String(fd.get('bio')||'').trim()}); state.profile={...state.profile,...profile}; modalRoot.innerHTML=''; toast('Profile updated','success'); renderRoute(); }catch(e){toast(humanError(e),'error');} });
+}
+async function handleReport(form) {
+  const fd=new FormData(form); try { await reportPost(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Report submitted. Thank you.','success'); } catch(e){toast(humanError(e),'error');}
+}
+async function handleNotification(el) {
+  try { await markNotificationRead(state.mode,el.dataset.notification); const n=state.notifications.find(x=>x.id===el.dataset.notification); if(n)n.read=true; state.unreadCount=state.notifications.filter(n=>!n.read).length; if(el.dataset.post)go(`post/${el.dataset.post}`);else renderNotifications(); }catch(e){toast(humanError(e),'error');}
+}
+async function handleStartConversation(profile) {
+  if(!profile?.uid)return;
+  try { const conv=await startConversation(state.mode,state.user.uid,profile); if(!state.conversations.some(c=>c.id===conv.id))state.conversations.unshift(conv); go(`messages/${conv.id}`); }
+  catch(e){toast(humanError(e),'error');}
+}
+async function withButton(button, task) {
+  if (!button) return task();
+  const old=button.innerHTML; button.disabled=true; button.textContent='Please wait…';
+  try { return await task(); } finally { button.disabled=false; button.innerHTML=old; }
+}
+
+function handleInput(event) {
+  const fileInput = event.target.matches('[data-compose-form] input[type="file"]') ? event.target : null;
+  if (!fileInput) return;
+  const preview = fileInput.form.querySelector('[data-image-preview]');
+  const files = [...(fileInput.files || [])];
+  const policy = getWebPostingPolicy(state.profile || {});
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+
+  if (!files.length) { preview.classList.add('hidden'); preview.innerHTML = ''; return; }
+  if (files.length > policy.maxImagesPerPost) { toast(`Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`, 'error'); fileInput.value = ''; return; }
+  if (files.some(file => !allowed.has(file.type))) { toast('Only PNG, JPG and WebP images are allowed.', 'error'); fileInput.value = ''; return; }
+  if (totalBytes > policy.maxTotalImageBytes) { toast(`Images must be within ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total for your plan.`, 'error'); fileInput.value = ''; return; }
+
+  preview.innerHTML = files.map((file, index) => {
+    const url = URL.createObjectURL(file);
+    return `<figure><img src="${url}" alt="Selected image ${index + 1}"><figcaption>${(file.size/1024/1024).toFixed(1)} MB</figcaption></figure>`;
+  }).join('');
+  preview.classList.remove('hidden');
+}
+
+document.addEventListener('error', event => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.closest('.avatar, .top-avatar')) {
+    img.remove();
+  }
+}, true);
+
+function handleProfileMenuCapture(event) {
+  const trigger = event.target.closest?.('[data-profile-menu]');
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.ui.profileMenu = !state.ui.profileMenu;
+  syncProfileMenu();
+}
+
+function protectDisplayedAvatarMedia(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (!target.closest('.avatar, .top-avatar')) return;
+  event.preventDefault();
+}
+
+window.addEventListener('hashchange', renderRoute);
+// Capture phase makes the top-right avatar reliable on mobile even when the
+// search/header layers overlap or the image itself receives the tap.
+document.addEventListener('click', handleProfileMenuCapture, true);
+document.addEventListener('contextmenu', protectDisplayedAvatarMedia, true);
+document.addEventListener('dragstart', protectDisplayedAvatarMedia, true);
+document.addEventListener('click', handleClick);
+document.addEventListener('submit', handleSubmit);
+document.addEventListener('change', handleInput);
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
+  if (event.key==='Escape' && modalRoot.innerHTML) modalRoot.innerHTML='';
+  if (event.key==='Escape' && state.ui.profileMenu) { state.ui.profileMenu = false; syncProfileMenu(); }
+});
+
+if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+
+boot();
