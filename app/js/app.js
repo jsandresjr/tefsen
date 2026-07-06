@@ -5,7 +5,8 @@ import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
   subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
-  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage
+  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
+  getFollowState, toggleFollow
 } from './services/data-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
@@ -265,7 +266,7 @@ function renderRightbar() {
       <h3>Your Tefsen</h3>
       <div class="widget-link">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(state.profile?.role || 'Student'))} · ${formatCount(state.profile?.points || 0)} points</small></div></div>
       <div class="widget-link"><span class="notification-icon">${icon('bookmark',17)}</span><div><b>${reactionState.saved.size} saved items</b><small>Knowledge for later</small></div></div>
-      <button class="widget-link subscription-widget-link" type="button" data-route="subscription"><span class="notification-icon">${icon('info',17)}</span><div><b>${state.profile?.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><small>${state.profile?.subscriptionActive ? '2 images · 6 MB · 6 image posts/day' : '1 image · 2 MB · 2 image posts/day'}</small></div></button>
+      <button class="widget-link subscription-widget-link" type="button" data-route="subscription"><span class="notification-icon">${icon('info',17)}</span><div><b>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (state.profile?.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><small>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Unlimited daily posting · full web access' : (state.profile?.subscriptionActive ? '2 images · 6 MB · 6 image posts/day' : '1 image · 2 MB · 2 image posts/day')}</small></div></button>
     </section>
     <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
 }
@@ -287,7 +288,7 @@ function postCard(post) {
   return `<article class="panel post-card" data-post-id="${escapeHTML(post.id)}">
     <header class="post-head">
       <button style="border:0;background:none;padding:0;cursor:pointer" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({ fullName: post.authorName, photoUrl: post.authorPhotoUrl }, '', '')}</button>
-      <div class="post-head-main"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified, post.role)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
+      <div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
       <button class="post-menu" type="button" data-post-menu="${escapeHTML(post.id)}" aria-label="Post options">${icon('more',20)}</button>
     </header>
     <div class="post-body" data-route="post/${encodeURIComponent(post.id)}">
@@ -353,7 +354,7 @@ async function renderPostDetail(postId) {
     const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
     const content = `<button class="btn btn-ghost" style="margin-bottom:14px" data-back>${icon('back',17)} Back</button>
       <article class="panel detail-card">
-        <header class="post-head">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}<div class="post-head-main"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
+        <header class="post-head"><button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button><div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
         <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
         <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}"><span>${icon('heart',17)}</span>${formatCount(post.likeCount)}</button><button class="action-btn"><span>${icon('comment',17)}</span>${formatCount(currentComments.length || post.commentCount)}</button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
       </article>
@@ -368,7 +369,10 @@ async function renderPostDetail(postId) {
 
 function answerCard(answer) {
   const user = { fullName: answer.authorName || answer.userName || 'Tefsen User', photoUrl: answer.authorPhotoUrl || answer.profileImageUrl || '' };
-  return `<article class="panel answer-card"><header class="post-head">${avatar(user,'sm')}<div class="post-head-main"><b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b><small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
+  const authorId = answer.authorId || answer.userId || answer.uid || '';
+  const avatarHtml = authorId ? `<button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(authorId)}">${avatar(user,'sm')}</button>` : avatar(user,'sm');
+  const nameHtml = authorId ? `<button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(authorId)}"><b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b></button>` : `<b>${escapeHTML(user.fullName)} ${verifiedMark(answer.verified || answer.authorVerified, answer.role || answer.authorRole || 'Student')}</b>`;
+  return `<article class="panel answer-card"><header class="post-head">${avatarHtml}<div class="post-head-main">${nameHtml}<small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
 }
 
 async function renderNotifications() {
@@ -436,13 +440,18 @@ async function renderProfile(userId = '') {
   }
   currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
-  const posts = state.posts.filter(p => p.authorId === profile?.uid);
+  const posts = state.posts.filter(p => String(p.authorId || '') === String(profile?.uid || ''));
+  let follow = { following: false, followersCount: Number(profile?.followersCount || 0), followingCount: Number(profile?.followingCount || 0) };
+  try { follow = await getFollowState(state.mode, state.user.uid, profile?.uid || ''); } catch { /* keep profile available */ }
+  const actions = own
+    ? `<button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit profile</button>`
+    : `<div class="profile-actions"><button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button><button class="btn btn-secondary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button></div>`;
   const content = `${demoBanner()}<section class="panel" style="overflow:hidden">
     <div class="profile-cover"></div>
     <div class="profile-main">
-      <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${own ? `<button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit profile</button>` : `<button class="btn btn-primary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button>`}</div></div>
+      <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${actions}</div></div>
       <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
-      <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(profile?.followersCount || 0)}</b>Followers</span><span><b>${formatCount(profile?.followingCount || 0)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
+      <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(follow.followersCount)}</b>Followers</span><span><b>${formatCount(follow.followingCount)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
     </div></section>
     <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
     <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Ask your first question or share something useful.':'This member has not published yet.')}</div>`;
@@ -455,19 +464,30 @@ async function renderSubscription() {
   let usage = { textPosts: 0, imagePosts: 0 };
   try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
   const textLimit = Number.isFinite(policy.dailyTextPosts) ? policy.dailyTextPosts : 'Unlimited';
-  const playAction = policy.subscribed
-    ? `<a class="btn btn-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
-    : `<a class="btn btn-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Subscribe with Google Play</a>`;
+  const imageLimit = Number.isFinite(policy.dailyImagePosts) ? policy.dailyImagePosts : 'Unlimited';
+  const isAdmin = Boolean(policy.admin);
+  const playAction = isAdmin
+    ? ''
+    : policy.subscribed
+      ? `<a class="btn btn-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
+      : `<a class="btn btn-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Subscribe with Google Play</a>`;
+  const heroTitle = isAdmin ? 'Admin Full Access' : (policy.subscribed ? 'Subscribed Student' : 'Tefsen Student Plus');
+  const heroText = isAdmin ? 'Administrative account with full web access and no daily posting quota.' : (policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Unlock higher image limits and unlimited text posts.');
+  const kicker = isAdmin ? 'ADMIN PLAN' : (policy.subscribed ? 'ACTIVE PLAN' : 'UPGRADE OPTION');
+  const price = isAdmin ? `<div class="admin-access-badge">Full access</div>` : `<div class="subscription-price-wrap"><strong class="subscription-price">$2.99</strong><span>/ month</span></div>`;
+  const billing = isAdmin
+    ? `<section class="panel subscription-note subscription-play-card"><div><h3>Administrator access</h3><p>This account bypasses student subscription quotas on the web. Administrative actions must still be allowed by Firebase Security Rules.</p></div></section>`
+    : `<section class="panel subscription-note subscription-play-card"><div><h3>Google Play billing</h3><p>Subscribe through the Tefsen Android app on Google Play. After purchase, return here and sync the same Tefsen account.</p></div><div class="subscription-actions">${playAction}<button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div></section>`;
   const content = `${demoBanner()}<header class="page-head"><div><h1>Subscription</h1><p>Your web limits follow the subscription status on the same Tefsen account.</p></div></header>
-    <section class="panel subscription-hero ${policy.subscribed ? 'is-subscribed' : ''}">
-      <div><span class="subscription-kicker">${policy.subscribed ? 'ACTIVE PLAN' : 'UPGRADE OPTION'}</span><h2>${policy.subscribed ? 'Subscribed Student' : 'Tefsen Student Plus'}</h2><p>${policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Unlock higher image limits and unlimited text posts.'}</p></div>
-      <div class="subscription-price-wrap"><strong class="subscription-price">$2.99</strong><span>/ month</span></div>
+    <section class="panel subscription-hero ${policy.subscribed ? 'is-subscribed' : ''} ${isAdmin ? 'is-admin' : ''}">
+      <div><span class="subscription-kicker">${kicker}</span><h2>${heroTitle}</h2><p>${heroText}</p></div>
+      ${price}
     </section>
     <div class="subscription-grid">
-      <section class="panel subscription-card"><h3>Image posts</h3><b>${policy.dailyImagePosts} per day</b><p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p><small>Today: ${usage.imagePosts}/${policy.dailyImagePosts}</small></section>
-      <section class="panel subscription-card"><h3>Text posts</h3><b>${textLimit} per day</b><p>Questions and knowledge posts without images.</p><small>Today: ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? `/${policy.dailyTextPosts}` : ''}</small></section>
+      <section class="panel subscription-card"><h3>Image posts</h3><b>${imageLimit}${Number.isFinite(policy.dailyImagePosts) ? ' per day' : ''}</b><p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p><small>Today: ${usage.imagePosts}${Number.isFinite(policy.dailyImagePosts) ? `/${policy.dailyImagePosts}` : ''}</small></section>
+      <section class="panel subscription-card"><h3>Text posts</h3><b>${textLimit}${Number.isFinite(policy.dailyTextPosts) ? ' per day' : ''}</b><p>Questions and knowledge posts without images.</p><small>Today: ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? `/${policy.dailyTextPosts}` : ''}</small></section>
     </div>
-    <section class="panel subscription-note subscription-play-card"><div><h3>Google Play billing</h3><p>Subscribe through the Tefsen Android app on Google Play. After purchase, return here and sync the same Tefsen account.</p></div><div class="subscription-actions">${playAction}<button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div></section>`;
+    ${billing}`;
   renderShell(content, { wide: true });
 }
 
@@ -482,7 +502,7 @@ function renderSettings() {
     <section class="panel settings-section">
       <div class="${panelClass('profile')}" data-settings-panel="profile"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>
       <div class="${panelClass('preferences')}" data-settings-panel="preferences"><h2 style="margin-top:0">Preferences</h2><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle ${compact ? 'active' : ''}" type="button" data-pref="compact" aria-pressed="${compact}"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle ${motion ? 'active' : ''}" type="button" data-pref="motion" aria-pressed="${motion}"></button></div></div>
-      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${p.subscriptionActive ? 'Subscribed Student' : 'Free Student'}</b><p>Web posting limits sync with your Tefsen account.</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
+      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (p.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><p>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Administrative web access with no daily posting quota.' : 'Web posting limits sync with your Tefsen account.'}</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
     </section></div>`;
   renderShell(content,{wide:true});
 }
@@ -523,7 +543,7 @@ function openComposer() {
   const policy = getWebPostingPolicy(state.profile || {});
   const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
-    <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${policy.dailyImagePosts} image posts/day · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
+    <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} image posts/day` : 'Unlimited image posts'} · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
     <div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required placeholder="What would you like to ask or explain?"></div>
     <div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="8000" required placeholder="Add context, what you tried, or a useful explanation…"></textarea></div>
     <div class="input-row"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="60" placeholder="e.g. Physics"></div><div class="field"><label>Tags</label><input class="input" name="tags" maxlength="150" placeholder="circuits, electricity"></div></div>
@@ -618,6 +638,8 @@ async function handleClick(event) {
   if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; renderRoute(); return; }
   if (event.target.closest('[data-logout]')) { await logout(state.mode); return; }
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
+  const followUser = event.target.closest('[data-follow-user]');
+  if (followUser) { await handleFollow(followUser); return; }
   const messageUser = event.target.closest('[data-message-user]');
   if (messageUser) { await handleStartConversation(currentProfileView); return; }
   const subject = event.target.closest('[data-subject]');
@@ -722,6 +744,36 @@ async function handleLike(postId) {
     });
   }
 }
+async function handleFollow(button) {
+  const targetUserId = button?.dataset?.followUser || currentProfileView?.uid || '';
+  if (!targetUserId || targetUserId === state.user.uid) return;
+  const previous = button.getAttribute('aria-pressed') === 'true';
+  button.disabled = true;
+  button.textContent = previous ? 'Follow' : 'Following';
+  button.classList.toggle('btn-primary', previous);
+  button.classList.toggle('btn-secondary', !previous);
+  button.classList.toggle('is-following', !previous);
+  button.setAttribute('aria-pressed', String(!previous));
+  try {
+    const active = await toggleFollow(state.mode, state.user.uid, targetUserId);
+    button.textContent = active ? 'Following' : 'Follow';
+    button.classList.toggle('btn-primary', !active);
+    button.classList.toggle('btn-secondary', active);
+    button.classList.toggle('is-following', active);
+    button.setAttribute('aria-pressed', String(active));
+    await renderProfile(targetUserId);
+  } catch (error) {
+    button.textContent = previous ? 'Following' : 'Follow';
+    button.classList.toggle('btn-primary', !previous);
+    button.classList.toggle('btn-secondary', previous);
+    button.classList.toggle('is-following', previous);
+    button.setAttribute('aria-pressed', String(previous));
+    toast(humanError(error), 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
   catch(e){ toast(humanError(e),'error'); }

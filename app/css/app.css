@@ -644,3 +644,44 @@ img { max-width: 100%; }
   .subscription-actions { width: 100%; justify-content: stretch; }
   .subscription-actions .btn { flex: 1 1 180px; }
 }
+
+
+/* Follow + profile navigation polish */
+.user-name-link,
+.avatar-route-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.user-name-link { display: inline-flex; align-items: center; max-width: 100%; }
+.user-name-link b { display: inline-flex; align-items: center; gap: 4px; }
+.user-name-link:hover b { color: #7fe3ff; }
+.avatar-route-button { display: inline-grid; place-items: center; border-radius: 999px; }
+.avatar-route-button:focus-visible,
+.user-name-link:focus-visible { outline: 2px solid var(--cyan, #32d9ff); outline-offset: 3px; }
+.profile-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.btn.is-following { border-color: rgba(74, 215, 255, .28); }
+.admin-access-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: #ffd2dc;
+  background: rgba(239, 68, 101, .13);
+  border: 1px solid rgba(239, 68, 101, .28);
+  white-space: nowrap;
+}
+.subscription-hero.is-admin { box-shadow: inset 0 0 0 1px rgba(239, 68, 101, .12); }
+@media (max-width: 640px) {
+  .profile-actions { width: 100%; justify-content: stretch; }
+  .profile-actions .btn { flex: 1 1 140px; }
+}

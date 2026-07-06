@@ -4,7 +4,8 @@ import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS, DEMO_NOTIFICATIONS, DEMO_CONVERSATIONS, DEMO_MESSAGES } from './demo-data.js';
 import {
   collection, collectionGroup, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, limit, serverTimestamp, increment, arrayUnion
+  onSnapshot, query, where, orderBy, limit, serverTimestamp, increment, arrayUnion,
+  writeBatch, getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
@@ -57,9 +58,22 @@ function resolveSubscription(raw = {}) {
 }
 
 export function getWebPostingPolicy(profile = {}) {
+  const admin = isAdminRole(profile?.role);
+  if (admin) {
+    return {
+      subscribed: true,
+      admin: true,
+      name: 'Admin Full Access',
+      maxImagesPerPost: 2,
+      maxTotalImageBytes: 6 * 1024 * 1024,
+      dailyImagePosts: Infinity,
+      dailyTextPosts: Infinity
+    };
+  }
   const subscribed = Boolean(profile?.subscriptionActive);
   return subscribed ? {
     subscribed: true,
+    admin: false,
     name: 'Subscribed Student',
     maxImagesPerPost: 2,
     maxTotalImageBytes: 6 * 1024 * 1024,
@@ -67,6 +81,7 @@ export function getWebPostingPolicy(profile = {}) {
     dailyTextPosts: Infinity
   } : {
     subscribed: false,
+    admin: false,
     name: 'Free Student',
     maxImagesPerPost: 1,
     maxTotalImageBytes: 2 * 1024 * 1024,
@@ -139,11 +154,13 @@ let demoConversations = structuredClone(DEMO_CONVERSATIONS);
 let demoMessages = structuredClone(DEMO_MESSAGES);
 const demoSaved = new Set(JSON.parse(localStorage.getItem('tefsen_demo_saved') || '[]'));
 const demoLiked = new Set(JSON.parse(localStorage.getItem('tefsen_demo_liked') || '[]'));
+const demoFollowing = new Set(JSON.parse(localStorage.getItem('tefsen_demo_following') || '[]'));
 
 function persistDemo() {
   localStorage.setItem('tefsen_demo_posts', JSON.stringify(demoPosts.filter(p => String(p.id).startsWith('local-'))));
   localStorage.setItem('tefsen_demo_saved', JSON.stringify([...demoSaved]));
   localStorage.setItem('tefsen_demo_liked', JSON.stringify([...demoLiked]));
+  localStorage.setItem('tefsen_demo_following', JSON.stringify([...demoFollowing]));
 }
 
 export function normalizeUser(raw = {}, id = '') {
@@ -323,7 +340,7 @@ export async function createPost(mode, user, profile, payload) {
       title: payload.title, content: payload.content, subject: payload.subject,
       tags: payload.tags, imageUrl: imageUrls[0] || '', imageUrls,
       createdAt: new Date().toISOString(), likeCount: 0, commentCount: 0, saveCount: 0,
-      webPost: true, sourcePlatform: 'web', webPlan: policy.subscribed ? 'subscribed' : 'free',
+      webPost: true, sourcePlatform: 'web', webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
       imageCount: imageUrls.length, totalImageBytes, quotaDay: usage.dayKey
     });
     demoPosts.unshift(post); persistDemo(); return post;
@@ -358,7 +375,7 @@ export async function createPost(mode, user, profile, payload) {
     status: 'published',
     sourcePlatform: 'web',
     webPost: true,
-    webPlan: policy.subscribed ? 'subscribed' : 'free',
+    webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
     quotaDay: usage.dayKey,
     likeCount: 0,
     commentCount: 0,
@@ -417,6 +434,67 @@ export async function deletePost(mode, userId, postId) {
   // a trusted backend or Cloud Function.
   await deleteDoc(postRef);
   return true;
+}
+
+
+export async function getFollowState(mode, currentUserId, targetUserId) {
+  if (!targetUserId) return { following: false, followersCount: 0, followingCount: 0 };
+  if (mode === 'demo') {
+    const target = normalizeUser(DEMO_USERS.find(u => String(u.uid || u.id) === String(targetUserId)) || {}, targetUserId);
+    return {
+      following: Boolean(currentUserId && currentUserId !== targetUserId && demoFollowing.has(String(targetUserId))),
+      followersCount: Math.max(0, Number(target.followersCount || 0) + (demoFollowing.has(String(targetUserId)) ? 1 : 0)),
+      followingCount: Math.max(0, Number(target.followingCount || 0))
+    };
+  }
+
+  const targetRef = doc(db, C.users, targetUserId);
+  const followersRef = collection(targetRef, S.followers);
+  const followingRef = collection(targetRef, S.following);
+  const ownFollowerRef = currentUserId ? doc(targetRef, S.followers, currentUserId) : null;
+
+  const [followersAgg, followingAgg, ownSnap] = await Promise.all([
+    getCountFromServer(followersRef).catch(() => null),
+    getCountFromServer(followingRef).catch(() => null),
+    ownFollowerRef ? getDoc(ownFollowerRef).catch(() => null) : Promise.resolve(null)
+  ]);
+
+  return {
+    following: Boolean(ownSnap?.exists?.()),
+    followersCount: Number(followersAgg?.data?.().count || 0),
+    followingCount: Number(followingAgg?.data?.().count || 0)
+  };
+}
+
+export async function toggleFollow(mode, currentUserId, targetUserId) {
+  if (!currentUserId || !targetUserId) throw new Error('Missing user ID.');
+  if (String(currentUserId) === String(targetUserId)) throw new Error('You cannot follow yourself.');
+
+  if (mode === 'demo') {
+    const key = String(targetUserId);
+    const active = demoFollowing.has(key);
+    active ? demoFollowing.delete(key) : demoFollowing.add(key);
+    persistDemo();
+    return !active;
+  }
+
+  const followerRef = doc(db, C.users, targetUserId, S.followers, currentUserId);
+  const followingRef = doc(db, C.users, currentUserId, S.following, targetUserId);
+  const existing = await getDoc(followerRef);
+  const active = existing.exists();
+  const batch = writeBatch(db);
+
+  if (active) {
+    batch.delete(followerRef);
+    batch.delete(followingRef);
+  } else {
+    const stamp = serverTimestamp();
+    batch.set(followerRef, { uid: currentUserId, followerId: currentUserId, createdAt: stamp });
+    batch.set(followingRef, { uid: targetUserId, targetUserId, createdAt: stamp });
+  }
+
+  await batch.commit();
+  return !active;
 }
 
 export async function getReactionIds(mode, userId) {

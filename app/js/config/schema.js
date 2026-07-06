@@ -14,7 +14,9 @@ export const SCHEMA = Object.freeze({
     comments: 'comments',
     likes: 'likes',
     savedPosts: 'savedPosts',
-    messages: 'messages'
+    messages: 'messages',
+    followers: 'followers',
+    following: 'following'
   }
 });
 
