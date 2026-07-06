@@ -5,7 +5,7 @@ import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS, DEMO_NOTIFICATIONS, DEMO_CONVERS
 import {
   collection, collectionGroup, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
   onSnapshot, query, where, orderBy, limit, serverTimestamp, increment, arrayUnion,
-  writeBatch, getCountFromServer
+  writeBatch, getCountFromServer, runTransaction
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
@@ -555,6 +555,8 @@ export async function hydratePostLikeState(mode, userId, postIds = []) {
 }
 
 export async function toggleLike(mode, userId, postId) {
+  if (!userId || !postId) throw new Error('Missing user or post ID.');
+
   if (mode === 'demo') {
     const post = demoPosts.find(p => p.id === postId);
     const active = demoLiked.has(postId);
@@ -564,34 +566,61 @@ export async function toggleLike(mode, userId, postId) {
     return { liked: !active, count: Math.max(0, Number(post?.likeCount || 0)) };
   }
 
-  const likeRef = doc(db, C.posts, postId, S.likes, userId);
-  const likesRef = collection(db, C.posts, postId, S.likes);
-  const postRef = doc(db, C.posts, postId);
-  const snap = await getDoc(likeRef);
-  const liked = !snap.exists();
+  // Canonical cross-platform path. Always use the actual Firestore document ID.
+  const canonicalPostId = String(postId);
+  const canonicalUserId = String(userId);
+  const postRef = doc(db, C.posts, canonicalPostId);
+  const likeRef = doc(db, C.posts, canonicalPostId, S.likes, canonicalUserId);
+  const likesRef = collection(db, C.posts, canonicalPostId, S.likes);
 
-  // The like document is the source of truth. Keep this write independent
-  // from the denormalized post counter so stricter post-update rules do not
-  // make a valid like disappear after refresh.
-  if (liked) {
-    await setDoc(likeRef, { userId, createdAt: serverTimestamp() });
-  } else {
-    await deleteDoc(likeRef);
-  }
-  updateLikedCache(userId, postId, liked);
+  const result = await runTransaction(db, async transaction => {
+    const postSnap = await transaction.get(postRef);
+    if (!postSnap.exists()) {
+      const error = new Error('This post no longer exists.');
+      error.code = 'not-found';
+      throw error;
+    }
 
-  let exactCount = null;
+    const likeSnap = await transaction.get(likeRef);
+    const currentlyLiked = likeSnap.exists();
+    const liked = !currentlyLiked;
+    const raw = postSnap.data() || {};
+    const currentCount = Math.max(0, Number(raw.likeCount ?? raw.likesCount ?? 0));
+    const nextCount = Math.max(0, currentCount + (liked ? 1 : -1));
+
+    if (liked) {
+      transaction.set(likeRef, {
+        userId: canonicalUserId,
+        uid: canonicalUserId,
+        postId: canonicalPostId,
+        createdAt: serverTimestamp()
+      });
+    } else {
+      transaction.delete(likeRef);
+    }
+
+    transaction.update(postRef, {
+      likeCount: nextCount,
+      likesCount: nextCount,
+      updatedAt: serverTimestamp()
+    });
+
+    return { liked, count: nextCount };
+  });
+
+  updateLikedCache(userId, postId, result.liked);
+
+  // Reconcile the denormalized count from the canonical like documents.
   try {
     const aggregate = await getCountFromServer(likesRef);
-    exactCount = Math.max(0, Number(aggregate.data().count || 0));
-    // Best effort only: older Android clients may still read likeCount.
-    await updateDoc(postRef, { likeCount: exactCount }).catch(() => {});
-  } catch (error) {
-    // Fall back to a counter increment, but never roll back the real like doc.
-    await updateDoc(postRef, { likeCount: increment(liked ? 1 : -1) }).catch(() => {});
+    const exactCount = Math.max(0, Number(aggregate.data().count || 0));
+    if (exactCount !== result.count) {
+      await updateDoc(postRef, { likeCount: exactCount, likesCount: exactCount }).catch(() => {});
+    }
+    return { liked: result.liked, count: exactCount };
+  } catch {
+    return result;
   }
-
-  return { liked, count: exactCount };
 }
 
 export async function toggleSave(mode, userId, postId) {
@@ -609,82 +638,135 @@ export async function toggleSave(mode, userId, postId) {
 
 export function subscribeComments(mode, postId, callback, errorCallback = console.error) {
   if (mode === 'demo') {
-    callback((demoComments[postId] || []).map(x => ({...x})));
+    callback((demoComments[postId] || []).map(x => ({ ...x })));
     return () => {};
   }
-  const commentsRef = collection(db, C.posts, postId, S.comments);
-  const emit = rows => {
-    void Promise.all(rows.map(item => enrichAuthorRecord(mode, item))).then(callback).catch(() => callback(rows));
+
+  // `answers` is the canonical Android + Web reply path.
+  // Legacy `comments` are merged for backward compatibility only.
+  const answerRows = new Map();
+  const commentRows = new Map();
+
+  const emit = () => {
+    const merged = new Map();
+    for (const [id, row] of commentRows) merged.set(id, row);
+    for (const [id, row] of answerRows) merged.set(id, row); // canonical wins on duplicate IDs
+
+    const rows = [...merged.values()].sort((a, b) => {
+      const at = timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0;
+      const bt = timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0;
+      return at - bt;
+    });
+
+    void Promise.all(rows.map(item => enrichAuthorRecord(mode, item)))
+      .then(callback)
+      .catch(() => callback(rows));
   };
-  return onSnapshot(query(commentsRef, orderBy('createdAt', 'asc'), limit(100)), snap => {
-    emit(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  }, err => {
-    console.warn('Ordered comments listener failed:', err);
-    onSnapshot(query(commentsRef, limit(100)), snap => emit(snap.docs.map(d => ({ id: d.id, ...d.data() }))), errorCallback);
-  });
+
+  const attach = (subcollectionName, targetMap) => {
+    const targetRef = collection(db, C.posts, String(postId), subcollectionName);
+    let fallbackUnsub = null;
+    const unsub = onSnapshot(query(targetRef, orderBy('createdAt', 'asc'), limit(100)), snap => {
+      targetMap.clear();
+      snap.docs.forEach(d => targetMap.set(d.id, { id: d.id, ...d.data() }));
+      emit();
+    }, err => {
+      console.warn(`${subcollectionName} ordered listener failed; using fallback.`, err);
+      try {
+        fallbackUnsub = onSnapshot(query(targetRef, limit(100)), snap => {
+          targetMap.clear();
+          snap.docs.forEach(d => targetMap.set(d.id, { id: d.id, ...d.data() }));
+          emit();
+        }, errorCallback);
+      } catch (fallbackError) {
+        errorCallback(fallbackError);
+      }
+    });
+    return () => { unsub?.(); fallbackUnsub?.(); };
+  };
+
+  const unsubAnswers = attach(S.answers || 'answers', answerRows);
+  const unsubComments = attach(S.comments || 'comments', commentRows);
+  return () => { unsubAnswers?.(); unsubComments?.(); };
 }
 
 export async function addComment(mode, user, profile, postId, text) {
+  const cleanText = String(text || '').trim();
+  if (!cleanText) throw new Error('Answer cannot be empty.');
+  if (cleanText.length > 5000) throw new Error('Answer is too long.');
+
   if (mode === 'demo') {
-    const item = { id: uid('comment'), authorId: user.uid, authorName: profile?.fullName || 'Tefsen User', role: profile?.role || 'Student', verified: profile?.verified || false, content: text, createdAt: new Date().toISOString(), likeCount: 0 };
+    const item = {
+      id: uid('answer'),
+      authorId: user.uid,
+      userId: user.uid,
+      authorName: profile?.fullName || 'Tefsen User',
+      authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
+      authorRole: profile?.role || 'Student',
+      authorVerified: Boolean(profile?.verified),
+      content: cleanText,
+      text: cleanText,
+      createdAt: new Date().toISOString(),
+      likeCount: 0
+    };
     demoComments[postId] = [...(demoComments[postId] || []), item];
-    const post = demoPosts.find(p => p.id === postId); if (post) post.commentCount = Number(post.commentCount || 0) + 1;
+    const post = demoPosts.find(p => p.id === postId);
+    if (post) post.commentCount = Number(post.commentCount || 0) + 1;
     return item;
   }
+
+  const canonicalPostId = String(postId);
+  const answersRef = collection(db, C.posts, canonicalPostId, S.answers || 'answers');
+  const postRef = doc(db, C.posts, canonicalPostId);
+  const answerRef = doc(answersRef);
+  const nowMillis = Date.now();
+
   const item = {
-    authorId: user.uid,
-    userId: user.uid,
+    id: answerRef.id,
+    postId: canonicalPostId,
+    questionId: canonicalPostId,
+    parentPostId: canonicalPostId,
+    authorId: String(user.uid),
+    userId: String(user.uid),
+    uid: String(user.uid),
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
+    profileImageUrl: profile?.photoUrl || user.photoURL || '',
     authorRole: profile?.role || 'Student',
+    role: profile?.role || 'Student',
     authorVerified: Boolean(profile?.verified),
-    content: text,
-    text,
+    verified: Boolean(profile?.verified),
+    content: cleanText,
+    text: cleanText,
+    answer: cleanText,
+    reply: cleanText,
+    type: 'answer',
+    sourcePlatform: 'web',
     likeCount: 0,
+    createdAtMillis: nowMillis,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
-  // Primary web path. Keep this because the web app listens to nested comments.
-  const added = await addDoc(collection(db, C.posts, postId, S.comments), item);
 
-  // Cross-platform compatibility bridge for the Android app.
-  // Older/mobile builds may read replies from top-level `comments` or `answers`
-  // instead of `posts/{postId}/comments`. Use the same document id and include
-  // common field aliases so both clients can resolve the same answer.
-  const mobileItem = {
-    ...item,
-    id: added.id,
-    postId,
-    questionId: postId,
-    parentPostId: postId,
-    parentId: postId,
-    uid: user.uid,
-    authorUid: user.uid,
-    profileImageUrl: profile?.photoUrl || user.photoURL || '',
-    role: profile?.role || 'Student',
-    verified: Boolean(profile?.verified),
-    answer: text,
-    reply: text,
-    type: 'answer',
-    sourcePlatform: 'web'
-  };
+  const postSnap = await getDoc(postRef);
+  if (!postSnap.exists()) {
+    const error = new Error('This post no longer exists.');
+    error.code = 'not-found';
+    throw error;
+  }
 
-  // Best-effort dual write: do not break the web reply if one legacy mobile
-  // collection is not allowed by current Firestore rules.
-  await Promise.allSettled([
-    setDoc(doc(db, 'comments', added.id), mobileItem),
-    setDoc(doc(db, 'answers', added.id), mobileItem)
-  ]);
-
-  // Maintain common counter aliases used by different Android/web builds.
-  await updateDoc(doc(db, C.posts, postId), {
+  const batch = writeBatch(db);
+  batch.set(answerRef, item);
+  batch.update(postRef, {
+    answerCount: increment(1),
+    answersCount: increment(1),
     commentCount: increment(1),
     commentsCount: increment(1),
-    answerCount: increment(1),
-    answersCount: increment(1)
-  }).catch(() => {});
+    updatedAt: serverTimestamp()
+  });
+  await batch.commit();
 
-  return { id: added.id, ...item };
+  return { ...item, createdAt: new Date(nowMillis).toISOString() };
 }
 
 export async function getNotifications(mode, userId) {

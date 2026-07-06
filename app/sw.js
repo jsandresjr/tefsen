@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v12-mobile-answer-sync';
+const CACHE = 'tefsen-web-shell-v13-cross-platform-sync';
 const SHELL = [
   './', './index.html', './css/app.css', './js/app.js',
   './js/config/firebase-config.js', './assets/tefsen-logo.png', './assets/favicon.png'

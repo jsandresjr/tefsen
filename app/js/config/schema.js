@@ -12,6 +12,7 @@ export const SCHEMA = Object.freeze({
   },
   subcollections: {
     comments: 'comments',
+    answers: 'answers',
     likes: 'likes',
     savedPosts: 'savedPosts',
     messages: 'messages',
