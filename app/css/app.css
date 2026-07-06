@@ -826,3 +826,227 @@ img { max-width: 100%; }
   .action-btn { gap: 4px; font-size: 10.5px; }
   .action-btn svg { width: 16px; height: 16px; }
 }
+
+
+/* Mobile account menu reliability + luxury subscription experience */
+.profile-menu-backdrop {
+  position: fixed;
+  z-index: 88;
+  inset: 0;
+  background: rgba(2, 9, 17, .28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.profile-dropdown {
+  z-index: 90;
+  overflow: hidden;
+  border-color: rgba(112, 196, 236, .20);
+  background:
+    radial-gradient(circle at 90% -10%, rgba(34, 218, 194, .14), transparent 42%),
+    linear-gradient(180deg, rgba(15, 37, 59, .985), rgba(8, 25, 42, .99));
+  box-shadow: 0 26px 80px rgba(0,0,0,.48), inset 0 1px rgba(255,255,255,.05);
+}
+.dropdown-user-premium { padding-bottom: 7px; }
+.dropdown-plan-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 8px 7px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #7de9ff;
+  background: rgba(33, 178, 228, .10);
+  border: 1px solid rgba(71, 205, 238, .15);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .03em;
+}
+.profile-dropdown button {
+  display: grid;
+  grid-template-columns: 20px minmax(0,1fr);
+  align-items: center;
+  column-gap: 10px;
+  min-height: 49px;
+  padding: 7px 10px;
+}
+.profile-dropdown button svg { grid-row: 1 / span 2; }
+.profile-dropdown button span { font-weight: 760; color: #e7f4fd; }
+.profile-dropdown button small {
+  display: block;
+  grid-column: 2;
+  color: #829bb2;
+  font-size: 9.5px;
+  line-height: 1.25;
+}
+.profile-dropdown .dropdown-danger { display: flex; min-height: 43px; }
+html.profile-menu-open { overflow: hidden; }
+
+.subscription-luxury-page { display: grid; gap: 18px; padding-bottom: 18px; }
+.subscription-luxury-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 4px 2px 2px;
+}
+.subscription-luxury-head h1 {
+  margin: 5px 0 7px;
+  font-size: clamp(31px, 5vw, 54px);
+  line-height: .98;
+  letter-spacing: -.05em;
+  background: linear-gradient(105deg, #ffffff 4%, #cceeff 48%, #7af2d2 96%);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.subscription-luxury-head p { max-width: 680px; margin: 0; color: #98aec2; font-size: 15px; }
+.lux-overline,
+.lux-card-kicker,
+.lux-plan-eyebrow {
+  color: #69dcf7;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .15em;
+}
+.lux-secure-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid rgba(92, 223, 188, .16);
+  border-radius: 999px;
+  color: #9fead4;
+  background: rgba(25, 151, 125, .08);
+  font-size: 11px;
+  font-weight: 800;
+}
+.lux-plan-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 270px;
+  padding: clamp(24px, 4vw, 44px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  border: 1px solid rgba(111, 203, 238, .18);
+  border-radius: 30px;
+  background:
+    linear-gradient(135deg, rgba(16, 56, 86, .94), rgba(8, 30, 51, .97) 52%, rgba(9, 47, 56, .92)),
+    #0c2136;
+  box-shadow: 0 28px 80px rgba(0,0,0,.26), inset 0 1px rgba(255,255,255,.06);
+}
+.lux-plan-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .22;
+  background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(110deg, #000, transparent 78%);
+}
+.lux-plan-hero.is-plus { border-color: rgba(79, 232, 195, .27); }
+.lux-plan-hero.is-admin { border-color: rgba(255, 111, 143, .25); background: linear-gradient(135deg, rgba(67, 25, 49, .94), rgba(13, 31, 50, .97) 58%, rgba(26, 23, 48, .95)); }
+.lux-glow { position: absolute; width: 360px; height: 360px; border-radius: 50%; filter: blur(28px); opacity: .22; pointer-events: none; }
+.lux-glow-a { right: -130px; top: -170px; background: #20d7b8; }
+.lux-glow-b { left: -210px; bottom: -250px; background: #1a9cff; }
+.lux-plan-content,
+.lux-plan-price { position: relative; z-index: 1; }
+.lux-plan-content h2 { margin: 8px 0 10px; font-size: clamp(30px, 4.2vw, 48px); letter-spacing: -.045em; line-height: 1; }
+.lux-plan-content > p { max-width: 620px; margin: 0; color: #a9bdce; font-size: 15px; line-height: 1.65; }
+.lux-plan-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+.btn.lux-primary { color: #051721; font-weight: 900; background: linear-gradient(115deg, #20b9ff, #2cdeaa); box-shadow: 0 12px 30px rgba(24, 197, 204, .18); }
+.btn.lux-secondary { color: #d7edf8; background: rgba(8, 28, 45, .55); border: 1px solid rgba(141, 205, 235, .16); }
+.lux-plan-price { min-width: 190px; text-align: right; }
+.lux-price { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+.lux-price strong { font-size: clamp(42px, 6vw, 66px); letter-spacing: -.06em; line-height: .9; }
+.lux-price span { color: #a8bccd; font-size: 12px; font-weight: 750; }
+.lux-plan-price > small { display: block; margin-top: 10px; color: #7491a8; }
+.lux-access-token { display: inline-flex; align-items: center; gap: 8px; padding: 11px 15px; border-radius: 999px; color: #ffd8e2; background: rgba(236, 71, 111, .12); border: 1px solid rgba(255, 116, 151, .21); font-weight: 900; }
+
+.lux-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+.lux-usage-card {
+  position: relative;
+  padding: 22px;
+  border: 1px solid rgba(141, 196, 226, .13);
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(15, 39, 62, .92), rgba(8, 26, 44, .90));
+  box-shadow: inset 0 1px rgba(255,255,255,.03);
+}
+.lux-icon-orb { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 16px; border-radius: 13px; color: #6ce6ff; background: linear-gradient(145deg, rgba(28, 169, 231, .17), rgba(43, 220, 172, .09)); border: 1px solid rgba(85, 207, 239, .13); }
+.lux-usage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.lux-usage-top span { font-weight: 780; }
+.lux-usage-top strong { font-size: 22px; letter-spacing: -.035em; }
+.lux-usage-card p { min-height: 42px; margin: 9px 0 16px; color: #91a8bb; font-size: 13px; }
+.lux-meter { overflow: hidden; height: 6px; border-radius: 999px; background: rgba(145, 190, 216, .09); }
+.lux-meter i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #16b8ff, #2bdcab); box-shadow: 0 0 16px rgba(37, 211, 189, .35); }
+.lux-usage-card small { display: block; margin-top: 9px; color: #6fdcf2; }
+
+.lux-compare-section { padding: clamp(22px, 4vw, 34px); border: 1px solid rgba(140, 198, 229, .12); border-radius: 28px; background: rgba(10, 28, 46, .62); }
+.lux-section-title h2 { margin: 6px 0 20px; font-size: clamp(25px, 3vw, 34px); letter-spacing: -.04em; }
+.lux-section-title span { color: #6adcf5; font-size: 10px; font-weight: 900; letter-spacing: .14em; }
+.lux-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+.lux-plan-card { position: relative; padding: 22px; border-radius: 22px; border: 1px solid rgba(145, 197, 225, .12); background: rgba(7, 23, 40, .66); }
+.lux-plan-card-plus { background: linear-gradient(145deg, rgba(15, 61, 79, .85), rgba(8, 32, 49, .9)); border-color: rgba(70, 219, 190, .18); }
+.lux-plan-card.is-current { box-shadow: inset 0 0 0 1px rgba(75, 216, 236, .16), 0 14px 36px rgba(0,0,0,.14); }
+.lux-plan-card h3 { margin: 6px 0 6px; font-size: 24px; letter-spacing: -.035em; }
+.lux-plan-card h3 small { color: #879db0; font-size: 11px; }
+.lux-plan-card p { margin: 0; color: #8fa6ba; font-size: 13px; }
+.lux-plan-card ul { display: grid; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none; color: #c5d9e8; font-size: 13px; }
+.lux-plan-card li { display: flex; align-items: center; gap: 8px; }
+.lux-plan-card li svg { color: #58dec0; }
+.lux-current-pill { display: inline-flex; margin-top: 20px; padding: 7px 10px; border-radius: 999px; color: #79e6ca; background: rgba(50, 195, 158, .10); font-size: 10px; font-weight: 850; }
+.lux-card-cta { display: inline-block; margin-top: 20px; color: #70e8ff; font-size: 12px; font-weight: 850; }
+
+.lux-billing-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 18px; padding: 22px; border-radius: 24px; border: 1px solid rgba(129, 193, 225, .13); background: linear-gradient(120deg, rgba(17, 39, 61, .84), rgba(7, 24, 41, .92)); }
+.lux-billing-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 17px; color: #061924; background: linear-gradient(135deg, #5ad8ff, #55e5a4); font-size: 22px; font-weight: 1000; box-shadow: 0 10px 28px rgba(32, 202, 201, .16); }
+.lux-billing-card h3 { margin: 4px 0 5px; }
+.lux-billing-card p { margin: 0; color: #91a8ba; font-size: 13px; line-height: 1.55; }
+
+@media (max-width: 860px) {
+  .profile-menu-backdrop { background: rgba(1, 8, 15, .54); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+  .profile-dropdown {
+    position: fixed;
+    top: calc(var(--top) + 8px);
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: calc(100dvh - var(--top) - 24px);
+    overflow-y: auto;
+    border-radius: 22px;
+    animation: mobile-account-menu-in .18s ease-out;
+  }
+  @keyframes mobile-account-menu-in { from { opacity: 0; transform: translateY(-7px) scale(.985); } to { opacity: 1; transform: none; } }
+  .dropdown-user { padding: 10px 10px 9px; }
+  .dropdown-user .avatar.sm { width: 46px; height: 46px; }
+  .profile-dropdown button { min-height: 54px; }
+
+  .subscription-luxury-head { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .lux-plan-hero { min-height: 0; grid-template-columns: 1fr; padding: 26px 22px; }
+  .lux-plan-price { min-width: 0; text-align: left; }
+  .lux-price { justify-content: flex-start; }
+  .lux-usage-grid,
+  .lux-compare-grid { grid-template-columns: 1fr; }
+  .lux-billing-card { grid-template-columns: auto 1fr; }
+  .lux-billing-card > .btn { grid-column: 1 / -1; width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .subscription-luxury-page { gap: 13px; }
+  .subscription-luxury-head { padding-top: 2px; }
+  .subscription-luxury-head h1 { font-size: 34px; }
+  .subscription-luxury-head p { font-size: 13px; line-height: 1.55; }
+  .lux-secure-note { padding: 7px 9px; font-size: 10px; }
+  .lux-plan-hero { border-radius: 24px; padding: 24px 18px; }
+  .lux-plan-content h2 { font-size: 32px; }
+  .lux-plan-content > p { font-size: 13px; }
+  .lux-plan-actions { display: grid; grid-template-columns: 1fr; }
+  .lux-plan-actions .btn { width: 100%; }
+  .lux-price strong { font-size: 50px; }
+  .lux-usage-card,
+  .lux-plan-card { padding: 18px; }
+  .lux-compare-section { padding: 20px 15px; border-radius: 24px; }
+  .lux-billing-card { padding: 18px; border-radius: 22px; }
+  .lux-billing-mark { width: 44px; height: 44px; border-radius: 14px; }
+}

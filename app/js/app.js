@@ -204,7 +204,7 @@ function renderShell(content, options = {}) {
         <div class="topbar-actions">
           <button class="icon-button desktop-only" type="button" data-route="messages" aria-label="Messages">${icon('message',19)}</button>
           <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
-          <button class="top-avatar" type="button" data-profile-menu aria-label="Profile menu"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
+          <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
         </div>
       </header>
 
@@ -249,15 +249,37 @@ function mobileNavButton(id, ic, route, label) {
 
 function renderProfileDropdown() {
   const p = state.profile || {};
-  return `<div class="dropdown profile-dropdown" data-dropdown>
-    <div class="dropdown-user">${avatar(p,'sm')}<div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(p.role || 'Student'))}</small></div></div>
-    <div class="dropdown-separator"></div>
-    <button type="button" data-route="profile">${icon('user',17)} <span>View profile</span></button>
-    <button type="button" data-route="subscription">${icon('info',17)} <span>Subscription</span></button>
-    <button type="button" data-route="settings">${icon('settings',17)} <span>Settings</span></button>
-    <div class="dropdown-separator"></div>
-    <button type="button" class="dropdown-danger" data-logout>${icon('logout',17)} <span>Sign out</span></button>
-  </div>`;
+  const role = normalizeRole(p.role || 'Student');
+  const isAdmin = String(p.role || '').trim().toLowerCase() === 'admin';
+  const plan = isAdmin ? 'Admin Full Access' : (p.subscriptionActive ? 'Student Plus' : 'Free Student');
+  return `<div class="profile-menu-backdrop" data-profile-menu-dismiss aria-hidden="true"></div>
+    <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Tefsen account menu">
+      <div class="dropdown-user dropdown-user-premium">
+        ${avatar(p,'sm')}
+        <div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(role)} · ${escapeHTML(plan)}</small></div>
+      </div>
+      <div class="dropdown-plan-chip">${isAdmin ? icon('check',15) : icon('info',15)} <span>${escapeHTML(plan)}</span></div>
+      <div class="dropdown-separator"></div>
+      <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
+      <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
+      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
+      <div class="dropdown-separator"></div>
+      <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
+    </section>`;
+}
+
+function syncProfileMenu() {
+  document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
+  const trigger = document.querySelector('[data-profile-menu]');
+  if (!state.ui.profileMenu) {
+    trigger?.setAttribute('aria-expanded', 'false');
+    document.documentElement.classList.remove('profile-menu-open');
+    return;
+  }
+  root.insertAdjacentHTML('afterend', renderProfileDropdown());
+  trigger?.setAttribute('aria-expanded', 'true');
+  document.documentElement.classList.add('profile-menu-open');
 }
 
 function renderRightbar() {
@@ -478,31 +500,87 @@ async function renderSubscription() {
   const policy = getWebPostingPolicy(p);
   let usage = { textPosts: 0, imagePosts: 0 };
   try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
-  const textLimit = Number.isFinite(policy.dailyTextPosts) ? policy.dailyTextPosts : 'Unlimited';
-  const imageLimit = Number.isFinite(policy.dailyImagePosts) ? policy.dailyImagePosts : 'Unlimited';
+
   const isAdmin = Boolean(policy.admin);
-  const playAction = isAdmin
-    ? ''
-    : policy.subscribed
-      ? `<a class="btn btn-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
-      : `<a class="btn btn-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Subscribe with Google Play</a>`;
-  const heroTitle = isAdmin ? 'Admin Full Access' : (policy.subscribed ? 'Subscribed Student' : 'Tefsen Student Plus');
-  const heroText = isAdmin ? 'Administrative account with full web access and no daily posting quota.' : (policy.subscribed ? 'Your subscribed-student web benefits are active.' : 'Unlock higher image limits and unlimited text posts.');
-  const kicker = isAdmin ? 'ADMIN PLAN' : (policy.subscribed ? 'ACTIVE PLAN' : 'UPGRADE OPTION');
-  const price = isAdmin ? `<div class="admin-access-badge">Full access</div>` : `<div class="subscription-price-wrap"><strong class="subscription-price">$2.99</strong><span>/ month</span></div>`;
-  const billing = isAdmin
-    ? `<section class="panel subscription-note subscription-play-card"><div><h3>Administrator access</h3><p>This account bypasses student subscription quotas on the web. Administrative actions must still be allowed by Firebase Security Rules.</p></div></section>`
-    : `<section class="panel subscription-note subscription-play-card"><div><h3>Google Play billing</h3><p>Subscribe through the Tefsen Android app on Google Play. After purchase, return here and sync the same Tefsen account.</p></div><div class="subscription-actions">${playAction}<button class="btn btn-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div></section>`;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Subscription</h1><p>Your web limits follow the subscription status on the same Tefsen account.</p></div></header>
-    <section class="panel subscription-hero ${policy.subscribed ? 'is-subscribed' : ''} ${isAdmin ? 'is-admin' : ''}">
-      <div><span class="subscription-kicker">${kicker}</span><h2>${heroTitle}</h2><p>${heroText}</p></div>
-      ${price}
-    </section>
-    <div class="subscription-grid">
-      <section class="panel subscription-card"><h3>Image posts</h3><b>${imageLimit}${Number.isFinite(policy.dailyImagePosts) ? ' per day' : ''}</b><p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p><small>Today: ${usage.imagePosts}${Number.isFinite(policy.dailyImagePosts) ? `/${policy.dailyImagePosts}` : ''}</small></section>
-      <section class="panel subscription-card"><h3>Text posts</h3><b>${textLimit}${Number.isFinite(policy.dailyTextPosts) ? ' per day' : ''}</b><p>Questions and knowledge posts without images.</p><small>Today: ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? `/${policy.dailyTextPosts}` : ''}</small></section>
-    </div>
-    ${billing}`;
+  const isPlus = Boolean(policy.subscribed) && !isAdmin;
+  const planName = isAdmin ? 'Admin Full Access' : (isPlus ? 'Tefsen Student Plus' : 'Free Student');
+  const planEyebrow = isAdmin ? 'TEFSEN ADMIN' : (isPlus ? 'ACTIVE MEMBERSHIP' : 'STUDENT MEMBERSHIP');
+  const planDescription = isAdmin
+    ? 'Complete web access with no student posting quota.'
+    : isPlus
+      ? 'Your premium student limits are active on this Tefsen account.'
+      : 'Learn, ask and share for free — upgrade when you need more image publishing power.';
+  const price = isAdmin
+    ? `<div class="lux-access-token">${icon('check',18)} Full access</div>`
+    : `<div class="lux-price"><strong>$2.99</strong><span>/ month</span></div>`;
+  const primaryAction = isAdmin
+    ? `<button class="btn lux-primary" type="button" data-route="settings">Open admin settings</button>`
+    : isPlus
+      ? `<a class="btn lux-primary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
+      : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Get Student Plus</a>`;
+
+  const imageLimitText = Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} / day` : 'Unlimited';
+  const textLimitText = Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} / day` : 'Unlimited';
+  const imageProgress = Number.isFinite(policy.dailyImagePosts) && policy.dailyImagePosts > 0 ? Math.min(100, Math.round((usage.imagePosts / policy.dailyImagePosts) * 100)) : 0;
+  const textProgress = Number.isFinite(policy.dailyTextPosts) && policy.dailyTextPosts > 0 ? Math.min(100, Math.round((usage.textPosts / policy.dailyTextPosts) * 100)) : 0;
+
+  const content = `${demoBanner()}
+    <div class="subscription-luxury-page">
+      <header class="subscription-luxury-head">
+        <div><span class="lux-overline">TEFSEN MEMBERSHIP</span><h1>Study with fewer limits.</h1><p>A refined membership experience for students who publish, explain and contribute more.</p></div>
+        <div class="lux-secure-note">${icon('check',16)} Same Tefsen account</div>
+      </header>
+
+      <section class="lux-plan-hero ${isAdmin ? 'is-admin' : ''} ${isPlus ? 'is-plus' : ''}">
+        <div class="lux-glow lux-glow-a"></div><div class="lux-glow lux-glow-b"></div>
+        <div class="lux-plan-content">
+          <span class="lux-plan-eyebrow">${planEyebrow}</span>
+          <h2>${planName}</h2>
+          <p>${planDescription}</p>
+          <div class="lux-plan-actions">${primaryAction}<button class="btn lux-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div>
+        </div>
+        <div class="lux-plan-price">${price}<small>${isAdmin ? 'Administrative account' : 'Google Play billing'}</small></div>
+      </section>
+
+      <div class="lux-usage-grid">
+        <section class="lux-usage-card">
+          <div class="lux-icon-orb">${icon('image',20)}</div>
+          <div class="lux-usage-top"><span>Image posts</span><strong>${imageLimitText}</strong></div>
+          <p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p>
+          <div class="lux-meter"><i style="width:${imageProgress}%"></i></div>
+          <small>Today ${usage.imagePosts}${Number.isFinite(policy.dailyImagePosts) ? ` of ${policy.dailyImagePosts}` : ''}</small>
+        </section>
+        <section class="lux-usage-card">
+          <div class="lux-icon-orb">${icon('message',20)}</div>
+          <div class="lux-usage-top"><span>Text posts</span><strong>${textLimitText}</strong></div>
+          <p>Questions and knowledge posts without images.</p>
+          <div class="lux-meter"><i style="width:${textProgress}%"></i></div>
+          <small>Today ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? ` of ${policy.dailyTextPosts}` : ''}</small>
+        </section>
+      </div>
+
+      <section class="lux-compare-section">
+        <div class="lux-section-title"><span>MEMBERSHIP DETAILS</span><h2>Choose the pace that fits you.</h2></div>
+        <div class="lux-compare-grid">
+          <article class="lux-plan-card ${!isPlus && !isAdmin ? 'is-current' : ''}">
+            <div><span class="lux-card-kicker">FREE</span><h3>Free Student</h3><p>Essential access for everyday learning.</p></div>
+            <ul><li>${icon('check',16)} 20 text posts per day</li><li>${icon('check',16)} 2 image posts per day</li><li>${icon('check',16)} 1 image per post</li><li>${icon('check',16)} Up to 2 MB total</li></ul>
+            ${!isPlus && !isAdmin ? '<span class="lux-current-pill">Current plan</span>' : ''}
+          </article>
+          <article class="lux-plan-card lux-plan-card-plus ${isPlus ? 'is-current' : ''}">
+            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>$2.99 <small>/ month</small></h3><p>Designed for students who contribute more.</p></div>
+            <ul><li>${icon('check',16)} Unlimited text posts</li><li>${icon('check',16)} 6 image posts per day</li><li>${icon('check',16)} 2 images per post</li><li>${icon('check',16)} Up to 6 MB total</li></ul>
+            ${isPlus ? '<span class="lux-current-pill">Active plan</span>' : `<a class="lux-card-cta" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Upgrade with Google Play →</a>`}
+          </article>
+        </div>
+      </section>
+
+      <section class="lux-billing-card">
+        <div class="lux-billing-mark">G</div>
+        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here.</p></div>
+        ${isAdmin ? '' : (isPlus ? `<a class="btn lux-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage subscription</a>` : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Open Google Play</a>`)}
+      </section>
+    </div>`;
   renderShell(content, { wide: true });
 }
 
@@ -536,6 +614,8 @@ function renderRoute() {
   if (!state.user) return;
   const [route, param] = routeParts();
   state.ui.profileMenu = false;
+  document.documentElement.classList.remove('profile-menu-open');
+  document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
   if (stopComments && route !== 'post') { stopComments(); stopComments = null; }
   if (stopMessages && route !== 'messages') { stopMessages(); stopMessages = null; }
   switch (route || 'home') {
@@ -618,7 +698,7 @@ async function handleClick(event) {
     catch (error) { toast(humanError(error), 'error'); }
     return;
   }
-  if (routeEl) { event.preventDefault(); go(routeEl.dataset.route); return; }
+  if (routeEl) { event.preventDefault(); state.ui.profileMenu = false; document.documentElement.classList.remove('profile-menu-open'); document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove()); go(routeEl.dataset.route); return; }
   const switchEl = event.target.closest('[data-auth-switch]');
   if (switchEl) { renderAuth(switchEl.dataset.authSwitch); return; }
   if (event.target.closest('[data-google]')) { await withButton(event.target.closest('[data-google]'), () => signInGoogle(state.mode).catch(e=>toast(humanError(e),'error'))); return; }
@@ -650,7 +730,8 @@ async function handleClick(event) {
   if (conv) { go(`messages/${conv.dataset.conversation}`); return; }
   if (event.target.closest('[data-messages-back]')) { drawMessages(null); return; }
   if (event.target.closest('[data-back]')) { history.length > 1 ? history.back() : go('home'); return; }
-  if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; renderRoute(); return; }
+  if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; syncProfileMenu(); return; }
+  if (event.target.closest('[data-profile-menu-dismiss]')) { state.ui.profileMenu = false; syncProfileMenu(); return; }
   if (event.target.closest('[data-logout]')) { await logout(state.mode); return; }
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
   const followUser = event.target.closest('[data-follow-user]');
@@ -884,6 +965,7 @@ document.addEventListener('change', handleInput);
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
   if (event.key==='Escape' && modalRoot.innerHTML) modalRoot.innerHTML='';
+  if (event.key==='Escape' && state.ui.profileMenu) { state.ui.profileMenu = false; syncProfileMenu(); }
 });
 
 if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));

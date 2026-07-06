@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v8-mobile-polish';
+const CACHE = 'tefsen-web-shell-v9-account-luxury';
 const SHELL = [
   './', './index.html', './css/app.css', './js/app.js',
   './js/config/firebase-config.js', './assets/tefsen-logo.png', './assets/favicon.png'
