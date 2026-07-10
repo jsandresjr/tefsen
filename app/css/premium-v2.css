@@ -1,0 +1,164 @@
+/* Tefsen Premium V2 — product-quality refinement layer */
+:root{
+  --focus-ring:0 0 0 3px rgba(33,184,255,.22);
+  --surface-hover:rgba(20,47,73,.72);
+  --content:692px;
+}
+
+/* Stronger hierarchy, less dashboard feel */
+.content-wrap{max-width:var(--content)}
+.sidebar{width:220px}
+:root{--left:220px;--right:300px}
+
+/* Keep only primary navigation visually prominent. Secondary destinations live in account menu. */
+.sidebar .nav-item[data-route="leaderboard"],
+.sidebar .nav-item[data-route="subscription"],
+.sidebar .nav-item[data-route="settings"]{display:none!important}
+.sidebar .nav-divider{margin:12px 8px}
+
+/* Premium brand treatment */
+.topbar-brand span,.mobile-top-brand span{
+  background:linear-gradient(100deg,#f7fdff 8%,#64ddff 48%,#6ee5a1);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-weight:900
+}
+
+/* Global interaction quality */
+button,a,input,textarea,select{outline:none}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
+  box-shadow:var(--focus-ring)!important
+}
+button{touch-action:manipulation}
+
+/* Page transition */
+.content-wrap{animation:tefsen-enter .24s cubic-bezier(.2,.75,.25,1)}
+@keyframes tefsen-enter{from{opacity:.35;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* Feed tabs become sticky discovery switcher */
+.feed-tabs{
+  position:sticky;top:calc(var(--top) + 10px);z-index:12;
+  margin-bottom:15px!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.16)
+}
+
+/* Composer feels like a real social product */
+.composer-mini{
+  position:relative;
+  background:linear-gradient(145deg,rgba(14,31,50,.92),rgba(7,19,32,.95))!important
+}
+.composer-mini::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(110deg,rgba(33,184,255,.05),transparent 34%,rgba(43,216,190,.04))
+}
+.composer-mini>*{position:relative}
+.fake-input{font-size:14px!important}
+.ask-btn{min-width:76px}
+
+/* Refined cards: calmer surfaces, stronger content */
+.post-card{contain:layout paint;will-change:transform}
+.post-card .post-head-main b{font-size:14px;letter-spacing:-.01em}
+.post-card .post-head-main small{margin-top:3px}
+.post-body h3{font-weight:790}
+.post-body p{font-size:15px}
+.post-image{width:100%;object-fit:cover;background:#07131f}
+.post-actions{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.post-actions .action-btn{justify-content:center!important;padding-inline:8px!important}
+
+/* Better empty states and widgets */
+.empty-state{border-radius:24px!important;padding:48px 28px!important}
+.widget h3{font-size:15px;margin-bottom:12px}
+.widget-link{min-height:54px}
+.rightbar .widget:first-child{position:relative;overflow:hidden}
+.rightbar .widget:first-child::after{
+  content:"";position:absolute;width:130px;height:130px;border-radius:50%;right:-78px;top:-82px;
+  background:#21b8ff;filter:blur(56px);opacity:.10;pointer-events:none
+}
+
+/* Profile menu is the single account hub */
+.profile-dropdown{width:min(360px,calc(100vw - 24px))!important}
+.profile-dropdown button{min-height:54px}
+.profile-dropdown button span{font-weight:720}
+.profile-dropdown button small{opacity:.74}
+
+/* Improved authentication */
+.auth-card{position:relative;overflow:hidden}
+.auth-card::before{
+  content:"";position:absolute;inset:0 0 auto;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(97,222,255,.55),rgba(110,229,161,.42),transparent)
+}
+.auth-card h2{font-size:clamp(28px,4vw,36px)}
+.auth-card .btn{min-height:48px}
+.auth-card .input{min-height:48px}
+
+/* Loading polish */
+[data-tefsen-loading]{animation:tefsen-pulse 1.4s ease-in-out infinite}
+@keyframes tefsen-pulse{50%{opacity:.58}}
+
+/* Mobile: consumer app, not compressed desktop */
+@media(max-width:980px){
+  body{background:#050c15}
+  .topbar{
+    height:64px!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    border-bottom-color:rgba(190,218,239,.07)
+  }
+  .topbar-center{min-width:0}
+  .global-search input{font-size:16px!important}
+  .main-area{padding:78px 10px 96px!important}
+  .content-wrap,.content-wrap.wide{width:100%;max-width:690px}
+  .feed-tabs{
+    top:72px;width:100%;display:grid!important;grid-template-columns:repeat(4,1fr);
+    border-radius:14px
+  }
+  .feed-tab{padding:0 7px!important;font-size:12px}
+  .composer-mini{border-radius:18px!important;padding:12px!important}
+  .composer-mini .avatar{display:none}
+  .fake-input{min-height:44px!important}
+  .post-card{border-radius:18px!important;margin-inline:0}
+  .post-card:hover{transform:none}
+  .post-head{padding:15px 14px 7px!important}
+  .post-body{padding:7px 14px 14px!important}
+  .post-body h3{font-size:19px!important}
+  .post-actions{padding:8px!important}
+  .post-actions .action-btn{font-size:12px!important}
+  .mobile-bottom{
+    left:10px!important;right:10px!important;bottom:max(10px,env(safe-area-inset-bottom))!important;
+    width:auto!important;height:66px!important;border-radius:22px!important;
+    background:rgba(7,18,30,.92)!important;
+    border:1px solid rgba(181,214,238,.13)!important;
+    box-shadow:0 20px 55px rgba(0,0,0,.44)!important;
+    backdrop-filter:blur(24px) saturate(150%);
+    -webkit-backdrop-filter:blur(24px) saturate(150%)
+  }
+  .mobile-bottom>button:not(.create-mobile){border-radius:15px!important}
+  .mobile-bottom>button.active:not(.create-mobile){
+    color:#78e9f8!important;background:rgba(38,187,222,.11)!important
+  }
+  .create-mobile{
+    width:50px!important;height:50px!important;border-radius:17px!important;
+    background:linear-gradient(135deg,#168ff8,#18c9d2 56%,#36d794)!important;
+    box-shadow:0 13px 30px rgba(20,187,210,.24)!important
+  }
+  .profile-dropdown{right:12px!important;top:68px!important}
+}
+
+@media(max-width:560px){
+  .main-area{padding-left:0!important;padding-right:0!important}
+  .feed-tabs,.composer-mini{margin-left:10px!important;margin-right:10px!important;width:calc(100% - 20px)!important}
+  .feed-list{gap:10px!important}
+  .post-card{border-left:0!important;border-right:0!important;border-radius:0!important}
+  .post-image,.post-image-grid{border-radius:13px!important}
+  .post-actions .action-btn:nth-child(3),.post-actions .action-btn:nth-child(4){font-size:0!important}
+  .post-actions .action-btn:nth-child(3) span,.post-actions .action-btn:nth-child(4) span{font-size:17px!important}
+  .auth-panel{padding:18px!important}
+  .auth-card{padding:26px 20px!important;border-radius:24px!important}
+}
+
+/* Accessibility and motion */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+@media(prefers-contrast:more){
+  :root{--line:rgba(220,237,250,.28)}
+  .panel,.widget,.dropdown,.auth-card{border-color:rgba(220,237,250,.28)!important}
+}
