@@ -1,6 +1,28 @@
 (() => {
   'use strict';
 
+  const OLD_ORIGIN = 'https://tefsen.com';
+  const NEW_ORIGIN = 'https://tefsen.org';
+
+  const replaceLegacyDomain = (value = '') => String(value).replaceAll(OLD_ORIGIN, NEW_ORIGIN);
+
+  document.querySelectorAll('link[href], meta[content]').forEach((element) => {
+    if (element.hasAttribute('href')) {
+      const href = element.getAttribute('href');
+      if (href?.includes(OLD_ORIGIN)) element.setAttribute('href', replaceLegacyDomain(href));
+    }
+    if (element.hasAttribute('content')) {
+      const content = element.getAttribute('content');
+      if (content?.includes(OLD_ORIGIN)) element.setAttribute('content', replaceLegacyDomain(content));
+    }
+  });
+
+  document.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
+    if (script.textContent.includes(OLD_ORIGIN)) {
+      script.textContent = replaceLegacyDomain(script.textContent);
+    }
+  });
+
   const header = document.querySelector('[data-header]');
   const menuButton = document.querySelector('[data-menu-button]');
   const nav = document.querySelector('[data-nav]');
