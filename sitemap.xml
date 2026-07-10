@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://tefsen.com/</loc><priority>1.0</priority></url>
-  <url><loc>https://tefsen.com/privacy.html</loc><priority>0.4</priority></url>
-  <url><loc>https://tefsen.com/terms.html</loc><priority>0.4</priority></url>
-  <url><loc>https://tefsen.com/delete-account/</loc><priority>0.5</priority></url>
-  <url><loc>https://tefsen.com/delete-account.html</loc><priority>0.3</priority></url>
+  <url><loc>https://tefsen.org/</loc><priority>1.0</priority></url>
+  <url><loc>https://tefsen.org/privacy.html</loc><priority>0.4</priority></url>
+  <url><loc>https://tefsen.org/terms.html</loc><priority>0.4</priority></url>
+  <url><loc>https://tefsen.org/delete-account/</loc><priority>0.5</priority></url>
+  <url><loc>https://tefsen.org/delete-account.html</loc><priority>0.3</priority></url>
+  <url><loc>https://tefsen.org/founder.html</loc><priority>0.6</priority></url>
 
   <url>
-    <loc>https://tefsen.com/app/</loc>
+    <loc>https://tefsen.org/app/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
