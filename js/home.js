@@ -30,6 +30,17 @@
     });
   }
 
+  // Keep the public company navigation connected to the dedicated founder story.
+  const companyHeading = [...document.querySelectorAll('.footer-column > b')]
+    .find((heading) => heading.textContent.trim().toLowerCase() === 'company');
+  const companyColumn = companyHeading?.closest('.footer-column');
+  if (companyColumn && !companyColumn.querySelector('a[href="founder.html"]')) {
+    const founderLink = document.createElement('a');
+    founderLink.href = 'founder.html';
+    founderLink.textContent = 'Founder';
+    companyColumn.insertBefore(founderLink, companyColumn.querySelector('a[href="#contact"]') || null);
+  }
+
   const revealItems = document.querySelectorAll('.reveal');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
