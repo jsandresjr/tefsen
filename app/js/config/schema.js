@@ -39,6 +39,6 @@ export const FIELD_ALIASES = Object.freeze({
   postAuthorPhoto: ['authorPhotoUrl', 'authorImageUrl', 'authorProfileImageUrl', 'userProfileImageUrl', 'profileImageUrl', 'profilePhotoUrl', 'photoURL', 'photoUrl', 'avatarUrl'],
   createdAt: ['createdAt', 'timestamp', 'publishedAt'],
   likeCount: ['likeCount', 'likesCount', 'likes'],
-  commentCount: ['commentCount', 'commentsCount', 'answerCount', 'answersCount'],
+  commentCount: ['answerCount', 'answersCount', 'commentCount', 'commentsCount'],
   saveCount: ['saveCount', 'savedCount']
 });
