@@ -1,39 +1,63 @@
-import { db, storage } from '../firebase-client.js';
+import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
-import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS, DEMO_NOTIFICATIONS, DEMO_CONVERSATIONS, DEMO_MESSAGES } from './demo-data.js';
+import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
 import {
-  collection, collectionGroup, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, limit, serverTimestamp, increment, arrayUnion,
-  writeBatch, getCountFromServer, runTransaction
+  collection, doc, setDoc, getDoc, getDocs, deleteDoc,
+  onSnapshot, query, where, limit, serverTimestamp,
+  getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
 const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
-
+const ALLOWED_ROLES = new Set(['student', 'HS_STUDENT', 'UNI_STUDENT', 'MENTOR', 'ADMIN']);
 const userProfileCache = new Map();
 
-function likedCacheKey(userId) { return `tefsen_liked_${String(userId || 'guest')}`; }
+function likedCacheKey(userId) {
+  return `tefsen_liked_${String(userId || 'guest')}`;
+}
+
 function readLikedCache(userId) {
-  try { return new Set(JSON.parse(localStorage.getItem(likedCacheKey(userId)) || '[]')); }
-  catch { return new Set(); }
+  try {
+    return new Set(JSON.parse(localStorage.getItem(likedCacheKey(userId)) || '[]'));
+  } catch {
+    return new Set();
+  }
 }
-function writeLikedCache(userId, set) {
-  try { localStorage.setItem(likedCacheKey(userId), JSON.stringify([...set].slice(-500))); }
-  catch { /* storage can be unavailable in private contexts */ }
+
+function writeLikedCache(userId, values) {
+  try {
+    localStorage.setItem(likedCacheKey(userId), JSON.stringify([...values].slice(-500)));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
 }
+
 function updateLikedCache(userId, postId, active) {
-  const cached = readLikedCache(userId);
-  active ? cached.add(postId) : cached.delete(postId);
-  writeLikedCache(userId, cached);
+  const liked = readLikedCache(userId);
+  active ? liked.add(String(postId)) : liked.delete(String(postId));
+  writeLikedCache(userId, liked);
 }
 
 function toBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
-  if (typeof value === 'string') return ['true', '1', 'yes', 'verified'].includes(value.trim().toLowerCase());
+  if (typeof value === 'string') {
+    return ['true', '1', 'yes', 'verified'].includes(value.trim().toLowerCase());
+  }
   return false;
+}
+
+function normalizeRoleValue(role, email = '') {
+  const raw = String(role || '').trim();
+  if (ALLOWED_ROLES.has(raw)) return raw;
+  if (raw.toLowerCase() === 'admin') return 'ADMIN';
+  if (raw.toLowerCase() === 'hs_student') return 'HS_STUDENT';
+  if (raw.toLowerCase() === 'uni_student') return 'UNI_STUDENT';
+  if (raw.toLowerCase() === 'mentor') return 'MENTOR';
+  if (String(email || '').trim().toLowerCase() === 'jsandresjr@gmail.com') return 'ADMIN';
+  return 'student';
 }
 
 function isAdminRole(role = '') {
@@ -41,11 +65,20 @@ function isAdminRole(role = '') {
 }
 
 function resolveSubscription(raw = {}) {
-  const nested = raw.subscription && typeof raw.subscription === 'object' ? raw.subscription : (raw.premiumSubscription && typeof raw.premiumSubscription === 'object' ? raw.premiumSubscription : {});
-  const direct = toBoolean(pick(raw, FIELD_ALIASES.subscriptionActive, false)) || toBoolean(nested.active) || toBoolean(nested.isActive) || toBoolean(nested.subscribed);
+  const nested = raw.subscription && typeof raw.subscription === 'object'
+    ? raw.subscription
+    : (raw.premiumSubscription && typeof raw.premiumSubscription === 'object' ? raw.premiumSubscription : {});
+  const direct = toBoolean(pick(raw, FIELD_ALIASES.subscriptionActive, false))
+    || toBoolean(nested.active)
+    || toBoolean(nested.isActive)
+    || toBoolean(nested.subscribed);
   const status = String(pick(raw, FIELD_ALIASES.subscriptionStatus, '') || nested.status || '').trim().toLowerCase();
   const plan = String(pick(raw, FIELD_ALIASES.subscriptionPlan, '') || nested.plan || nested.tier || nested.productId || '').trim();
-  const expiresAt = pick(raw, FIELD_ALIASES.subscriptionExpiresAt, null) || nested.expiresAt || nested.expiryDate || nested.endAt || null;
+  const expiresAt = pick(raw, FIELD_ALIASES.subscriptionExpiresAt, null)
+    || nested.expiresAt
+    || nested.expiryDate
+    || nested.endAt
+    || null;
   const expiresDate = timestampToDate(expiresAt);
   const statusActive = ['active', 'trialing', 'trial', 'subscribed', 'premium', 'paid'].includes(status);
   const notExpired = expiresDate ? expiresDate.getTime() > Date.now() : false;
@@ -70,16 +103,21 @@ export function getWebPostingPolicy(profile = {}) {
       dailyTextPosts: Infinity
     };
   }
+
   const subscribed = Boolean(profile?.subscriptionActive);
-  return subscribed ? {
-    subscribed: true,
-    admin: false,
-    name: 'Subscribed Student',
-    maxImagesPerPost: 2,
-    maxTotalImageBytes: 6 * 1024 * 1024,
-    dailyImagePosts: 6,
-    dailyTextPosts: Infinity
-  } : {
+  if (subscribed) {
+    return {
+      subscribed: true,
+      admin: false,
+      name: 'Subscribed Student',
+      maxImagesPerPost: 2,
+      maxTotalImageBytes: 6 * 1024 * 1024,
+      dailyImagePosts: 6,
+      dailyTextPosts: Infinity
+    };
+  }
+
+  return {
     subscribed: false,
     admin: false,
     name: 'Free Student',
@@ -98,6 +136,61 @@ function isWebPostForToday(post, dayKey) {
   const created = timestampToDate(post.createdAt);
   if (!created || utcDayKey(created) !== dayKey) return false;
   return post.webPost === true || String(post.sourcePlatform || '').toLowerCase() === 'web';
+}
+
+export function normalizeUser(raw = {}, id = '') {
+  const subscription = resolveSubscription(raw);
+  const email = raw.email || '';
+  return {
+    ...raw,
+    id: id || raw.id || raw.uid || '',
+    uid: raw.uid || id || raw.id || '',
+    fullName: pick(raw, FIELD_ALIASES.userName, 'Tefsen User'),
+    photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
+    role: normalizeRoleValue(pick(raw, FIELD_ALIASES.userRole, 'student'), email),
+    verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
+    subscriptionActive: subscription.active,
+    subscriptionStatus: subscription.status,
+    subscriptionPlan: subscription.plan,
+    subscriptionExpiresAt: subscription.expiresAt,
+    username: raw.username || raw.handle || (email ? String(email).split('@')[0] : ''),
+    bio: raw.bio || raw.about || '',
+    points: Number(raw.points || raw.score || raw.reputation || 0),
+    followersCount: Number(raw.followersCount || raw.followerCount || 0),
+    followingCount: Number(raw.followingCount || 0)
+  };
+}
+
+export function normalizePost(raw = {}, id = '') {
+  const likesValue = pick(raw, FIELD_ALIASES.likeCount, 0);
+  const commentsValue = pick(raw, FIELD_ALIASES.commentCount, 0);
+  const primaryImage = pick(raw, FIELD_ALIASES.postImage, '');
+  const rawImages = pick(raw, FIELD_ALIASES.postImages, []);
+  const imageUrls = Array.isArray(rawImages) ? rawImages.filter(Boolean).slice(0, 2) : [];
+  if (!imageUrls.length && primaryImage) imageUrls.push(primaryImage);
+
+  return {
+    ...raw,
+    id: id || raw.id || '',
+    title: pick(raw, FIELD_ALIASES.postTitle, ''),
+    content: pick(raw, FIELD_ALIASES.postBody, ''),
+    imageUrl: primaryImage || imageUrls[0] || '',
+    imageUrls,
+    authorId: pick(raw, FIELD_ALIASES.postAuthorId, ''),
+    authorName: pick(raw, FIELD_ALIASES.postAuthorName, 'Tefsen User'),
+    authorPhotoUrl: pick(raw, FIELD_ALIASES.postAuthorPhoto, ''),
+    createdAt: pick(raw, FIELD_ALIASES.createdAt, null),
+    likeCount: Array.isArray(likesValue) ? likesValue.length : Number(likesValue || 0),
+    commentCount: Array.isArray(commentsValue) ? commentsValue.length : Number(commentsValue || 0),
+    saveCount: Number(pick(raw, FIELD_ALIASES.saveCount, 0) || 0),
+    subject: raw.subject || raw.category || raw.topic || 'General',
+    tags: Array.isArray(raw.tags) ? raw.tags : [],
+    role: normalizeRoleValue(raw.authorRole || raw.role || raw.userRole || 'student'),
+    verified: toBoolean(raw.authorVerified)
+      || toBoolean(raw.verified)
+      || toBoolean(raw.isVerified)
+      || toBoolean(raw.hasVerifiedBadge)
+  };
 }
 
 async function enrichPostAuthor(mode, post) {
@@ -142,88 +235,21 @@ async function enrichAuthorRecord(mode, item = {}) {
   }
 }
 
-let demoPosts = (() => {
-  try {
-    const saved = JSON.parse(localStorage.getItem('tefsen_demo_posts') || 'null');
-    return Array.isArray(saved) ? [...saved, ...DEMO_POSTS.filter(p => !saved.some(x => x.id === p.id))] : [...DEMO_POSTS];
-  } catch { return [...DEMO_POSTS]; }
-})();
+let demoPosts = [...DEMO_POSTS];
 let demoComments = structuredClone(DEMO_COMMENTS);
-let demoNotifications = structuredClone(DEMO_NOTIFICATIONS);
-let demoConversations = structuredClone(DEMO_CONVERSATIONS);
-let demoMessages = structuredClone(DEMO_MESSAGES);
-const demoSaved = new Set(JSON.parse(localStorage.getItem('tefsen_demo_saved') || '[]'));
-const demoLiked = new Set(JSON.parse(localStorage.getItem('tefsen_demo_liked') || '[]'));
-const demoFollowing = new Set(JSON.parse(localStorage.getItem('tefsen_demo_following') || '[]'));
-
-function persistDemo() {
-  localStorage.setItem('tefsen_demo_posts', JSON.stringify(demoPosts.filter(p => String(p.id).startsWith('local-'))));
-  localStorage.setItem('tefsen_demo_saved', JSON.stringify([...demoSaved]));
-  localStorage.setItem('tefsen_demo_liked', JSON.stringify([...demoLiked]));
-  localStorage.setItem('tefsen_demo_following', JSON.stringify([...demoFollowing]));
-}
-
-export function normalizeUser(raw = {}, id = '') {
-  const subscription = resolveSubscription(raw);
-  return {
-    ...raw,
-    id: id || raw.id || raw.uid || '',
-    uid: raw.uid || id || raw.id || '',
-    fullName: pick(raw, FIELD_ALIASES.userName, 'Tefsen User'),
-    photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
-    role: pick(raw, FIELD_ALIASES.userRole, 'Student'),
-    verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
-    subscriptionActive: subscription.active,
-    subscriptionStatus: subscription.status,
-    subscriptionPlan: subscription.plan,
-    subscriptionExpiresAt: subscription.expiresAt,
-    username: raw.username || raw.handle || (raw.email ? String(raw.email).split('@')[0] : ''),
-    bio: raw.bio || raw.about || '',
-    points: Number(raw.points || raw.score || raw.reputation || 0),
-    followersCount: Number(raw.followersCount || raw.followerCount || 0),
-    followingCount: Number(raw.followingCount || 0)
-  };
-}
-
-export function normalizePost(raw = {}, id = '') {
-  const likesValue = pick(raw, FIELD_ALIASES.likeCount, 0);
-  const commentsValue = pick(raw, FIELD_ALIASES.commentCount, 0);
-  const primaryImage = pick(raw, FIELD_ALIASES.postImage, '');
-  const rawImages = pick(raw, FIELD_ALIASES.postImages, []);
-  const imageUrls = Array.isArray(rawImages) ? rawImages.filter(Boolean).slice(0, 2) : [];
-  if (!imageUrls.length && primaryImage) imageUrls.push(primaryImage);
-  return {
-    ...raw,
-    id: id || raw.id || '',
-    title: pick(raw, FIELD_ALIASES.postTitle, ''),
-    content: pick(raw, FIELD_ALIASES.postBody, ''),
-    imageUrl: primaryImage || imageUrls[0] || '',
-    imageUrls,
-    authorId: pick(raw, FIELD_ALIASES.postAuthorId, ''),
-    authorName: pick(raw, FIELD_ALIASES.postAuthorName, 'Tefsen User'),
-    authorPhotoUrl: pick(raw, FIELD_ALIASES.postAuthorPhoto, ''),
-    createdAt: pick(raw, FIELD_ALIASES.createdAt, null),
-    likeCount: Array.isArray(likesValue) ? likesValue.length : Number(likesValue || 0),
-    commentCount: Array.isArray(commentsValue) ? commentsValue.length : Number(commentsValue || 0),
-    saveCount: Number(pick(raw, FIELD_ALIASES.saveCount, 0) || 0),
-    subject: raw.subject || raw.category || raw.topic || 'General',
-    tags: Array.isArray(raw.tags) ? raw.tags : [],
-    role: raw.authorRole || raw.role || raw.userRole || 'Student',
-    verified: toBoolean(raw.authorVerified) || toBoolean(raw.verified) || toBoolean(raw.isVerified) || toBoolean(raw.hasVerifiedBadge)
-  };
-}
-
 
 export async function getUserById(mode, userId) {
   if (!userId) return null;
   const key = `${mode}:${userId}`;
   if (userProfileCache.has(key)) return userProfileCache.get(key);
+
   if (mode === 'demo') {
-    const user = DEMO_USERS.find(u => u.uid === userId || u.id === userId);
+    const user = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
     const normalized = user ? normalizeUser(user, userId) : null;
     if (normalized) userProfileCache.set(key, normalized);
     return normalized;
   }
+
   const snap = await getDoc(doc(db, C.users, userId));
   const normalized = snap.exists() ? normalizeUser(snap.data(), snap.id) : null;
   if (normalized) userProfileCache.set(key, normalized);
@@ -233,43 +259,43 @@ export async function getUserById(mode, userId) {
 export async function getProfile(mode, user) {
   if (!user) return null;
   if (mode === 'demo') {
-    return normalizeUser(DEMO_USERS.find(u => u.uid === user.uid) || user, user.uid);
+    return normalizeUser(DEMO_USERS.find(row => row.uid === user.uid) || user, user.uid);
   }
+
   const snap = await getDoc(doc(db, C.users, user.uid));
-  const authFallback = {
+  const fallback = {
     uid: user.uid,
     fullName: user.displayName || user.email || 'Tefsen User',
     email: user.email || '',
-    profileImageUrl: user.photoURL || ''
+    profileImageUrl: user.photoURL || '',
+    role: normalizeRoleValue('', user.email || '')
   };
-  return normalizeUser(snap.exists() ? { ...authFallback, ...snap.data() } : authFallback, user.uid);
+  return normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
 }
 
 export function subscribePosts(mode, callback, errorCallback = console.error) {
   if (mode === 'demo') {
-    const rows = demoPosts.map(p => normalizePost(p, p.id)).sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
+    const rows = demoPosts
+      .map(post => normalizePost(post, post.id))
+      .filter(post => post.status !== 'hidden')
+      .sort((a, b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
     void enrichPostAuthors(mode, rows).then(callback).catch(() => callback(rows));
     return () => {};
   }
-  let fallbackUnsub = null;
-  const emit = rows => {
-    void enrichPostAuthors(mode, rows).then(callback).catch(error => {
-      console.warn('Post author enrichment failed:', error);
-      callback(rows);
-    });
-  };
-  const q = query(collection(db, C.posts), orderBy('createdAt', 'desc'), limit(50));
-  const unsub = onSnapshot(q, snap => emit(snap.docs.map(d => normalizePost(d.data(), d.id))), err => {
-    console.warn('Ordered posts listener failed; trying collection fallback.', err);
-    try {
-      fallbackUnsub = onSnapshot(query(collection(db, C.posts), limit(50)), snap => {
-        const rows = snap.docs.map(d => normalizePost(d.data(), d.id));
-        rows.sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
-        emit(rows);
-      }, errorCallback);
-    } catch (fallbackError) { errorCallback(fallbackError); }
-  });
-  return () => { unsub?.(); fallbackUnsub?.(); };
+
+  const q = query(
+    collection(db, C.posts),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(50)
+  );
+
+  return onSnapshot(q, snap => {
+    const rows = snap.docs
+      .map(row => normalizePost(row.data(), row.id))
+      .sort((a, b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
+    void enrichPostAuthors(mode, rows).then(callback).catch(() => callback(rows));
+  }, errorCallback);
 }
 
 export async function getDailyPostUsage(mode, userId) {
@@ -277,35 +303,32 @@ export async function getDailyPostUsage(mode, userId) {
   if (!userId) return { dayKey, textPosts: 0, imagePosts: 0, totalPosts: 0 };
 
   if (mode === 'demo') {
-    const rows = demoPosts.map(p => normalizePost(p, p.id)).filter(p => String(p.authorId) === String(userId) && isWebPostForToday(p, dayKey));
-    const imagePosts = rows.filter(p => (p.imageUrls?.length || 0) > 0 || Boolean(p.imageUrl)).length;
+    const rows = demoPosts
+      .map(post => normalizePost(post, post.id))
+      .filter(post => String(post.authorId) === String(userId) && isWebPostForToday(post, dayKey));
+    const imagePosts = rows.filter(post => (post.imageUrls?.length || 0) > 0 || Boolean(post.imageUrl)).length;
     return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
   }
 
-  const found = new Map();
-  const collect = snap => snap.forEach(d => found.set(d.id, normalizePost(d.data(), d.id)));
-  const queries = [
-    query(collection(db, C.posts), where('authorId', '==', userId), limit(100)),
-    query(collection(db, C.posts), where('userId', '==', userId), limit(100))
-  ];
-  const results = await Promise.allSettled(queries.map(qry => getDocs(qry)));
-  let success = false;
-  for (const result of results) {
-    if (result.status === 'fulfilled') { success = true; collect(result.value); }
-  }
-  if (!success) {
-    const error = new Error('Could not verify today\'s web posting limits. Please try again.');
-    error.code = 'quota-check-failed';
-    throw error;
-  }
-  const rows = [...found.values()].filter(p => isWebPostForToday(p, dayKey));
-  const imagePosts = rows.filter(p => (p.imageUrls?.length || 0) > 0 || Boolean(p.imageUrl)).length;
+  const q = query(
+    collection(db, C.posts),
+    where('authorId', '==', userId),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(100)
+  );
+  const snap = await getDocs(q);
+  const rows = snap.docs
+    .map(row => normalizePost(row.data(), row.id))
+    .filter(post => isWebPostForToday(post, dayKey));
+  const imagePosts = rows.filter(post => (post.imageUrls?.length || 0) > 0 || Boolean(post.imageUrl)).length;
   return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
 }
 
 export async function createPost(mode, user, profile, payload) {
   const policy = getWebPostingPolicy(profile);
-  const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile]).filter(file => file && file.size);
+  const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
+    .filter(file => file && file.size);
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   const totalImageBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
 
@@ -314,6 +337,7 @@ export async function createPost(mode, user, profile, payload) {
   }
   for (const file of imageFiles) {
     if (!allowedTypes.has(file.type)) throw new Error('Only PNG, JPG and WebP images are allowed.');
+    if (file.size >= 10 * 1024 * 1024) throw new Error('Each image must be smaller than 10 MB.');
   }
   if (totalImageBytes > policy.maxTotalImageBytes) {
     throw new Error(`${policy.name} image uploads are limited to ${Math.round(policy.maxTotalImageBytes / 1024 / 1024)} MB total per post.`);
@@ -330,30 +354,45 @@ export async function createPost(mode, user, profile, payload) {
 
   if (mode === 'demo') {
     const imageUrls = imageFiles.map(file => URL.createObjectURL(file));
-    const post = normalizePost({
+    const local = normalizePost({
       id: `local-${uid('post')}`,
       authorId: user.uid,
       userId: user.uid,
       authorName: profile?.fullName || user.displayName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
-      role: profile?.role || 'Student', verified: profile?.verified || false,
-      title: payload.title, content: payload.content, subject: payload.subject,
-      tags: payload.tags, imageUrl: imageUrls[0] || '', imageUrls,
-      createdAt: new Date().toISOString(), likeCount: 0, commentCount: 0, saveCount: 0,
-      webPost: true, sourcePlatform: 'web', webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
-      imageCount: imageUrls.length, totalImageBytes, quotaDay: usage.dayKey
+      authorRole: profile?.role || 'student',
+      authorVerified: Boolean(profile?.verified),
+      title: payload.title,
+      content: payload.content,
+      subject: payload.subject || 'General',
+      tags: payload.tags || [],
+      imageUrl: imageUrls[0] || '',
+      imageUrls,
+      status: 'published',
+      visibility: 'public',
+      sourcePlatform: 'web',
+      webPost: true,
+      createdAt: new Date().toISOString(),
+      likeCount: 0,
+      commentCount: 0
     });
-    demoPosts.unshift(post); persistDemo(); return post;
+    demoPosts.unshift(local);
+    return local;
   }
 
+  const postRef = doc(collection(db, C.posts));
   const imageUrls = [];
   for (const file of imageFiles) {
-    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectRef = ref(storage, `post_images/${user.uid}/${Date.now()}-${uid('img')}-${cleanName}`);
+    const cleanName = String(file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const objectRef = ref(
+      storage,
+      `post_images/${user.uid}/${postRef.id}/${Date.now()}-${uid('img')}-${cleanName}`
+    );
     const upload = await uploadBytes(objectRef, file, { contentType: file.type });
     imageUrls.push(await getDownloadURL(upload.ref));
   }
 
+  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const base = {
     title: payload.title,
     questionTitle: payload.title,
@@ -366,13 +405,17 @@ export async function createPost(mode, user, profile, payload) {
     imageCount: imageUrls.length,
     totalImageBytes,
     authorId: user.uid,
+    firebaseUid: user.uid,
     userId: user.uid,
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: profile?.role || 'Student',
+    authorRole: role,
+    role,
     authorVerified: Boolean(profile?.verified),
+    verified: Boolean(profile?.verified),
     type: 'question',
     status: 'published',
+    visibility: 'public',
     sourcePlatform: 'web',
     webPost: true,
     webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
@@ -384,155 +427,44 @@ export async function createPost(mode, user, profile, payload) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
-  const added = await addDoc(collection(db, C.posts), base);
-  return normalizePost(base, added.id);
+
+  await setDoc(postRef, base);
+  return normalizePost(base, postRef.id);
 }
 
 export async function getPost(mode, postId) {
-  if (mode === 'demo') return enrichPostAuthor(mode, normalizePost(demoPosts.find(p => p.id === postId) || {}, postId));
+  if (mode === 'demo') {
+    const post = demoPosts.find(row => String(row.id) === String(postId));
+    return post ? enrichPostAuthor(mode, normalizePost(post, postId)) : null;
+  }
   const snap = await getDoc(doc(db, C.posts, postId));
   return snap.exists() ? enrichPostAuthor(mode, normalizePost(snap.data(), snap.id)) : null;
 }
 
 export async function deletePost(mode, userId, postId) {
   if (!userId || !postId) throw new Error('Missing user or post ID.');
-
   if (mode === 'demo') {
-    const index = demoPosts.findIndex(post => post.id === postId);
-    if (index < 0) return false;
-    const post = normalizePost(demoPosts[index], postId);
-    if (post.authorId && String(post.authorId) !== String(userId)) {
-      const error = new Error('You can delete only your own posts.');
-      error.code = 'permission-denied';
-      throw error;
-    }
-    demoPosts.splice(index, 1);
+    demoPosts = demoPosts.filter(post => String(post.id) !== String(postId));
     delete demoComments[postId];
-    demoSaved.delete(postId);
-    demoLiked.delete(postId);
-    persistDemo();
     return true;
   }
-
-  const postRef = doc(db, C.posts, postId);
-  const snap = await getDoc(postRef);
-  if (!snap.exists()) return false;
-
-  const raw = snap.data();
-  const ownerId = String(pick(raw, FIELD_ALIASES.postAuthorId, '') || '');
-  const actorSnap = await getDoc(doc(db, C.users, userId));
-  const actorRole = actorSnap.exists() ? pick(actorSnap.data(), FIELD_ALIASES.userRole, '') : '';
-  const actorIsAdmin = isAdminRole(actorRole);
-  if ((!ownerId || ownerId !== String(userId)) && !actorIsAdmin) {
-    const error = new Error('You can delete only your own posts.');
-    error.code = 'permission-denied';
-    throw error;
-  }
-
-  // Delete the parent post. Firestore does not automatically delete nested
-  // subcollections; production cleanup for comments/likes is best handled by
-  // a trusted backend or Cloud Function.
-  await deleteDoc(postRef);
+  await deleteDoc(doc(db, C.posts, String(postId)));
   return true;
-}
-
-
-export async function getFollowState(mode, currentUserId, targetUserId) {
-  if (!targetUserId) return { following: false, followersCount: 0, followingCount: 0 };
-  if (mode === 'demo') {
-    const target = normalizeUser(DEMO_USERS.find(u => String(u.uid || u.id) === String(targetUserId)) || {}, targetUserId);
-    return {
-      following: Boolean(currentUserId && currentUserId !== targetUserId && demoFollowing.has(String(targetUserId))),
-      followersCount: Math.max(0, Number(target.followersCount || 0) + (demoFollowing.has(String(targetUserId)) ? 1 : 0)),
-      followingCount: Math.max(0, Number(target.followingCount || 0))
-    };
-  }
-
-  const targetRef = doc(db, C.users, targetUserId);
-  const followersRef = collection(targetRef, S.followers);
-  const followingRef = collection(targetRef, S.following);
-  const ownFollowerRef = currentUserId ? doc(targetRef, S.followers, currentUserId) : null;
-
-  const [followersAgg, followingAgg, ownSnap] = await Promise.all([
-    getCountFromServer(followersRef).catch(() => null),
-    getCountFromServer(followingRef).catch(() => null),
-    ownFollowerRef ? getDoc(ownFollowerRef).catch(() => null) : Promise.resolve(null)
-  ]);
-
-  return {
-    following: Boolean(ownSnap?.exists?.()),
-    followersCount: Number(followersAgg?.data?.().count || 0),
-    followingCount: Number(followingAgg?.data?.().count || 0)
-  };
-}
-
-export async function toggleFollow(mode, currentUserId, targetUserId) {
-  if (!currentUserId || !targetUserId) throw new Error('Missing user ID.');
-  if (String(currentUserId) === String(targetUserId)) throw new Error('You cannot follow yourself.');
-
-  if (mode === 'demo') {
-    const key = String(targetUserId);
-    const active = demoFollowing.has(key);
-    active ? demoFollowing.delete(key) : demoFollowing.add(key);
-    persistDemo();
-    return !active;
-  }
-
-  const followerRef = doc(db, C.users, targetUserId, S.followers, currentUserId);
-  const followingRef = doc(db, C.users, currentUserId, S.following, targetUserId);
-  const existing = await getDoc(followerRef);
-  const active = existing.exists();
-  const batch = writeBatch(db);
-
-  if (active) {
-    batch.delete(followerRef);
-    batch.delete(followingRef);
-  } else {
-    const stamp = serverTimestamp();
-    batch.set(followerRef, { uid: currentUserId, followerId: currentUserId, createdAt: stamp });
-    batch.set(followingRef, { uid: targetUserId, targetUserId, createdAt: stamp });
-  }
-
-  await batch.commit();
-  return !active;
 }
 
 export async function getReactionIds(mode, userId) {
   if (!userId) return { saved: new Set(), liked: new Set() };
-  if (mode === 'demo') return { saved: new Set(demoSaved), liked: new Set(demoLiked) };
-  const saved = new Set();
-  // Seed from local cache so the heart state survives refresh even when a
-  // collection-group query is temporarily blocked by rules/indexing.
-  const liked = readLikedCache(userId);
-  try {
-    const savedSnap = await getDocs(collection(db, C.users, userId, S.savedPosts));
-    savedSnap.forEach(d => saved.add(d.id));
-  } catch (e) { console.warn('Saved posts unavailable:', e); }
-  try {
-    const likedSnap = await getDocs(query(collectionGroup(db, S.likes), where('userId', '==', userId), limit(200)));
-    likedSnap.forEach(d => {
-      const parentPost = d.ref.parent.parent;
-      if (parentPost?.id) liked.add(parentPost.id);
-    });
-    writeLikedCache(userId, liked);
-  } catch (e) { console.warn('Liked posts unavailable; using local cache:', e); }
-  return { saved, liked };
+  return {
+    saved: new Set(),
+    liked: mode === 'demo' ? new Set() : readLikedCache(userId)
+  };
 }
 
 export async function hydratePostLikeState(mode, userId, postIds = []) {
-  const ids = [...new Set((postIds || []).map(id => String(id || '').trim()).filter(Boolean))].slice(0, 20);
+  const ids = [...new Set((postIds || []).map(value => String(value || '').trim()).filter(Boolean))].slice(0, 20);
   const liked = readLikedCache(userId);
   const counts = new Map();
-  if (!userId || !ids.length) return { liked, counts };
-
-  if (mode === 'demo') {
-    for (const postId of ids) {
-      if (demoLiked.has(postId)) liked.add(postId); else liked.delete(postId);
-      const post = demoPosts.find(row => row.id === postId);
-      counts.set(postId, Math.max(0, Number(post?.likeCount || 0)));
-    }
-    return { liked, counts };
-  }
+  if (!userId || !ids.length || mode === 'demo') return { liked, counts };
 
   await Promise.allSettled(ids.map(async postId => {
     const likeRef = doc(db, C.posts, postId, S.likes, userId);
@@ -543,7 +475,7 @@ export async function hydratePostLikeState(mode, userId, postIds = []) {
     ]);
 
     if (mine.status === 'fulfilled') {
-      if (mine.value.exists()) liked.add(postId); else liked.delete(postId);
+      mine.value.exists() ? liked.add(postId) : liked.delete(postId);
     }
     if (aggregate.status === 'fulfilled') {
       counts.set(postId, Math.max(0, Number(aggregate.value.data().count || 0)));
@@ -556,138 +488,63 @@ export async function hydratePostLikeState(mode, userId, postIds = []) {
 
 export async function toggleLike(mode, userId, postId) {
   if (!userId || !postId) throw new Error('Missing user or post ID.');
-
   if (mode === 'demo') {
-    const post = demoPosts.find(p => p.id === postId);
-    const active = demoLiked.has(postId);
-    if (active) demoLiked.delete(postId); else demoLiked.add(postId);
-    if (post) post.likeCount = Math.max(0, Number(post.likeCount || 0) + (active ? -1 : 1));
-    persistDemo();
-    return { liked: !active, count: Math.max(0, Number(post?.likeCount || 0)) };
+    const liked = readLikedCache(userId);
+    const active = liked.has(postId);
+    active ? liked.delete(postId) : liked.add(postId);
+    writeLikedCache(userId, liked);
+    return !active;
   }
 
-  // Canonical cross-platform path. Always use the actual Firestore document ID.
-  const canonicalPostId = String(postId);
-  const canonicalUserId = String(userId);
-  const postRef = doc(db, C.posts, canonicalPostId);
-  const likeRef = doc(db, C.posts, canonicalPostId, S.likes, canonicalUserId);
-  const likesRef = collection(db, C.posts, canonicalPostId, S.likes);
+  const likeRef = doc(db, C.posts, String(postId), S.likes, String(userId));
+  const snap = await getDoc(likeRef);
+  const active = snap.exists();
 
-  const result = await runTransaction(db, async transaction => {
-    const postSnap = await transaction.get(postRef);
-    if (!postSnap.exists()) {
-      const error = new Error('This post no longer exists.');
-      error.code = 'not-found';
-      throw error;
-    }
-
-    const likeSnap = await transaction.get(likeRef);
-    const currentlyLiked = likeSnap.exists();
-    const liked = !currentlyLiked;
-    const raw = postSnap.data() || {};
-    const currentCount = Math.max(0, Number(raw.likeCount ?? raw.likesCount ?? 0));
-    const nextCount = Math.max(0, currentCount + (liked ? 1 : -1));
-
-    if (liked) {
-      transaction.set(likeRef, {
-        userId: canonicalUserId,
-        uid: canonicalUserId,
-        postId: canonicalPostId,
-        createdAt: serverTimestamp()
-      });
-    } else {
-      transaction.delete(likeRef);
-    }
-
-    transaction.update(postRef, {
-      likeCount: nextCount,
-      likesCount: nextCount,
-      updatedAt: serverTimestamp()
+  if (active) {
+    await deleteDoc(likeRef);
+  } else {
+    await setDoc(likeRef, {
+      uid: String(userId),
+      userId: String(userId),
+      postId: String(postId),
+      createdAt: serverTimestamp()
     });
-
-    return { liked, count: nextCount };
-  });
-
-  updateLikedCache(userId, postId, result.liked);
-
-  // Reconcile the denormalized count from the canonical like documents.
-  try {
-    const aggregate = await getCountFromServer(likesRef);
-    const exactCount = Math.max(0, Number(aggregate.data().count || 0));
-    if (exactCount !== result.count) {
-      await updateDoc(postRef, { likeCount: exactCount, likesCount: exactCount }).catch(() => {});
-    }
-    return { liked: result.liked, count: exactCount };
-  } catch {
-    return result;
   }
+
+  updateLikedCache(userId, postId, !active);
+  return !active;
 }
 
-export async function toggleSave(mode, userId, postId) {
-  if (mode === 'demo') {
-    const active = demoSaved.has(postId);
-    if (active) demoSaved.delete(postId); else demoSaved.add(postId);
-    persistDemo(); return !active;
-  }
-  const saveRef = doc(db, C.users, userId, S.savedPosts, postId);
-  const snap = await getDoc(saveRef);
-  if (snap.exists()) { await deleteDoc(saveRef); return false; }
-  await setDoc(saveRef, { postId, userId, createdAt: serverTimestamp() });
-  return true;
+export async function toggleSave() {
+  throw new Error('Saved posts are not enabled in the current Tefsen app data model.');
 }
 
 export function subscribeComments(mode, postId, callback, errorCallback = console.error) {
   if (mode === 'demo') {
-    callback((demoComments[postId] || []).map(x => ({ ...x })));
+    callback((demoComments[postId] || []).map(item => ({ ...item })));
     return () => {};
   }
 
-  // `answers` is the canonical Android + Web reply path.
-  // Legacy `comments` are merged for backward compatibility only.
-  const answerRows = new Map();
-  const commentRows = new Map();
+  const answersRef = collection(db, C.posts, String(postId), S.answers || 'answers');
+  const q = query(
+    answersRef,
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(100)
+  );
 
-  const emit = () => {
-    const merged = new Map();
-    for (const [id, row] of commentRows) merged.set(id, row);
-    for (const [id, row] of answerRows) merged.set(id, row); // canonical wins on duplicate IDs
-
-    const rows = [...merged.values()].sort((a, b) => {
-      const at = timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0;
-      const bt = timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0;
-      return at - bt;
-    });
-
+  return onSnapshot(q, snap => {
+    const rows = snap.docs
+      .map(row => ({ id: row.id, ...row.data() }))
+      .sort((a, b) => {
+        const at = timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0;
+        const bt = timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0;
+        return at - bt;
+      });
     void Promise.all(rows.map(item => enrichAuthorRecord(mode, item)))
       .then(callback)
       .catch(() => callback(rows));
-  };
-
-  const attach = (subcollectionName, targetMap) => {
-    const targetRef = collection(db, C.posts, String(postId), subcollectionName);
-    let fallbackUnsub = null;
-    const unsub = onSnapshot(query(targetRef, orderBy('createdAt', 'asc'), limit(100)), snap => {
-      targetMap.clear();
-      snap.docs.forEach(d => targetMap.set(d.id, { id: d.id, ...d.data() }));
-      emit();
-    }, err => {
-      console.warn(`${subcollectionName} ordered listener failed; using fallback.`, err);
-      try {
-        fallbackUnsub = onSnapshot(query(targetRef, limit(100)), snap => {
-          targetMap.clear();
-          snap.docs.forEach(d => targetMap.set(d.id, { id: d.id, ...d.data() }));
-          emit();
-        }, errorCallback);
-      } catch (fallbackError) {
-        errorCallback(fallbackError);
-      }
-    });
-    return () => { unsub?.(); fallbackUnsub?.(); };
-  };
-
-  const unsubAnswers = attach(S.answers || 'answers', answerRows);
-  const unsubComments = attach(S.comments || 'comments', commentRows);
-  return () => { unsubAnswers?.(); unsubComments?.(); };
+  }, errorCallback);
 }
 
 export async function addComment(mode, user, profile, postId, text) {
@@ -702,38 +559,37 @@ export async function addComment(mode, user, profile, postId, text) {
       userId: user.uid,
       authorName: profile?.fullName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
-      authorRole: profile?.role || 'Student',
+      authorRole: profile?.role || 'student',
       authorVerified: Boolean(profile?.verified),
       content: cleanText,
       text: cleanText,
+      status: 'published',
+      visibility: 'public',
       createdAt: new Date().toISOString(),
       likeCount: 0
     };
     demoComments[postId] = [...(demoComments[postId] || []), item];
-    const post = demoPosts.find(p => p.id === postId);
-    if (post) post.commentCount = Number(post.commentCount || 0) + 1;
     return item;
   }
 
   const canonicalPostId = String(postId);
-  const answersRef = collection(db, C.posts, canonicalPostId, S.answers || 'answers');
-  const postRef = doc(db, C.posts, canonicalPostId);
-  const answerRef = doc(answersRef);
+  const answerRef = doc(collection(db, C.posts, canonicalPostId, S.answers || 'answers'));
+  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const nowMillis = Date.now();
-
   const item = {
     id: answerRef.id,
     postId: canonicalPostId,
     questionId: canonicalPostId,
     parentPostId: canonicalPostId,
     authorId: String(user.uid),
+    firebaseUid: String(user.uid),
     userId: String(user.uid),
     uid: String(user.uid),
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
     profileImageUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: profile?.role || 'Student',
-    role: profile?.role || 'Student',
+    authorRole: role,
+    role,
     authorVerified: Boolean(profile?.verified),
     verified: Boolean(profile?.verified),
     content: cleanText,
@@ -741,6 +597,8 @@ export async function addComment(mode, user, profile, postId, text) {
     answer: cleanText,
     reply: cleanText,
     type: 'answer',
+    status: 'published',
+    visibility: 'public',
     sourcePlatform: 'web',
     likeCount: 0,
     createdAtMillis: nowMillis,
@@ -748,151 +606,183 @@ export async function addComment(mode, user, profile, postId, text) {
     updatedAt: serverTimestamp()
   };
 
-  const postSnap = await getDoc(postRef);
-  if (!postSnap.exists()) {
-    const error = new Error('This post no longer exists.');
-    error.code = 'not-found';
-    throw error;
-  }
-
-  const batch = writeBatch(db);
-  batch.set(answerRef, item);
-  batch.update(postRef, {
-    answerCount: increment(1),
-    answersCount: increment(1),
-    commentCount: increment(1),
-    commentsCount: increment(1),
-    updatedAt: serverTimestamp()
-  });
-  await batch.commit();
-
+  await setDoc(answerRef, item);
   return { ...item, createdAt: new Date(nowMillis).toISOString() };
 }
 
-export async function getNotifications(mode, userId) {
-  if (mode === 'demo') return demoNotifications.filter(n => n.recipientId === userId || userId.startsWith('demo-'));
-  try {
-    const snap = await getDocs(query(collection(db, C.notifications), where('recipientId', '==', userId), orderBy('createdAt', 'desc'), limit(60)));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch {
-    const snap = await getDocs(query(collection(db, C.notifications), where('recipientId', '==', userId), limit(60)));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (timestampToDate(b.createdAt)?.getTime() || 0) - (timestampToDate(a.createdAt)?.getTime() || 0));
-  }
+export async function getNotifications() {
+  return [];
 }
 
-export async function markNotificationRead(mode, id) {
-  if (mode === 'demo') { const n = demoNotifications.find(x => x.id === id); if (n) n.read = true; return; }
-  await updateDoc(doc(db, C.notifications, id), { read: true, readAt: serverTimestamp() });
+export async function markNotificationRead() {
+  return true;
 }
 
-export async function getConversations(mode, userId) {
-  if (mode === 'demo') return demoConversations.filter(c => c.participants.includes(userId) || userId.startsWith('demo-'));
-  try {
-    const snap = await getDocs(query(collection(db, C.conversations), where('participants', 'array-contains', userId), orderBy('updatedAt', 'desc'), limit(50)));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch {
-    const snap = await getDocs(query(collection(db, C.conversations), where('participants', 'array-contains', userId), limit(50)));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (timestampToDate(b.updatedAt)?.getTime() || 0) - (timestampToDate(a.updatedAt)?.getTime() || 0));
-  }
+export async function getConversations() {
+  return [];
 }
 
-export function subscribeMessages(mode, conversationId, callback, errorCallback = console.error) {
-  if (mode === 'demo') { callback([...(demoMessages[conversationId] || [])]); return () => {}; }
-  return onSnapshot(query(collection(db, C.conversations, conversationId, S.messages), orderBy('createdAt', 'asc'), limit(200)), snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))), errorCallback);
+export function subscribeMessages(mode, conversationId, callback) {
+  callback([]);
+  return () => {};
 }
 
-export async function sendMessage(mode, userId, conversationId, text) {
-  const cleanText = String(text || '').trim().slice(0, 3000);
-  if (!cleanText) throw new Error('Message cannot be empty.');
-  if (mode === 'demo') {
-    const item = { id: uid('message'), senderId: userId, text: cleanText, createdAt: new Date().toISOString() };
-    demoMessages[conversationId] = [...(demoMessages[conversationId] || []), item];
-    const conv = demoConversations.find(c => c.id === conversationId); if (conv) { conv.lastMessage = cleanText; conv.updatedAt = item.createdAt; }
-    return item;
-  }
-  const message = { senderId: userId, text: cleanText, createdAt: serverTimestamp() };
-  const added = await addDoc(collection(db, C.conversations, conversationId, S.messages), message);
-  await updateDoc(doc(db, C.conversations, conversationId), { lastMessage: cleanText, updatedAt: serverTimestamp() }).catch(() => {});
-  return { id: added.id, ...message };
+export async function sendMessage() {
+  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
 }
 
 export async function getLeaderboard(mode) {
-  if (mode === 'demo') return [...DEMO_USERS].sort((a,b) => b.points - a.points).map(normalizeUser);
-  try {
-    const snap = await getDocs(query(collection(db, C.users), orderBy('points', 'desc'), limit(30)));
-    return snap.docs.map(d => normalizeUser(d.data(), d.id));
-  } catch {
-    const snap = await getDocs(query(collection(db, C.users), limit(60)));
-    return snap.docs.map(d => normalizeUser(d.data(), d.id)).sort((a,b) => b.points - a.points).slice(0, 30);
+  if (mode === 'demo') {
+    return [...DEMO_USERS]
+      .sort((a, b) => Number(b.points || 0) - Number(a.points || 0))
+      .map(row => normalizeUser(row, row.uid || row.id));
   }
+
+  const snap = await getDocs(query(collection(db, C.users), limit(60)));
+  return snap.docs
+    .map(row => normalizeUser(row.data(), row.id))
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 30);
 }
 
 export async function searchAll(mode, term) {
-  const qText = term.trim().toLowerCase();
+  const qText = String(term || '').trim().toLowerCase();
   if (!qText) return { users: [], posts: [] };
+
   if (mode === 'demo') {
-    return {
-      users: DEMO_USERS.map(normalizeUser).filter(u => `${u.fullName} ${u.username} ${u.bio}`.toLowerCase().includes(qText)),
-      posts: demoPosts.map(p => normalizePost(p,p.id)).filter(p => `${p.title} ${p.content} ${p.subject} ${(p.tags || []).join(' ')}`.toLowerCase().includes(qText))
-    };
+    const users = DEMO_USERS
+      .map(row => normalizeUser(row, row.uid || row.id))
+      .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText));
+    const posts = demoPosts
+      .map(post => normalizePost(post, post.id))
+      .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText));
+    return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
   }
+
   const [usersSnap, postsSnap] = await Promise.all([
     getDocs(query(collection(db, C.users), limit(100))),
-    getDocs(query(collection(db, C.posts), limit(100)))
+    getDocs(query(
+      collection(db, C.posts),
+      where('status', '==', 'published'),
+      where('visibility', '==', 'public'),
+      limit(100)
+    ))
   ]);
-  const users = usersSnap.docs.map(d => normalizeUser(d.data(), d.id)).filter(u => `${u.fullName} ${u.username} ${u.bio}`.toLowerCase().includes(qText));
-  const posts = postsSnap.docs.map(d => normalizePost(d.data(), d.id)).filter(p => `${p.title} ${p.content} ${p.subject} ${(p.tags || []).join(' ')}`.toLowerCase().includes(qText));
-  const enrichedPosts = await enrichPostAuthors(mode, posts.slice(0, 30));
-  return { users: users.slice(0, 20), posts: enrichedPosts };
+
+  const users = usersSnap.docs
+    .map(row => normalizeUser(row.data(), row.id))
+    .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText))
+    .slice(0, 20);
+
+  const posts = postsSnap.docs
+    .map(row => normalizePost(row.data(), row.id))
+    .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText))
+    .slice(0, 30);
+
+  return { users, posts: await enrichPostAuthors(mode, posts) };
 }
 
 export async function updateUserProfile(mode, userId, data) {
   if (mode === 'demo') {
-    const base = DEMO_USERS.find(u => u.uid === userId) || {};
-    Object.assign(base, data); return normalizeUser(base, userId);
+    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
+    Object.assign(existing, data);
+    return normalizeUser(existing, userId);
   }
+
   const fullName = String(data.fullName || '').trim().slice(0, 80);
   const username = String(data.username || '').trim().replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40);
   const bio = String(data.bio || '').trim().slice(0, 500);
   if (!fullName) throw new Error('Full name is required.');
+
+  const userRef = doc(db, C.users, userId);
+  const snap = await getDoc(userRef);
+  const current = snap.exists() ? snap.data() : {};
+  const currentAuthUser = auth?.currentUser;
+  const email = String(current.email || currentAuthUser?.email || '').trim();
+  const role = normalizeRoleValue(current.role, email);
+  let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
+
+  const photoInput = document.querySelector('[data-profile-form] input[name="profileImage"]');
+  const photoFile = photoInput?.files?.[0] || null;
+  if (photoFile) {
+    if (!String(photoFile.type || '').startsWith('image/')) {
+      throw new Error('Profile photo must be an image.');
+    }
+    if (photoFile.size >= 5 * 1024 * 1024) {
+      throw new Error('Profile photo must be smaller than 5 MB.');
+    }
+    const objectRef = ref(storage, `profile_images/${userId}.jpg`);
+    const upload = await uploadBytes(objectRef, photoFile, { contentType: photoFile.type });
+    profileImageUrl = await getDownloadURL(upload.ref);
+  }
+
   const payload = {
+    uid: userId,
+    email,
     fullName,
     displayName: fullName,
     username,
     bio,
+    role,
+    profileImageUrl,
+    photoURL: profileImageUrl,
     updatedAt: serverTimestamp()
   };
-  await setDoc(doc(db, C.users, userId), payload, { merge: true });
+
+  if (!snap.exists()) {
+    payload.verified = false;
+    payload.createdAt = serverTimestamp();
+  }
+
+  await setDoc(userRef, payload, { merge: true });
   userProfileCache.delete(`${mode}:${userId}`);
-  return normalizeUser({ ...data, ...payload, uid: userId }, userId);
+  return normalizeUser({ ...current, ...payload }, userId);
 }
 
 export async function reportPost(mode, userId, postId, reason, details = '') {
-  const allowedReasons = new Set(['Spam', 'Harassment', 'Harmful or unsafe content', 'Misinformation concern', 'Copyright concern', 'Other']);
+  const allowedReasons = new Set([
+    'Spam',
+    'Harassment',
+    'Harmful or unsafe content',
+    'Misinformation concern',
+    'Copyright concern',
+    'Other'
+  ]);
   const cleanReason = String(reason || '').trim();
   const cleanDetails = String(details || '').trim().slice(0, 1000);
   if (!allowedReasons.has(cleanReason)) throw new Error('Choose a valid report reason.');
   if (mode === 'demo') return { id: uid('report') };
-  return addDoc(collection(db, C.reports), { reporterId: userId, postId, reason: cleanReason, details: cleanDetails, status: 'open', createdAt: serverTimestamp() });
+
+  const requestRef = doc(collection(db, 'support_requests'));
+  await setDoc(requestRef, {
+    type: 'post_report',
+    status: 'open',
+    requesterId: String(userId),
+    userId: String(userId),
+    postId: String(postId),
+    reason: cleanReason,
+    details: cleanDetails,
+    sourcePlatform: 'web',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return { id: requestRef.id };
 }
 
-export async function startConversation(mode, currentUserId, otherUser) {
-  if (mode === 'demo') {
-    const existing = demoConversations.find(c => c.participants.includes(currentUserId) && c.participants.includes(otherUser.uid));
-    if (existing) return existing;
-    const conv = { id: uid('conv'), participants: [currentUserId, otherUser.uid], title: otherUser.fullName, otherUserId: otherUser.uid, lastMessage: '', updatedAt: new Date().toISOString() };
-    demoConversations.unshift(conv); demoMessages[conv.id] = []; return conv;
-  }
-  const existingSnap = await getDocs(query(collection(db, C.conversations), where('participants', 'array-contains', currentUserId), limit(50)));
-  const existing = existingSnap.docs.find(d => {
-    const parts = d.data().participants || [];
-    return parts.includes(otherUser.uid);
-  });
-  if (existing) return { id: existing.id, ...existing.data() };
-  const added = await addDoc(collection(db, C.conversations), {
-    participants: [currentUserId, otherUser.uid],
-    participantNames: { [currentUserId]: '', [otherUser.uid]: otherUser.fullName },
-    lastMessage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-  });
-  return { id: added.id, participants: [currentUserId, otherUser.uid], title: otherUser.fullName, otherUserId: otherUser.uid };
+export async function getFollowState(mode, currentUserId, targetUserId) {
+  if (!targetUserId) return { following: false, followersCount: 0, followingCount: 0 };
+  const profile = await getUserById(mode, targetUserId).catch(() => null);
+  return {
+    following: false,
+    followersCount: Number(profile?.followersCount || 0),
+    followingCount: Number(profile?.followingCount || 0)
+  };
+}
+
+export async function toggleFollow() {
+  throw new Error('Following is not enabled in the current Tefsen app data model.');
+}
+
+export async function startConversation() {
+  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
 }
