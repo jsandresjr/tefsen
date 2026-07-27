@@ -1,18 +1,66 @@
-import { auth } from '../firebase-client.js';
+import { auth, db } from '../firebase-client.js';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, GoogleAuthProvider, signInWithPopup, updateProfile
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
-import { doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
-import { db } from '../firebase-client.js';
+import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { DEMO_USERS } from './demo-data.js';
 
 const DEMO_KEY = 'tefsen_demo_user';
 const demoListeners = new Set();
+const ALLOWED_ROLES = new Set(['student', 'HS_STUDENT', 'UNI_STUDENT', 'MENTOR', 'ADMIN']);
+const ADMIN_EMAIL = 'jsandresjr@gmail.com';
 
-function emitDemo(user) { demoListeners.forEach(fn => fn(user)); }
+function emitDemo(user) {
+  demoListeners.forEach(fn => fn(user));
+}
+
 function currentDemo() {
-  try { return JSON.parse(localStorage.getItem(DEMO_KEY) || 'null'); } catch { return null; }
+  try {
+    return JSON.parse(localStorage.getItem(DEMO_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStoredRole(role, email = '') {
+  const raw = String(role || '').trim();
+  if (ALLOWED_ROLES.has(raw)) return raw;
+  if (raw.toLowerCase() === 'admin' || String(email).toLowerCase() === ADMIN_EMAIL) return 'ADMIN';
+  if (raw.toLowerCase() === 'hs_student') return 'HS_STUDENT';
+  if (raw.toLowerCase() === 'uni_student') return 'UNI_STUDENT';
+  if (raw.toLowerCase() === 'mentor') return 'MENTOR';
+  return 'student';
+}
+
+async function syncUserDocument(user, { isRegistration = false } = {}) {
+  const userRef = doc(db, 'users', user.uid);
+  const snap = await getDoc(userRef);
+  const existing = snap.exists() ? snap.data() : {};
+  const email = String(existing.email || user.email || '').trim();
+  const role = normalizeStoredRole(existing.role, email);
+  const fullName = String(user.displayName || existing.fullName || existing.displayName || email || 'Tefsen User').trim();
+
+  const payload = {
+    uid: user.uid,
+    email,
+    fullName,
+    displayName: fullName,
+    role,
+    updatedAt: serverTimestamp()
+  };
+
+  if (user.photoURL) {
+    payload.profileImageUrl = user.photoURL;
+    payload.photoURL = user.photoURL;
+  }
+
+  if (!snap.exists() || isRegistration) {
+    payload.verified = false;
+    payload.createdAt = serverTimestamp();
+  }
+
+  await setDoc(userRef, payload, { merge: true });
 }
 
 export function observeAuth(mode, callback) {
@@ -35,19 +83,21 @@ export async function register(mode, { fullName, email, password }) {
   if (mode === 'firebase') {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(credential.user, { displayName: fullName });
-    await setDoc(doc(db, 'users', credential.user.uid), {
-      uid: credential.user.uid,
-      fullName,
-      displayName: fullName,
-      email,
-      role: 'Student',
-      verified: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    await syncUserDocument(credential.user, { isRegistration: true });
     return credential;
   }
-  const user = { id: `demo-${Date.now()}`, uid: `demo-${Date.now()}`, fullName, displayName: fullName, email, username: email.split('@')[0], role: 'Student', verified: false, points: 0 };
+
+  const user = {
+    id: `demo-${Date.now()}`,
+    uid: `demo-${Date.now()}`,
+    fullName,
+    displayName: fullName,
+    email,
+    username: email.split('@')[0],
+    role: 'student',
+    verified: false,
+    points: 0
+  };
   localStorage.setItem(DEMO_KEY, JSON.stringify(user));
   emitDemo(user);
   return { user };
@@ -58,17 +108,10 @@ export async function signInGoogle(mode) {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     const credential = await signInWithPopup(auth, provider);
-    await setDoc(doc(db, 'users', credential.user.uid), {
-      uid: credential.user.uid,
-      fullName: credential.user.displayName || 'Tefsen User',
-      displayName: credential.user.displayName || 'Tefsen User',
-      email: credential.user.email || '',
-      profileImageUrl: credential.user.photoURL || '',
-      photoURL: credential.user.photoURL || '',
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    await syncUserDocument(credential.user);
     return credential;
   }
+
   const user = { ...DEMO_USERS[0], displayName: DEMO_USERS[0].fullName };
   localStorage.setItem(DEMO_KEY, JSON.stringify(user));
   emitDemo(user);
