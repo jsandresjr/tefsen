@@ -1,8 +1,8 @@
 // Tefsen Premium V2 — interaction, accessibility and product polish.
 // Progressive enhancement only: core Firebase/data behavior remains owned by app.js.
 
-const PRIMARY_ROUTES = new Set(['home','explore','notifications','profile']);
-const RETIRED_ROUTE = 'messages';
+const PRIMARY_ROUTES = new Set(['home','explore','profile']);
+const RETIRED_ROUTES = new Set(['messages','notifications','saved']);
 let lastRoute = '';
 let observerQueued = false;
 
@@ -10,18 +10,45 @@ function routeName(){
   return location.hash.replace(/^#\/?/,'').split('/')[0].trim().toLowerCase() || 'home';
 }
 
-function retireMessagesExperience(root=document){
-  root.querySelectorAll('[data-route="messages"]').forEach((el)=>el.remove());
-  root.querySelectorAll('button,a').forEach((el)=>{
-    const label=(el.textContent||'').trim().toLowerCase();
-    if(label==='messages' && (el.closest('.sidebar')||el.closest('.topbar-actions')||el.closest('.mobile-bottom'))){
-      el.remove();
-    }
+function retireUnsupportedAppFeatures(root=document){
+  root.querySelectorAll('[data-route]').forEach((el)=>{
+    const route=(el.getAttribute('data-route')||'').split('/')[0].trim().toLowerCase();
+    if(RETIRED_ROUTES.has(route)) el.remove();
   });
-  if(routeName()===RETIRED_ROUTE){
+
+  root.querySelectorAll('[data-save],[data-follow-user],[data-message-user]').forEach((el)=>el.remove());
+
+  root.querySelectorAll('[data-feed-tab="saved"]').forEach((el)=>el.remove());
+
+  root.querySelectorAll('.widget-link').forEach((el)=>{
+    const text=(el.textContent||'').trim().toLowerCase();
+    if(text.includes('saved item') || text.includes('knowledge for later')) el.remove();
+  });
+
+  root.querySelectorAll('.profile-stats span').forEach((el)=>{
+    const text=(el.textContent||'').trim().toLowerCase();
+    if(text.endsWith('followers') || text.endsWith('following')) el.remove();
+  });
+
+  if(RETIRED_ROUTES.has(routeName())){
     history.replaceState(null,'',`${location.pathname}${location.search}#/home`);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }
+}
+
+function enhanceProfilePhotoEditor(root=document){
+  root.querySelectorAll('[data-profile-form]').forEach((form)=>{
+    if(form.dataset.profilePhotoEnhanced==='1') return;
+    form.dataset.profilePhotoEnhanced='1';
+
+    const field=document.createElement('div');
+    field.className='field';
+    field.innerHTML=`
+      <label>Profile photo</label>
+      <input class="input" type="file" name="profileImage" accept="image/*">
+      <small class="form-help">JPG, PNG or WebP · under 5 MB · syncs with the Tefsen app</small>`;
+    form.prepend(field);
+  });
 }
 
 function labelNavigation(root=document){
@@ -80,7 +107,8 @@ function improveForms(root=document){
 function improveExternalLinks(root=document){
   root.querySelectorAll('a[target="_blank"]').forEach((link)=>{
     const rel=new Set((link.getAttribute('rel')||'').split(/\s+/).filter(Boolean));
-    rel.add('noopener');rel.add('noreferrer');
+    rel.add('noopener');
+    rel.add('noreferrer');
     link.setAttribute('rel',[...rel].join(' '));
   });
 }
@@ -113,7 +141,8 @@ function announceRoute(){
 }
 
 function applyPremiumV2(root=document){
-  retireMessagesExperience(root);
+  retireUnsupportedAppFeatures(root);
+  enhanceProfilePhotoEditor(root);
   labelNavigation(root);
   improvePostCards(root);
   improveForms(root);
