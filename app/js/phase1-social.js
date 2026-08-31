@@ -10,22 +10,31 @@ const TOPICS = [
   'All', 'Mathematics', 'Physics', 'Chemistry', 'Biology',
   'ICT/Computer Science', 'Study Tips', 'Engineering', 'Medicine', 'Technology'
 ];
-
 const PAGE_SIZE = 8;
+
 let homeMode = 'for-you';
 let activeTopic = 'All';
 let visibleCount = PAGE_SIZE;
+let profileTab = 'posts';
+let scheduled = false;
 let enhancing = false;
 let allowLegacyCompose = false;
-let scheduled = false;
+
+function localRouteParts() {
+  return location.hash.replace(/^#\/?/, '').split(/[/?]/).filter(Boolean).map(decodeURIComponent);
+}
 
 function routeName() {
-  return (location.hash.replace(/^#\/?/, '').split(/[/?]/)[0] || 'home').toLowerCase();
+  return (localRouteParts()[0] || 'home').toLowerCase();
+}
+
+function routeProfileId() {
+  return localRouteParts()[1] || state.profile?.uid || '';
 }
 
 function profileAvatar(profile = {}) {
-  const name = profile.fullName || profile.displayName || 'Tefsen User';
-  const photo = safeUrl(profile.photoUrl || profile.profileImageUrl || profile.photoURL || '');
+  const name = profile.fullName || profile.displayName || profile.authorName || 'Tefsen User';
+  const photo = safeUrl(profile.photoUrl || profile.profileImageUrl || profile.photoURL || profile.authorPhotoUrl || '');
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'T';
   return `<span class="phase1-avatar" aria-label="${escapeHTML(name)}">${photo
     ? `<img src="${photo}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
@@ -56,15 +65,15 @@ function topicMatches(post, topic) {
   if (topic === 'All') return true;
   const haystack = `${post.subject || ''} ${post.topic || ''} ${(post.tags || []).join(' ')}`.toLowerCase();
   const aliases = {
-    'ICT/Computer Science': ['ict', 'computer', 'coding', 'programming', 'software', 'technology'],
-    'Study Tips': ['study', 'revision', 'focus', 'learning', 'exam'],
-    'Mathematics': ['math', 'mathematics'],
-    'Biology': ['biology', 'bio'],
-    'Chemistry': ['chemistry', 'chemical'],
-    'Physics': ['physics'],
-    'Engineering': ['engineering'],
-    'Medicine': ['medicine', 'medical', 'health'],
-    'Technology': ['technology', 'tech']
+    Mathematics: ['math', 'mathematics'],
+    Physics: ['physics'],
+    Chemistry: ['chemistry', 'chemical'],
+    Biology: ['biology', 'bio'],
+    'ICT/Computer Science': ['ict', 'computer', 'coding', 'programming', 'software'],
+    'Study Tips': ['study', 'revision', 'focus', 'exam', 'learning'],
+    Engineering: ['engineering'],
+    Medicine: ['medicine', 'medical', 'health'],
+    Technology: ['technology', 'tech']
   };
   return (aliases[topic] || [topic.toLowerCase()]).some(term => haystack.includes(term));
 }
@@ -106,7 +115,8 @@ function socialPostCard(post) {
   const title = post.title || post.questionTitle || '';
   const body = post.content || post.description || '';
   const id = String(post.id || '');
-  const verified = post.verified || post.authorVerified;
+  const verified = Boolean(post.verified || post.authorVerified);
+
   return `<article class="phase1-post panel" data-phase1-post="${escapeHTML(id)}">
     <header class="phase1-post-head">
       <button class="phase1-author" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">
@@ -132,58 +142,50 @@ function socialPostCard(post) {
     ${mediaMarkup(post)}
 
     <footer class="phase1-actions">
-      <button class="phase1-action" type="button" data-like="${escapeHTML(id)}" aria-label="Like">
-        ${icon('heart', 18)} <span>${formatCount(post.likeCount || 0)}</span>
-      </button>
-      <button class="phase1-action" type="button" data-route="post/${encodeURIComponent(id)}" aria-label="Comment">
-        ${icon('comment', 18)} <span>${formatCount(post.commentCount || post.answerCount || 0)}</span>
-      </button>
-      <button class="phase1-action phase1-disabled" type="button" aria-disabled="true" title="Helpful launches in Phase 2">
-        ${icon('check', 18)} <span>Helpful</span>
-      </button>
-      <button class="phase1-action phase1-disabled" type="button" aria-disabled="true" title="Private Save launches in Phase 2">
-        ${icon('bookmark', 18)} <span>Save</span>
-      </button>
-      <button class="phase1-action" type="button" data-share="${escapeHTML(id)}" aria-label="Share">
-        ${icon('share', 18)} <span>Share</span>
-      </button>
+      <button class="phase1-action" type="button" data-like="${escapeHTML(id)}" aria-label="Like">${icon('heart', 18)} <span>${formatCount(post.likeCount || 0)}</span></button>
+      <button class="phase1-action" type="button" data-route="post/${encodeURIComponent(id)}" aria-label="Comment">${icon('comment', 18)} <span>${formatCount(post.commentCount || post.answerCount || 0)}</span></button>
+      <button class="phase1-action" type="button" data-phase1-unavailable="Helpful" aria-label="Helpful">${icon('check', 18)} <span>Helpful</span></button>
+      <button class="phase1-action" type="button" data-phase1-unavailable="Save" aria-label="Save">${icon('bookmark', 18)} <span>Save</span></button>
+      <button class="phase1-action" type="button" data-share="${escapeHTML(id)}" aria-label="Share">${icon('share', 18)} <span>Share</span></button>
     </footer>
   </article>`;
 }
 
-function honestEmptyState() {
+function emptyHomeState() {
   if (homeMode === 'following') {
     return `<section class="phase1-empty panel">
       <div class="phase1-empty-icon">${icon('user', 24)}</div>
-      <h2>Your Following feed is ready for real relationships</h2>
-      <p>This repository does not currently have working follow writes, so Tefsen will not invent followed creators. Use Explore now; real follow/unfollow and the live Following feed are the Phase 3 backend milestone.</p>
-      <button class="btn btn-primary" type="button" data-route="explore">Explore creators</button>
+      <h2>Your Following feed is just getting started</h2>
+      <p>Explore learners and educators. Posts from people you follow will appear here when the secure follow system is enabled.</p>
+      <button class="btn btn-primary" type="button" data-route="explore">Explore Tefsen</button>
     </section>`;
   }
   return `<section class="phase1-empty panel">
     <div class="phase1-empty-icon">${icon('compass', 24)}</div>
-    <h2>Build the first learning streak</h2>
-    <p>Explore subjects, discover creators, or publish the first useful question for this topic.</p>
+    <h2>Your feed is just getting started</h2>
+    <p>Explore subjects, discover useful discussions, or create the first contribution for this topic.</p>
     <div class="phase1-empty-actions">
       <button class="btn btn-secondary" type="button" data-route="explore">Explore subjects</button>
-      <button class="btn btn-primary" type="button" data-phase1-create>+ Create</button>
+      <button class="btn btn-primary" type="button" data-phase1-create>Create</button>
     </div>
   </section>`;
 }
 
-function renderPhase1Home() {
+function renderSocialHome() {
+  if (routeName() !== 'home') return;
   const wrap = root.querySelector('.content-wrap');
-  if (!wrap) return;
+  if (!wrap || wrap.dataset.phase1Home === '1') return;
+
   const posts = homePosts();
   const visible = posts.slice(0, visibleCount);
   const canLoadMore = posts.length > visible.length;
-
+  wrap.dataset.phase1Home = '1';
   wrap.innerHTML = `<div class="phase1-home">
     <section class="phase1-home-intro">
       <div>
         <span class="phase1-eyebrow">THE SOCIAL EDUCATION NETWORK</span>
         <h1>Learn something worth sharing.</h1>
-        <p>Discover ideas from students and creators, react to what helps, then add what you know.</p>
+        <p>Discover educational content, learn from people, react to what helps, and contribute what you know.</p>
       </div>
       <button class="phase1-create-hero" type="button" data-phase1-create>${icon('plus', 19)} Create</button>
     </section>
@@ -199,47 +201,49 @@ function renderPhase1Home() {
 
     <section class="phase1-composer panel">
       ${profileAvatar(state.profile || {})}
-      <button type="button" data-phase1-create>
-        <b>Share what you know.</b>
-        <span>Post a concept, notes, question, Spark or study update</span>
-      </button>
+      <button type="button" data-phase1-create><b>Share what you know.</b><span>Post, Notes, Question, Spark or Study Update</span></button>
       <button class="phase1-composer-plus" type="button" data-phase1-create aria-label="Create">${icon('plus', 20)}</button>
     </section>
 
-    <div class="phase1-feed">
-      ${visible.length ? visible.map(socialPostCard).join('') : honestEmptyState()}
-    </div>
-    ${canLoadMore ? `<div class="phase1-load-more"><button class="btn btn-secondary" type="button" data-phase1-more>Show more learning</button><small>${visible.length} of ${posts.length} loaded from the current bounded feed batch</small></div>` : ''}
+    <div class="phase1-feed">${visible.length ? visible.map(socialPostCard).join('') : emptyHomeState()}</div>
+    ${canLoadMore ? `<div class="phase1-load-more"><button class="btn btn-secondary" type="button" data-phase1-more>Show more learning</button></div>` : ''}
   </div>`;
 }
 
+function refreshSocialHome() {
+  const wrap = root.querySelector('.content-wrap');
+  if (wrap) delete wrap.dataset.phase1Home;
+  renderSocialHome();
+}
+
 function applyPrimaryNavigation() {
+  const route = routeName();
+  const signature = `${route}:${Number(state.unreadCount || 0)}`;
   const sidebar = root.querySelector('.sidebar');
+
   if (sidebar) {
     const lists = sidebar.querySelectorAll('.nav-list');
-    const first = lists[0];
-    if (first && !first.classList.contains('phase1-primary-nav')) {
-      first.classList.add('phase1-primary-nav');
-    }
-    if (first) {
-      const route = routeName();
-      first.innerHTML = `
+    const primary = lists[0];
+    if (primary && primary.dataset.phase1Signature !== signature) {
+      primary.dataset.phase1Signature = signature;
+      primary.classList.add('phase1-primary-nav');
+      primary.innerHTML = `
         <button class="nav-item ${route === 'home' ? 'active' : ''}" type="button" data-route="home"><span class="nav-icon">${icon('home',20)}</span><span>Home</span></button>
         <button class="nav-item ${route === 'explore' ? 'active' : ''}" type="button" data-route="explore"><span class="nav-icon">${icon('compass',20)}</span><span>Explore</span></button>
         <button class="nav-item phase1-create-nav" type="button" data-phase1-create><span class="nav-icon">${icon('plus',20)}</span><span>Create</span></button>
         <button class="nav-item ${route === 'notifications' ? 'active' : ''}" type="button" data-route="notifications"><span class="nav-icon">${icon('bell',20)}</span><span>Activity</span>${state.unreadCount ? `<span class="badge-dot phase1-inline-badge">${Math.min(99, state.unreadCount)}</span>` : ''}</button>
         <button class="nav-item ${route === 'profile' ? 'active' : ''}" type="button" data-route="profile"><span class="nav-icon">${icon('user',20)}</span><span>Profile</span></button>`;
     }
-    if (lists[1]) lists[1].hidden = true;
+    if (lists[1]) lists[1].style.display = 'none';
     const cta = sidebar.querySelector('.sidebar-cta');
-    if (cta) cta.hidden = true;
-    const profile = sidebar.querySelector('.sidebar-profile');
-    if (profile) profile.hidden = true;
+    if (cta) cta.style.display = 'none';
+    const duplicateProfile = sidebar.querySelector('.sidebar-profile');
+    if (duplicateProfile) duplicateProfile.style.display = 'none';
   }
 
   const mobile = root.querySelector('.mobile-bottom');
-  if (mobile) {
-    const route = routeName();
+  if (mobile && mobile.dataset.phase1Signature !== signature) {
+    mobile.dataset.phase1Signature = signature;
     mobile.innerHTML = `
       <button class="${route === 'home' ? 'active' : ''}" type="button" data-route="home" aria-label="Home">${icon('home',21)}</button>
       <button class="${route === 'explore' ? 'active' : ''}" type="button" data-route="explore" aria-label="Explore">${icon('compass',21)}</button>
@@ -250,16 +254,31 @@ function applyPrimaryNavigation() {
 }
 
 function enhanceTopbar() {
-  const input = root.querySelector('.global-search input');
-  if (input) {
-    input.placeholder = 'Search creators, subjects and learning…';
-    input.setAttribute('aria-label', 'Search Tefsen learning');
+  const search = root.querySelector('.global-search input');
+  if (search) {
+    search.placeholder = 'Search creators, subjects and learning…';
+    search.setAttribute('aria-label', 'Search Tefsen');
   }
-  const messages = root.querySelector('[data-route="messages"]');
-  if (messages) {
-    messages.setAttribute('aria-label', 'Messages — backend not enabled yet');
-    messages.setAttribute('title', 'Messages UI exists; real messaging backend is not enabled yet');
-    messages.classList.add('phase1-placeholder-action');
+
+  const duplicateActivity = root.querySelector('.topbar-actions [data-route="notifications"]');
+  if (duplicateActivity) duplicateActivity.style.display = 'none';
+
+  const avatar = root.querySelector('.top-avatar');
+  if (avatar) avatar.style.display = matchMedia('(max-width: 760px)').matches ? 'none' : '';
+}
+
+function enhanceExplore() {
+  if (routeName() !== 'explore') return;
+  const head = root.querySelector('.page-head');
+  if (!head) return;
+  const title = head.querySelector('h1');
+  const text = head.querySelector('p');
+  if (title) title.textContent = 'Explore';
+  if (text) text.textContent = 'Discover trending learning, subjects, creators and useful questions.';
+  const create = head.querySelector('[data-action="compose"]');
+  if (create) create.innerHTML = `${icon('plus',17)} Create`;
+  if (!head.querySelector('[data-route="leaderboard"]')) {
+    head.insertAdjacentHTML('beforeend', `<button class="btn btn-secondary" type="button" data-route="leaderboard">${icon('trophy',17)} Top Scholars</button>`);
   }
 }
 
@@ -270,30 +289,61 @@ function enhanceActivity() {
   const title = head.querySelector('h1');
   const text = head.querySelector('p');
   if (title) title.textContent = 'Activity';
-  if (text) text.textContent = 'Likes, helpful reactions, answers, follows and achievements will collect here as each backend capability is enabled.';
+  if (text) text.textContent = 'Your learning interactions and community updates appear here.';
 }
 
-function enhanceExplore() {
-  if (routeName() !== 'explore') return;
-  const head = root.querySelector('.page-head');
-  if (head) {
-    const title = head.querySelector('h1');
-    const text = head.querySelector('p');
-    if (title) title.textContent = 'Explore';
-    if (text) text.textContent = 'Discover subjects, creators, popular questions and new learning formats.';
-    if (!head.querySelector('[data-route="leaderboard"]')) {
-      head.insertAdjacentHTML('beforeend', `<button class="btn btn-secondary" type="button" data-route="leaderboard">${icon('trophy',17)} Top Scholars</button>`);
-    }
-  }
+function profilePostsForTab(tab) {
+  const targetId = String(routeProfileId() || '');
+  const posts = state.posts.filter(post => {
+    const ids = [post.authorId, post.userId, post.uid, post.ownerId, post.authorUid]
+      .map(value => String(value || '')).filter(Boolean);
+    return !targetId || ids.includes(targetId);
+  });
+  if (tab === 'notes') return posts.filter(post => normalizePostType(post) === 'NOTE_CAROUSEL');
+  if (tab === 'questions') return posts.filter(post => normalizePostType(post) === 'QUESTION');
+  if (tab === 'sparks') return posts.filter(post => normalizePostType(post) === 'SPARK');
+  return posts;
+}
+
+function renderProfileTabContent() {
+  const feed = root.querySelector('.profile-tabs + .feed-list');
+  if (!feed) return;
+  const posts = profilePostsForTab(profileTab);
+  const label = { posts: 'posts', notes: 'notes', questions: 'questions', sparks: 'Sparks' }[profileTab] || 'posts';
+  feed.innerHTML = posts.length
+    ? posts.map(socialPostCard).join('')
+    : `<section class="phase1-empty panel"><div class="phase1-empty-icon">${icon('compass',24)}</div><h2>No ${label} yet</h2><p>This section will fill as this learner shares more educational content.</p></section>`;
 }
 
 function enhanceProfile() {
   if (routeName() !== 'profile') return;
   root.querySelectorAll('.profile-stats span').forEach(stat => {
-    if (/\bPoints\b/i.test(stat.textContent || '')) {
-      stat.lastChild && (stat.lastChild.textContent = 'Reputation');
-    }
+    if (/\bPoints\b/i.test(stat.textContent || '') && stat.lastChild) stat.lastChild.textContent = 'Reputation';
   });
+
+  const follow = root.querySelector('[data-follow-user]');
+  if (follow) {
+    follow.disabled = true;
+    follow.title = 'Follow will be enabled with the secure relationship model';
+  }
+  const message = root.querySelector('[data-message-user]');
+  if (message) {
+    message.disabled = true;
+    message.title = 'Messaging is not enabled in this web build yet';
+  }
+
+  const tabs = root.querySelector('.profile-tabs');
+  if (!tabs || tabs.dataset.phase1Ready === '1') return;
+  tabs.dataset.phase1Ready = '1';
+  tabs.style.display = 'flex';
+  tabs.style.gap = '6px';
+  tabs.style.overflowX = 'auto';
+  tabs.innerHTML = `
+    <button class="feed-tab ${profileTab === 'posts' ? 'active' : ''}" type="button" data-phase1-profile-tab="posts">Posts</button>
+    <button class="feed-tab ${profileTab === 'notes' ? 'active' : ''}" type="button" data-phase1-profile-tab="notes">Notes</button>
+    <button class="feed-tab ${profileTab === 'questions' ? 'active' : ''}" type="button" data-phase1-profile-tab="questions">Questions</button>
+    <button class="feed-tab ${profileTab === 'sparks' ? 'active' : ''}" type="button" data-phase1-profile-tab="sparks">Sparks</button>`;
+  renderProfileTabContent();
 }
 
 function showCreateSheet() {
@@ -305,18 +355,18 @@ function showCreateSheet() {
         <button class="close-btn" type="button" data-phase1-sheet-dismiss aria-label="Close">${icon('close',19)}</button>
       </header>
       <div class="phase1-create-grid">
-        <button type="button" data-phase1-coming="Post"><span>${icon('image',21)}</span><b>Post</b><small>Concept + images</small><em>Phase 2</em></button>
-        <button type="button" data-phase1-coming="Notes"><span>${icon('bookmark',21)}</span><b>Notes</b><small>Swipeable study slides</small><em>Phase 5</em></button>
-        <button class="is-ready" type="button" data-phase1-question><span>${icon('comment',21)}</span><b>Question</b><small>Ask the community</small><em>Available</em></button>
-        <button type="button" data-phase1-coming="Spark"><span>${icon('eye',21)}</span><b>Spark</b><small>Short vertical learning</small><em>Phase 5</em></button>
-        <button type="button" data-phase1-coming="Study Update"><span>${icon('check',21)}</span><b>Study Update</b><small>Share your progress</small><em>Phase 2</em></button>
+        <button type="button" data-phase1-unavailable="Post"><span>${icon('image',21)}</span><b>Post</b><small>Concept + images</small></button>
+        <button type="button" data-phase1-unavailable="Notes"><span>${icon('bookmark',21)}</span><b>Notes</b><small>Swipeable study slides</small></button>
+        <button class="is-ready" type="button" data-phase1-question><span>${icon('comment',21)}</span><b>Question</b><small>Ask the community</small></button>
+        <button type="button" data-phase1-unavailable="Spark"><span>${icon('eye',21)}</span><b>Spark</b><small>Short vertical learning</small></button>
+        <button type="button" data-phase1-unavailable="Study Update"><span>${icon('check',21)}</span><b>Study Update</b><small>Share your progress</small></button>
       </div>
-      <p class="phase1-sheet-note">Question publishing uses the existing production-compatible flow. Unfinished formats are intentionally not faked.</p>
+      <p class="phase1-sheet-note">Question publishing is available now. Other formats will activate as their secure data flows are completed.</p>
     </section>
   </div>`;
 }
 
-function openLegacyQuestionComposer() {
+function openQuestionComposer() {
   const legacy = root.querySelector('[data-action="compose"]');
   if (!legacy) {
     toast('Question composer is not available on this screen.', 'error');
@@ -336,10 +386,10 @@ function enhance() {
   try {
     applyPrimaryNavigation();
     enhanceTopbar();
-    enhanceActivity();
     enhanceExplore();
+    enhanceActivity();
     enhanceProfile();
-    if (routeName() === 'home' && !root.querySelector('.phase1-home')) renderPhase1Home();
+    renderSocialHome();
   } finally {
     enhancing = false;
   }
@@ -354,11 +404,13 @@ function scheduleEnhance() {
   });
 }
 
-new MutationObserver(scheduleEnhance).observe(root, { childList: true, subtree: true });
+new MutationObserver(scheduleEnhance).observe(root, { childList: true });
 window.addEventListener('hashchange', () => {
   visibleCount = PAGE_SIZE;
+  profileTab = 'posts';
   scheduleEnhance();
 });
+window.addEventListener('resize', scheduleEnhance);
 
 document.addEventListener('click', event => {
   const create = event.target.closest?.('[data-phase1-create], [data-action="compose"]');
@@ -373,15 +425,15 @@ document.addEventListener('click', event => {
   if (question) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    openLegacyQuestionComposer();
+    openQuestionComposer();
     return;
   }
 
-  const coming = event.target.closest?.('[data-phase1-coming]');
-  if (coming) {
+  const unavailable = event.target.closest?.('[data-phase1-unavailable]');
+  if (unavailable) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    toast(`${coming.dataset.phase1Coming} is intentionally scheduled for a later verified phase.`, 'success');
+    toast(`${unavailable.dataset.phase1Unavailable} is not available in this web build yet.`, 'success');
     return;
   }
 
@@ -399,7 +451,7 @@ document.addEventListener('click', event => {
     event.stopImmediatePropagation();
     homeMode = mode.dataset.phase1HomeMode || 'for-you';
     visibleCount = PAGE_SIZE;
-    renderPhase1Home();
+    refreshSocialHome();
     return;
   }
 
@@ -409,7 +461,7 @@ document.addEventListener('click', event => {
     event.stopImmediatePropagation();
     activeTopic = topic.dataset.phase1Topic || 'All';
     visibleCount = PAGE_SIZE;
-    renderPhase1Home();
+    refreshSocialHome();
     return;
   }
 
@@ -418,7 +470,19 @@ document.addEventListener('click', event => {
     event.preventDefault();
     event.stopImmediatePropagation();
     visibleCount += PAGE_SIZE;
-    renderPhase1Home();
+    refreshSocialHome();
+    return;
+  }
+
+  const tab = event.target.closest?.('[data-phase1-profile-tab]');
+  if (tab) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    profileTab = tab.dataset.phase1ProfileTab || 'posts';
+    root.querySelectorAll('[data-phase1-profile-tab]').forEach(button => {
+      button.classList.toggle('active', button.dataset.phase1ProfileTab === profileTab);
+    });
+    renderProfileTabContent();
   }
 }, true);
 
