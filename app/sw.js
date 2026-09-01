@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v17-mobile-rebuild';
+const CACHE = 'tefsen-web-shell-v18-mobile-rebuild';
 const SHELL = [
   './', './index.html', './css/app.css', './css/mobile-complete.css', './css/mobile-final.css',
-  './js/app.js', './js/mobile-complete.js', './js/config/firebase-config.js',
+  './js/app.js', './js/mobile-app.js', './js/config/firebase-config.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
 
