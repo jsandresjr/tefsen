@@ -32,10 +32,14 @@ const TEFSEN_PARITY = (() => {
 
   function setNavButton(button, routeName, label, iconName) {
     if (!button) return;
-    button.dataset.route = routeName;
-    button.removeAttribute('data-action');
-    button.setAttribute('aria-label', label);
-    button.innerHTML = `${icon(iconName, 22)}<span class="mobile-nav-label">${label}</span>`;
+    const marker = `${routeName}:${label}:${iconName}`;
+    if (button.dataset.parityNav !== marker) {
+      button.dataset.parityNav = marker;
+      button.dataset.route = routeName;
+      button.removeAttribute('data-action');
+      button.setAttribute('aria-label', label);
+      button.innerHTML = `${icon(iconName, 22)}<span class="mobile-nav-label">${label}</span>`;
+    }
     button.classList.toggle('active', route() === routeName);
   }
 
@@ -49,11 +53,14 @@ const TEFSEN_PARITY = (() => {
     setNavButton(buttons[1], 'notifications', 'Alerts', 'bell');
 
     const ask = buttons[2];
-    ask.removeAttribute('data-route');
-    ask.dataset.action = 'compose';
-    ask.setAttribute('aria-label', 'Ask');
-    ask.innerHTML = `${icon('plus', 25)}<span class="mobile-nav-label">Ask</span>`;
-    ask.classList.add('create-mobile');
+    if (ask.dataset.parityNav !== 'ask') {
+      ask.dataset.parityNav = 'ask';
+      ask.removeAttribute('data-route');
+      ask.dataset.action = 'compose';
+      ask.setAttribute('aria-label', 'Ask');
+      ask.innerHTML = `${icon('plus', 25)}<span class="mobile-nav-label">Ask</span>`;
+      ask.classList.add('create-mobile');
+    }
 
     setNavButton(buttons[3], 'study', 'Study', 'study');
     setNavButton(buttons[4], 'profile', 'Profile', 'user');
@@ -67,11 +74,15 @@ const TEFSEN_PARITY = (() => {
 
     const find = (routeName) => firstNav.querySelector(`[data-route="${routeName}"]`);
     const home = find('home');
-    if (home) home.innerHTML = `<span class="nav-icon">${icon('home', 20)}</span><span>Home</span>`;
+    if (home && home.dataset.parityNav !== 'home') {
+      home.dataset.parityNav = 'home';
+      home.innerHTML = `<span class="nav-icon">${icon('home', 20)}</span><span>Home</span>`;
+    }
 
     const explore = find('explore');
     const notifications = find('notifications');
-    if (explore) {
+    if (explore && explore.dataset.parityNav !== 'alerts') {
+      explore.dataset.parityNav = 'alerts';
       explore.dataset.route = 'notifications';
       explore.innerHTML = `<span class="nav-icon">${icon('bell', 20)}</span><span>Alerts</span>`;
     }
@@ -86,7 +97,10 @@ const TEFSEN_PARITY = (() => {
       study.dataset.parityStudy = '1';
       firstNav.appendChild(study);
     }
-    study.innerHTML = `<span class="nav-icon">${icon('study', 20)}</span><span>Study</span>`;
+    if (study.dataset.parityNav !== 'study') {
+      study.dataset.parityNav = 'study';
+      study.innerHTML = `<span class="nav-icon">${icon('study', 20)}</span><span>Study</span>`;
+    }
     study.classList.toggle('active', route() === 'study');
   }
 
@@ -108,16 +122,16 @@ const TEFSEN_PARITY = (() => {
     const tabs = [...document.querySelectorAll('.feed-tabs .feed-tab')];
     const labels = ['For You', 'Latest', 'Unanswered', 'Following'];
     tabs.slice(0, 4).forEach((tab, index) => {
-      tab.textContent = labels[index];
+      if (tab.textContent !== labels[index]) tab.textContent = labels[index];
       tab.classList.add('parity-feed-tab');
     });
     subjectFilters();
 
     const fakeInput = document.querySelector('.composer-mini .fake-input');
-    if (fakeInput) fakeInput.textContent = 'Ask an academic question or share what you learned…';
+    if (fakeInput && fakeInput.textContent !== 'Ask an academic question or share what you learned…') fakeInput.textContent = 'Ask an academic question or share what you learned…';
 
     const empty = document.querySelector('.feed-list .empty-state');
-    if (empty && !document.querySelector('.post-card')) {
+    if (empty && !document.querySelector('.post-card') && !empty.classList.contains('academic-empty')) {
       empty.classList.add('academic-empty');
       empty.innerHTML = `
         <div class="academic-empty-icon">${icon('question', 62)}</div>
@@ -139,7 +153,7 @@ const TEFSEN_PARITY = (() => {
     const desc = document.querySelector('.page-head p');
     if (desc) desc.textContent = '';
     const empty = document.querySelector('.empty-state');
-    if (empty) {
+    if (empty && !empty.classList.contains('notification-empty')) {
       empty.classList.add('notification-empty');
       empty.innerHTML = `<div class="notification-empty-orb">${icon('bell', 52)}</div><h3>Quiet for now</h3><p>You'll see activity updates, answers to your questions, and community alerts here.</p>`;
     }
@@ -150,7 +164,7 @@ const TEFSEN_PARITY = (() => {
     const desc = document.querySelector('.page-head p');
     if (desc) desc.remove();
     const empty = document.querySelector('.empty-state');
-    if (empty) {
+    if (empty && !empty.classList.contains('leaderboard-empty')) {
       empty.classList.add('leaderboard-empty');
       empty.innerHTML = `<div class="leaderboard-empty-icon">${icon('trophy', 70)}</div><h3>Leaderboard Empty</h3><p>Earn more than 400 reputation points to appear here!</p>`;
     }
@@ -163,7 +177,7 @@ const TEFSEN_PARITY = (() => {
     panel.classList.add('profile-dashboard-card');
 
     const info = panel.querySelector('.profile-info');
-    if (info && !info.querySelector('.profile-dashboard-label')) {
+    if (info && !panel.querySelector('.profile-dashboard-label')) {
       const label = document.createElement('div');
       label.className = 'profile-dashboard-label';
       label.textContent = 'Profile Dashboard';
@@ -171,12 +185,13 @@ const TEFSEN_PARITY = (() => {
     }
 
     const stats = [...panel.querySelectorAll('.profile-stats > span')];
-    if (stats.length >= 4) {
+    if (stats.length >= 4 && panel.querySelector('.profile-stats')?.dataset.parityStats !== '1') {
       const values = stats.map(el => el.querySelector('b')?.textContent || '0');
       const posts = values[0] || '0';
       const followers = values[1] || '0';
       const following = values[2] || '0';
       const points = values[3] || '0';
+      panel.querySelector('.profile-stats').dataset.parityStats = '1';
       panel.querySelector('.profile-stats').innerHTML = `
         <span><b>${points}</b><small>Reputation</small></span>
         <span><b>${posts}</b><small>Questions</small></span>
