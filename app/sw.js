@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v15-question-only-parity';
+const CACHE = 'tefsen-web-shell-v16-quality-pass';
 const SHELL = [
-  './', './index.html', './css/app.css', './css/android-parity.css',
-  './js/app.js', './js/android-parity.js', './js/config/firebase-config.js',
+  './', './index.html', './css/app.css', './css/android-parity.css', './css/web-polish.css',
+  './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/config/firebase-config.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
 
