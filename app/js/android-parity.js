@@ -79,14 +79,14 @@ const TEFSEN_PARITY = (() => {
       home.innerHTML = `<span class="nav-icon">${icon('home', 20)}</span><span>Home</span>`;
     }
 
-    const explore = find('explore');
-    const notifications = find('notifications');
+    const explore = firstNav.querySelector('[data-route="explore"]');
+    const notifications = firstNav.querySelector('[data-route="notifications"]:not([data-parity-nav="alerts"])');
     if (explore && explore.dataset.parityNav !== 'alerts') {
       explore.dataset.parityNav = 'alerts';
       explore.dataset.route = 'notifications';
       explore.innerHTML = `<span class="nav-icon">${icon('bell', 20)}</span><span>Alerts</span>`;
     }
-    if (notifications && notifications !== explore) notifications.classList.add('parity-hide-nav');
+    if (notifications) notifications.classList.add('parity-hide-nav');
 
     let study = firstNav.querySelector('[data-parity-study]');
     if (!study) {
@@ -149,9 +149,12 @@ const TEFSEN_PARITY = (() => {
   function patchNotifications() {
     if (route() !== 'notifications') return;
     const head = document.querySelector('.page-head h1');
-    if (head) head.innerHTML = `${icon('bell', 30)} Notifications`;
+    if (head && head.dataset.parityHead !== 'notifications') {
+      head.dataset.parityHead = 'notifications';
+      head.innerHTML = `${icon('bell', 30)} Notifications`;
+    }
     const desc = document.querySelector('.page-head p');
-    if (desc) desc.textContent = '';
+    if (desc && desc.textContent) desc.textContent = '';
     const empty = document.querySelector('.empty-state');
     if (empty && !empty.classList.contains('notification-empty')) {
       empty.classList.add('notification-empty');
