@@ -1,0 +1,547 @@
+:root {
+  --bg: #021215;
+  --bg-2: #061b1f;
+  --surface: #082428;
+  --surface-2: #0d3034;
+  --surface-3: #10363a;
+  --text: #eefafa;
+  --muted: #9ab6b6;
+  --line: rgba(167, 211, 211, .14);
+  --brand: #35ddd1;
+  --brand-2: #29c9c7;
+  --brand-3: #2de3ae;
+  --shadow: 0 18px 54px rgba(0, 0, 0, .30);
+  --radius: 24px;
+  color-scheme: dark;
+}
+
+html.tefsen-android-parity body {
+  background: #021215;
+  color: var(--text);
+  font-family: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+}
+
+.tefsen-android-parity .topbar,
+.tefsen-android-parity .sidebar,
+.tefsen-android-parity .rightbar {
+  background: rgba(2, 18, 21, .96);
+  border-color: rgba(143, 197, 197, .12);
+  backdrop-filter: blur(18px);
+}
+
+.tefsen-android-parity .topbar-brand span,
+.tefsen-android-parity .mobile-top-brand span {
+  display: grid;
+  line-height: 1.05;
+}
+.tefsen-android-parity .topbar-brand span b,
+.tefsen-android-parity .mobile-top-brand span b {
+  color: var(--brand);
+  font-size: 23px;
+  letter-spacing: -.03em;
+}
+.tefsen-android-parity .topbar-brand span small,
+.tefsen-android-parity .mobile-top-brand span small {
+  margin-top: 5px;
+  color: #d1e5e4;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .04em;
+}
+
+.tefsen-android-parity .global-search input,
+.tefsen-android-parity .input,
+.tefsen-android-parity .textarea,
+.tefsen-android-parity .select {
+  background: #071d21;
+  border: 1px solid rgba(155, 199, 199, .34);
+  color: #eefafa;
+  box-shadow: none;
+}
+.tefsen-android-parity .input:focus,
+.tefsen-android-parity .textarea:focus,
+.tefsen-android-parity .select:focus {
+  border-color: #35ddd1;
+  box-shadow: 0 0 0 3px rgba(53, 221, 209, .10);
+}
+
+.tefsen-android-parity .btn-primary,
+.tefsen-android-parity .ask-btn {
+  background: #35ddd1;
+  color: #062125;
+  box-shadow: 0 12px 30px rgba(53, 221, 209, .16);
+}
+.tefsen-android-parity .btn-secondary,
+.tefsen-android-parity .btn-ghost {
+  background: #0a292d;
+  border: 1px solid rgba(155, 199, 199, .16);
+}
+
+.tefsen-android-parity .panel {
+  background: #082428;
+  border-color: rgba(155, 199, 199, .14);
+  box-shadow: none;
+}
+.tefsen-android-parity .post-card:hover { border-color: rgba(53, 221, 209, .28); }
+.tefsen-android-parity .post-subject,
+.tefsen-android-parity .feed-tab.active,
+.tefsen-android-parity .action-btn.active { color: var(--brand); }
+
+.tefsen-android-parity .nav-item.active {
+  color: var(--brand);
+  background: rgba(53, 221, 209, .10);
+  border-color: rgba(53, 221, 209, .16);
+}
+.tefsen-android-parity .nav-item:hover { background: rgba(53, 221, 209, .07); }
+.tefsen-android-parity .parity-hide-nav { display: none !important; }
+
+.tefsen-android-parity .feed-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid rgba(155, 199, 199, .16);
+  margin: 0 -20px 22px;
+  padding: 0 20px;
+}
+.tefsen-android-parity .feed-tab {
+  min-height: 58px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: #9eb5b5;
+  font-size: 15px;
+  font-weight: 700;
+  position: relative;
+}
+.tefsen-android-parity .feed-tab.active::after {
+  content: "";
+  position: absolute;
+  height: 4px;
+  left: 8%; right: 8%; bottom: -1px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+.tefsen-android-parity .subject-filter-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 0 0 22px;
+  scrollbar-width: none;
+}
+.tefsen-android-parity .subject-filter-row::-webkit-scrollbar { display: none; }
+.tefsen-android-parity .subject-chip {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(155, 199, 199, .18);
+  background: #071b1e;
+  color: #aec1c1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.tefsen-android-parity .subject-chip.active {
+  border-color: #18b5d4;
+  box-shadow: inset 0 0 0 1px rgba(24, 181, 212, .55);
+  color: #f2ffff;
+}
+
+.tefsen-android-parity .composer-mini {
+  border-radius: 22px;
+  background: #082327;
+}
+.tefsen-android-parity .composer-mini .fake-input { color: #9eb5b5; }
+
+.tefsen-android-parity .academic-empty,
+.tefsen-android-parity .notification-empty,
+.tefsen-android-parity .leaderboard-empty {
+  min-height: min(62vh, 580px);
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 54px 20px;
+}
+.tefsen-android-parity .academic-empty-icon,
+.tefsen-android-parity .leaderboard-empty-icon {
+  color: #789996;
+  margin-bottom: 24px;
+}
+.tefsen-android-parity .academic-empty h3,
+.tefsen-android-parity .notification-empty h3,
+.tefsen-android-parity .leaderboard-empty h3 {
+  margin: 0 0 12px;
+  font-size: 25px;
+  color: #f1fbfb;
+}
+.tefsen-android-parity .academic-empty p,
+.tefsen-android-parity .notification-empty p,
+.tefsen-android-parity .leaderboard-empty p {
+  max-width: 600px;
+  margin: 0;
+  color: #a8bdbd;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.tefsen-android-parity .academic-empty-cta {
+  min-height: 54px;
+  min-width: 320px;
+  margin-top: 28px;
+  border-radius: 25px;
+  font-size: 17px;
+}
+.tefsen-android-parity .notification-empty-orb {
+  width: 142px;
+  height: 142px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  margin-bottom: 32px;
+  color: var(--brand);
+  background: #082b2e;
+}
+
+.tefsen-android-parity .page-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 32px;
+}
+.tefsen-android-parity .page-head h1 svg { color: var(--brand); }
+
+.tefsen-android-parity .floating-ask {
+  position: fixed;
+  right: 28px;
+  bottom: 26px;
+  z-index: 24;
+  min-height: 58px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--brand);
+  color: #062125;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 850;
+  box-shadow: 0 18px 45px rgba(0,0,0,.28);
+  cursor: pointer;
+}
+
+.tefsen-android-parity .profile-dashboard-card {
+  position: relative;
+  overflow: visible !important;
+  padding: 0 0 28px;
+  background: linear-gradient(145deg, #073034, #062326 66%, #082428);
+  border: 1px solid rgba(110, 189, 188, .18);
+}
+.tefsen-android-parity .profile-dashboard-label {
+  position: absolute;
+  top: -52px;
+  left: 0;
+  color: #eefafa;
+  font-size: 27px;
+  font-weight: 850;
+}
+.tefsen-android-parity .profile-cover {
+  height: 90px;
+  background: linear-gradient(120deg, rgba(22, 133, 144, .20), rgba(34, 213, 195, .08));
+  border-radius: 24px 24px 0 0;
+}
+.tefsen-android-parity .profile-main { padding: 0 28px 10px; }
+.tefsen-android-parity .profile-topline { margin-top: -56px; align-items: flex-end; }
+.tefsen-android-parity .profile-topline .avatar.lg {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 5px solid #21cdc4;
+  background: #123a3d;
+}
+.tefsen-android-parity .profile-info { text-align: center; }
+.tefsen-android-parity .profile-info h1 { justify-content: center; font-size: 30px; }
+.tefsen-android-parity .profile-info .handle { color: #a7c0bf; }
+.tefsen-android-parity .profile-info p { color: #d1e0df; }
+.tefsen-android-parity .profile-info .role-pill { margin: 10px auto 0; }
+.tefsen-android-parity .profile-stats {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap: 12px;
+}
+.tefsen-android-parity .profile-stats span {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: var(--brand);
+}
+.tefsen-android-parity .profile-stats b { font-size: 24px; color: #f1fbfb; }
+.tefsen-android-parity .profile-stats small { color: #86a4a2; font-size: 12px; }
+.tefsen-android-parity .academic-achievements,
+.tefsen-android-parity .questions-asked-panel { margin-top: 28px; }
+.tefsen-android-parity .academic-achievements h2,
+.tefsen-android-parity .questions-asked-panel h2 { font-size: 24px; margin: 0 0 16px; }
+.tefsen-android-parity .achievement-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.tefsen-android-parity .achievement-chip {
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0b3034;
+  color: #95afae;
+  font-size: 13px;
+  font-weight: 750;
+}
+.tefsen-android-parity .achievement-chip.active { color: #efffff; background: #07545a; }
+.tefsen-android-parity .questions-placeholder {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  border-radius: 18px;
+  background: #0b3034;
+  color: #b8cccc;
+}
+
+.tefsen-android-parity .study-wrap { width: min(100%, 930px); }
+.tefsen-android-parity .study-hub-screen { display: grid; gap: 24px; }
+.tefsen-android-parity .study-head { display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+.tefsen-android-parity .study-head h1 { margin: 0; font-size: 34px; }
+.tefsen-android-parity .study-head p { margin: 6px 0 0; color: #a7bbbb; font-size: 17px; }
+.tefsen-android-parity .study-head-actions { display: flex; gap: 12px; align-items: center; }
+.tefsen-android-parity .streak-pill {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(155,199,199,.45);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #eaf7f7;
+  font-weight: 800;
+}
+.tefsen-android-parity .streak-pill svg { color: var(--brand); }
+.tefsen-android-parity .trophy-round {
+  width: 54px; height: 54px; border-radius: 50%; border: 0; cursor: pointer;
+  background: #252b75; color: white; display: grid; place-items: center;
+}
+.tefsen-android-parity .weekly-goal-card {
+  padding: 28px 30px;
+  border-radius: 28px;
+  background: linear-gradient(110deg, #087b84, #0ca6b3);
+  color: white;
+}
+.tefsen-android-parity .weekly-goal-card h2 { margin: 0 0 24px; display: flex; gap: 12px; align-items: center; }
+.tefsen-android-parity .weekly-goal-card h2 svg { color: #2af19c; }
+.tefsen-android-parity .weekly-goal-card p { font-size: 21px; margin: 0 0 18px; }
+.tefsen-android-parity .goal-track { height: 12px; border-radius: 999px; background: rgba(255,255,255,.28); overflow: hidden; }
+.tefsen-android-parity .goal-track span { display: block; height: 100%; background: #35f2bd; border-radius: inherit; }
+.tefsen-android-parity .weekly-goal-card small { display: block; margin-top: 16px; font-size: 15px; }
+.tefsen-android-parity .study-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.tefsen-android-parity .study-stat-grid article {
+  min-height: 164px;
+  padding: 24px;
+  border-radius: 22px;
+  background: #082428;
+  border: 1px solid rgba(155,199,199,.13);
+  display: grid;
+  align-content: space-between;
+}
+.tefsen-android-parity .study-stat-grid strong { font-size: 34px; }
+.tefsen-android-parity .study-stat-grid small { color: #a8baba; font-size: 15px; }
+.tefsen-android-parity .study-stat-icon.blue { color: #1cc8ed; }
+.tefsen-android-parity .study-stat-icon.green { color: #31e69a; }
+.tefsen-android-parity .study-stat-icon.purple { color: #8a5df5; }
+.tefsen-android-parity .study-stat-icon.gold { color: #f0a915; }
+.tefsen-android-parity .quick-actions-block h2,
+.tefsen-android-parity .subject-focus-block h2,
+.tefsen-android-parity .continue-learning-block h2 { margin: 0 0 16px; font-size: 23px; }
+.tefsen-android-parity .practice-button,
+.tefsen-android-parity .quick-action-row button {
+  border: 0;
+  min-height: 58px;
+  border-radius: 18px;
+  background: var(--brand);
+  color: #062125;
+  font-weight: 850;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.tefsen-android-parity .practice-button { width: 100%; }
+.tefsen-android-parity .quick-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.tefsen-android-parity .quick-action-row .outline { background: transparent; color: var(--brand); border: 1px solid rgba(155,199,199,.55); }
+.tefsen-android-parity .subject-focus-block p { color: #a8bbbb; font-size: 17px; }
+.tefsen-android-parity .continue-learning-block > div:first-child { display: flex; justify-content: space-between; align-items: center; }
+.tefsen-android-parity .continue-learning-block > div:first-child span { color: var(--brand); }
+.tefsen-android-parity .continue-empty {
+  min-height: 110px;
+  padding: 20px 24px;
+  border-radius: 20px;
+  background: #082428;
+  color: #a8bbbb;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tefsen-android-parity .academic-compose {
+  width: min(92vw, 820px);
+  max-height: 92vh;
+  border-radius: 28px;
+  background: #031719;
+  border: 1px solid rgba(155,199,199,.18);
+}
+.tefsen-android-parity .academic-compose .modal-head { border-color: rgba(155,199,199,.13); }
+.tefsen-android-parity .academic-compose .modal-head h2 { font-size: 28px; }
+.tefsen-android-parity .academic-compose .form-grid { gap: 18px; }
+.tefsen-android-parity .academic-compose .field label { color: #eefafa; font-size: 14px; }
+.tefsen-android-parity .academic-compose .textarea { min-height: 220px; }
+.tefsen-android-parity .academic-compose .file-drop {
+  min-height: 110px;
+  border-radius: 20px;
+  border: 1px solid rgba(155,199,199,.22);
+  background: #082428;
+  color: var(--brand);
+}
+.tefsen-android-parity .academic-compose button[type="submit"] { min-height: 58px; border-radius: 18px; font-size: 17px; }
+
+.mobile-nav-label { display: none; }
+
+@media (max-width: 1100px) {
+  .tefsen-android-parity .rightbar { display: none; }
+  .tefsen-android-parity .main-area { padding-right: 0; }
+}
+
+@media (max-width: 760px) {
+  :root { --top: 92px; }
+  html.tefsen-android-parity body { padding-bottom: 92px; }
+
+  .tefsen-android-parity .topbar {
+    height: var(--top);
+    display: flex;
+    gap: 8px;
+    padding: 12px 18px;
+    border-bottom: 0;
+  }
+  .tefsen-android-parity .topbar-brand { display: none; }
+  .tefsen-android-parity .topbar-center { flex: 1; padding: 0; min-width: 0; }
+  .tefsen-android-parity .global-search { max-width: none; display: flex; align-items: center; }
+  .tefsen-android-parity .global-search input,
+  .tefsen-android-parity .global-search .search-kbd { display: none; }
+  .tefsen-android-parity .global-search .search-icon { position: static; transform: none; margin-left: auto; color: #edfafa; }
+  .tefsen-android-parity .mobile-top-brand { display: flex !important; align-items: center; gap: 10px; }
+  .tefsen-android-parity .mobile-top-brand img { width: 54px; height: 54px; border-radius: 16px; }
+  .tefsen-android-parity .mobile-top-brand span b { font-size: 22px; }
+  .tefsen-android-parity .mobile-top-brand span small { font-size: 9px; }
+  .tefsen-android-parity .topbar-actions { padding: 0; gap: 8px; }
+  .tefsen-android-parity .topbar-actions .icon-button { display: none !important; }
+  .tefsen-android-parity .top-avatar { width: 46px !important; height: 46px !important; min-width: 46px !important; border-radius: 50%; border-color: #21cdc4; }
+
+  .tefsen-android-parity .sidebar { display: none; }
+  .tefsen-android-parity .main-area { padding: var(--top) 0 0; }
+  .tefsen-android-parity .content-wrap,
+  .tefsen-android-parity .content-wrap.wide,
+  .tefsen-android-parity .study-wrap { width: 100%; padding: 18px 16px 118px; }
+
+  .tefsen-android-parity .mobile-bottom {
+    position: fixed;
+    z-index: 150;
+    left: 0; right: 0; bottom: 0;
+    height: 88px;
+    padding: 8px 18px max(10px, env(safe-area-inset-bottom));
+    background: rgba(2, 18, 21, .98);
+    border-top: 1px solid rgba(155,199,199,.10);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: start;
+  }
+  .tefsen-android-parity .mobile-bottom > button,
+  .tefsen-android-parity .mobile-bottom .create-mobile {
+    width: 100%;
+    height: 64px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #8fa5a4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0;
+    box-shadow: none;
+  }
+  .tefsen-android-parity .mobile-bottom > button.active { color: var(--brand); }
+  .tefsen-android-parity .mobile-nav-label { display: block; font-size: 10px; line-height: 1; font-weight: 700; }
+
+  .tefsen-android-parity .feed-tabs { margin: 0 -16px 18px; padding: 0 8px; }
+  .tefsen-android-parity .feed-tab { min-height: 56px; font-size: 13px; }
+  .tefsen-android-parity .subject-filter-row { margin: 0 -16px; padding: 0 16px 20px; }
+  .tefsen-android-parity .subject-chip { min-height: 50px; padding: 0 18px; border-radius: 18px; }
+  .tefsen-android-parity .composer-mini { display: none; }
+  .tefsen-android-parity .floating-ask { right: 18px; bottom: 112px; min-width: 166px; min-height: 58px; border-radius: 18px; }
+
+  .tefsen-android-parity .academic-empty { min-height: calc(100dvh - 350px); padding: 40px 14px; }
+  .tefsen-android-parity .academic-empty h3 { font-size: 21px; }
+  .tefsen-android-parity .academic-empty p { font-size: 14px; }
+  .tefsen-android-parity .academic-empty-cta { min-width: min(100%, 310px); }
+
+  .tefsen-android-parity .page-head { margin-bottom: 12px; }
+  .tefsen-android-parity .page-head h1 { font-size: 28px; }
+  .tefsen-android-parity .notification-empty { min-height: calc(100dvh - 255px); }
+  .tefsen-android-parity .notification-empty-orb { width: 132px; height: 132px; }
+  .tefsen-android-parity .leaderboard-empty { min-height: calc(100dvh - 260px); }
+
+  .tefsen-android-parity .profile-dashboard-card { margin-top: 64px; border-radius: 28px; }
+  .tefsen-android-parity .profile-dashboard-label { top: -56px; font-size: 24px; }
+  .tefsen-android-parity .profile-cover { height: 64px; }
+  .tefsen-android-parity .profile-main { padding: 0 18px 8px; }
+  .tefsen-android-parity .profile-topline { margin-top: -45px; display: grid; justify-items: center; gap: 18px; }
+  .tefsen-android-parity .profile-topline > div:last-child { width: 100%; display: flex; justify-content: center; }
+  .tefsen-android-parity .profile-topline .avatar.lg { width: 116px; height: 116px; }
+  .tefsen-android-parity .profile-info h1 { font-size: 26px; margin-top: 16px; }
+  .tefsen-android-parity .profile-stats { grid-template-columns: repeat(3, 1fr); row-gap: 20px; }
+  .tefsen-android-parity .profile-stats span:nth-child(4),
+  .tefsen-android-parity .profile-stats span:nth-child(5) { transform: translateX(50%); }
+  .tefsen-android-parity .achievement-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tefsen-android-parity .achievement-chip { padding: 0 10px; min-height: 50px; justify-content: center; font-size: 11px; text-align: center; }
+
+  .tefsen-android-parity .study-hub-screen { gap: 20px; }
+  .tefsen-android-parity .study-head h1 { font-size: 30px; }
+  .tefsen-android-parity .study-head p { font-size: 15px; }
+  .tefsen-android-parity .streak-pill { min-height: 44px; padding: 0 12px; font-size: 13px; }
+  .tefsen-android-parity .trophy-round { width: 48px; height: 48px; }
+  .tefsen-android-parity .weekly-goal-card { padding: 25px 22px; border-radius: 24px; }
+  .tefsen-android-parity .weekly-goal-card h2 { font-size: 19px; }
+  .tefsen-android-parity .weekly-goal-card p { font-size: 17px; }
+  .tefsen-android-parity .study-stat-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tefsen-android-parity .study-stat-grid article { min-height: 142px; padding: 20px; }
+  .tefsen-android-parity .quick-action-row { gap: 12px; }
+
+  .tefsen-android-parity .modal-backdrop:has(.academic-compose) { align-items: stretch; padding: 0; background: #021215; }
+  .tefsen-android-parity .academic-compose {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    background: #021215;
+  }
+  .tefsen-android-parity .academic-compose .modal-head { min-height: 84px; padding: 18px 20px; }
+  .tefsen-android-parity .academic-compose .modal-head h2 { font-size: 24px; }
+  .tefsen-android-parity .academic-compose .modal-body { padding: 20px 18px 120px; overflow-y: auto; }
+  .tefsen-android-parity .academic-compose .textarea { min-height: 210px; }
+  .tefsen-android-parity .academic-compose .input-row { grid-template-columns: 1fr; }
+  .tefsen-android-parity .academic-compose .input-row .field:last-child { display: none; }
+  .tefsen-android-parity .academic-compose .composer-plan { display: none; }
+}
