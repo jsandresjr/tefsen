@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v18-mobile-rebuild';
+const CACHE = 'tefsen-web-shell-v19-rollback-stable';
 const SHELL = [
-  './', './index.html', './css/app.css', './css/mobile-complete.css', './css/mobile-final.css',
-  './js/app.js', './js/mobile-app.js', './js/config/firebase-config.js',
+  './', './index.html', './css/app.css', './css/android-parity.css', './css/web-polish.css',
+  './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/config/firebase-config.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
 
