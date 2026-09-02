@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v20-social-learning';
+const CACHE = 'tefsen-web-shell-v21-light-social-fix';
 const SHELL = [
   './', './index.html',
-  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css',
+  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css', './css/social-cleanup.css',
   './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/reference-interface.js', './js/config/firebase-config.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
