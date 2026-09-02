@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v21-light-social-fix';
+const CACHE = 'tefsen-web-shell-v22-profile-social-redesign';
 const SHELL = [
   './', './index.html',
-  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css', './css/social-cleanup.css',
+  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css', './css/social-cleanup.css', './css/profile-page-fix.css',
   './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/reference-interface.js', './js/config/firebase-config.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
