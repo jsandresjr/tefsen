@@ -30,19 +30,9 @@ const TEFSEN_REFERENCE_INTERFACE = (() => {
     return row;
   }
 
-  function syncFeedLabels() {
-    if (route() !== 'home') return;
-    const tabs = [...document.querySelectorAll('.content-wrap .feed-tab')];
-    // These labels stay aligned with the real data behavior behind each tab.
-    const labels = ['For You', 'Latest', 'Saved', 'Liked'];
-    tabs.slice(0, 4).forEach((tab, index) => {
-      if (tab.textContent.trim() !== labels[index]) tab.textContent = labels[index];
-    });
-  }
-
   function ensureLearningCircles(subjectRow) {
     if (route() !== 'home' || !subjectRow) return;
-    let circles = subjectRow.nextElementSibling;
+    const circles = subjectRow.nextElementSibling;
     if (circles?.classList?.contains('learning-circles')) return;
 
     subjectRow.insertAdjacentHTML('afterend', `
@@ -110,7 +100,6 @@ const TEFSEN_REFERENCE_INTERFACE = (() => {
     patchFloatingAsk();
 
     if (route() === 'home') {
-      syncFeedLabels();
       const subjectRow = ensureSubjectFilters();
       ensureLearningCircles(subjectRow);
       patchFeedCards();
