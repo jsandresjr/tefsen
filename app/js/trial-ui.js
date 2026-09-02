@@ -1,9 +1,9 @@
-// Tefsen 7-day Google Play trial messaging for the Web subscription page.
+// Tefsen 3-day Google Play trial messaging for the Web subscription page.
 // The Web app does not process Google Play Billing directly. Eligible users
 // start the trial through the Android app, then the subscription syncs back
 // to the same Tefsen account used on Web.
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 3;
 const NORMAL_PRICE = '$2.99';
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 
@@ -31,7 +31,7 @@ function patchTrialUI() {
   if (overline) overline.textContent = `${TRIAL_DAYS}-DAY FREE TRIAL`;
 
   const headTitle = page.querySelector('.subscription-luxury-head h1');
-  if (headTitle) headTitle.textContent = 'Try Student Plus free for 7 days.';
+  if (headTitle) headTitle.textContent = `Try Student Plus free for ${TRIAL_DAYS} days.`;
 
   const headCopy = page.querySelector('.subscription-luxury-head p');
   if (headCopy) headCopy.textContent = `Eligible new subscribers can try Tefsen Student Plus free for ${TRIAL_DAYS} days, then continue at ${NORMAL_PRICE}/month unless cancelled.`;
@@ -65,7 +65,7 @@ function patchTrialUI() {
 
     const cta = plusCard.querySelector('.lux-card-cta');
     if (cta) {
-      cta.textContent = `Start free trial in Android app →`;
+      cta.textContent = 'Start free trial in Android app →';
       cta.setAttribute('href', GOOGLE_PLAY_APP_URL);
     }
   }
