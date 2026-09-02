@@ -1,0 +1,517 @@
+/*
+ * Final Tefsen social-feed cleanup layer.
+ * Loaded last so older Android parity / quality-pass styles cannot fight the UI.
+ * Keep the Tefsen brand gradient exactly: #168ff8 -> #18c9d2 -> #31d991.
+ */
+html.web-quality.tefsen-web-reference {
+  --tefsen-gradient: linear-gradient(105deg, #168ff8, #18c9d2 55%, #31d991);
+  --social-bg: #001215;
+  --social-panel: #061c20;
+  --social-panel-2: #09262b;
+  --social-panel-3: #0d3036;
+  --social-text: #eefafa;
+  --social-muted: #89a2a4;
+  --social-line: rgba(164, 206, 207, .13);
+  --social-soft: linear-gradient(105deg, rgba(22,143,248,.15), rgba(24,201,210,.12) 55%, rgba(49,217,145,.14));
+  --left: 228px;
+  --right: 310px;
+  --top: 74px;
+  color-scheme: dark;
+}
+
+html.web-quality.tefsen-web-reference[data-web-theme="light"] {
+  --social-bg: #f5fbfa;
+  --social-panel: #ffffff;
+  --social-panel-2: #eef7f6;
+  --social-panel-3: #e5f2f0;
+  --social-text: #0b2528;
+  --social-muted: #637b7d;
+  --social-line: rgba(23, 73, 73, .13);
+  --social-soft: linear-gradient(105deg, rgba(22,143,248,.09), rgba(24,201,210,.08) 55%, rgba(49,217,145,.10));
+  color-scheme: light;
+}
+
+html.web-quality.tefsen-web-reference,
+html.web-quality.tefsen-web-reference body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+html.web-quality.tefsen-web-reference body {
+  background: var(--social-bg) !important;
+  color: var(--social-text) !important;
+  background-image: none !important;
+}
+
+/* Brand gradient is never replaced by theme colors. */
+html.web-quality.tefsen-web-reference .topbar-brand span b,
+html.web-quality.tefsen-web-reference .mobile-top-brand span b,
+html.web-quality.tefsen-web-reference .auth-brand span {
+  background: var(--tefsen-gradient) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+html.web-quality.tefsen-web-reference .btn-primary,
+html.web-quality.tefsen-web-reference .ask-btn,
+html.web-quality.tefsen-web-reference .sidebar-cta .btn-primary,
+html.web-quality.tefsen-web-reference .practice-button,
+html.web-quality.tefsen-web-reference .quick-action-row > button:not(.outline) {
+  background: var(--tefsen-gradient) !important;
+  color: #04191c !important;
+  border-color: transparent !important;
+}
+
+/* ---------- Shell ---------- */
+html.web-quality.tefsen-web-reference .topbar {
+  height: var(--top) !important;
+  grid-template-columns: var(--left) minmax(320px, 1fr) var(--right) !important;
+  background: color-mix(in srgb, var(--social-bg) 94%, transparent) !important;
+  border-bottom: 1px solid var(--social-line) !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,.05) !important;
+}
+
+html.web-quality.tefsen-web-reference .topbar-brand {
+  padding-left: 20px !important;
+}
+html.web-quality.tefsen-web-reference .topbar-brand img {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 13px !important;
+}
+html.web-quality.tefsen-web-reference .topbar-brand span small {
+  color: var(--social-muted) !important;
+}
+
+html.web-quality.tefsen-web-reference .topbar-center { padding: 0 28px !important; }
+html.web-quality.tefsen-web-reference .global-search { max-width: 600px !important; }
+html.web-quality.tefsen-web-reference .global-search input {
+  width: 100% !important;
+  height: 44px !important;
+  border-radius: 14px !important;
+  background: var(--social-panel-2) !important;
+  border: 1px solid var(--social-line) !important;
+  color: var(--social-text) !important;
+  box-shadow: none !important;
+}
+html.web-quality.tefsen-web-reference .global-search input::placeholder { color: var(--social-muted) !important; }
+html.web-quality.tefsen-web-reference .global-search .search-icon { color: var(--social-muted) !important; }
+
+html.web-quality.tefsen-web-reference .icon-button,
+html.web-quality.tefsen-web-reference .top-avatar {
+  background: var(--social-panel-2) !important;
+  color: var(--social-text) !important;
+  border-color: var(--social-line) !important;
+}
+html.web-quality.tefsen-web-reference .top-avatar {
+  border: 2px solid transparent !important;
+  background:
+    linear-gradient(var(--social-panel-2), var(--social-panel-2)) padding-box,
+    var(--tefsen-gradient) border-box !important;
+}
+
+html.web-quality.tefsen-web-reference .sidebar {
+  top: var(--top) !important;
+  width: var(--left) !important;
+  padding: 22px 14px !important;
+  background: var(--social-bg) !important;
+  border-right: 1px solid var(--social-line) !important;
+}
+html.web-quality.tefsen-web-reference .nav-item {
+  min-height: 48px !important;
+  border-radius: 14px !important;
+  color: var(--social-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+html.web-quality.tefsen-web-reference .nav-item:hover {
+  color: var(--social-text) !important;
+  background: color-mix(in srgb, var(--social-text) 4%, transparent) !important;
+}
+html.web-quality.tefsen-web-reference .nav-item.active {
+  color: var(--social-text) !important;
+  background: var(--social-soft) !important;
+  border-color: transparent !important;
+}
+html.web-quality.tefsen-web-reference .sidebar-profile {
+  background: var(--social-panel) !important;
+  color: var(--social-text) !important;
+  border-color: var(--social-line) !important;
+  box-shadow: none !important;
+}
+
+html.web-quality.tefsen-web-reference .main-area {
+  padding-top: var(--top) !important;
+  padding-left: var(--left) !important;
+  padding-right: var(--right) !important;
+  min-width: 0 !important;
+}
+html.web-quality.tefsen-web-reference .content-wrap {
+  width: min(100%, 680px) !important;
+  padding: 0 18px 100px !important;
+  margin: 0 auto !important;
+  min-width: 0 !important;
+}
+html.web-quality.tefsen-web-reference .content-wrap.wide {
+  width: min(100%, 980px) !important;
+  padding-top: 24px !important;
+}
+
+html.web-quality.tefsen-web-reference .rightbar {
+  display: block !important;
+  top: var(--top) !important;
+  width: var(--right) !important;
+  padding: 26px 20px !important;
+  background: var(--social-bg) !important;
+  border-left: 1px solid var(--social-line) !important;
+  color: var(--social-text) !important;
+}
+html.web-quality.tefsen-web-reference .rightbar .widget {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--social-line) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 0 18px !important;
+  margin: 0 0 18px !important;
+}
+html.web-quality.tefsen-web-reference .rightbar .widget h3,
+html.web-quality.tefsen-web-reference .rightbar .widget-link b { color: var(--social-text) !important; }
+html.web-quality.tefsen-web-reference .rightbar .widget-link small,
+html.web-quality.tefsen-web-reference .rightbar .trend-number,
+html.web-quality.tefsen-web-reference .footer-mini { color: var(--social-muted) !important; }
+html.web-quality.tefsen-web-reference .rightbar .widget-link:hover { background: var(--social-panel-2) !important; }
+
+/* Remove the extra marketing/CTA blocks that made Home look crowded. */
+html.web-quality.tefsen-web-reference .quality-home-hero,
+html.web-quality.tefsen-web-reference .floating-ask {
+  display: none !important;
+}
+
+/* ---------- One clean Home control stack ---------- */
+html.web-quality.tefsen-web-reference .feed-tabs {
+  position: sticky !important;
+  top: var(--top) !important;
+  z-index: 25 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 56px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  overflow: visible !important;
+  background: color-mix(in srgb, var(--social-bg) 96%, transparent) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--social-line) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(16px);
+}
+html.web-quality.tefsen-web-reference .feed-tab {
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 56px !important;
+  padding: 0 6px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--social-muted) !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  white-space: nowrap;
+}
+html.web-quality.tefsen-web-reference .feed-tab.active { color: var(--social-text) !important; }
+html.web-quality.tefsen-web-reference .feed-tab.active::after {
+  left: 22% !important;
+  right: 22% !important;
+  height: 3px !important;
+  background: var(--tefsen-gradient) !important;
+}
+
+/* Legacy subject row from the older parity layer must never render. */
+html.web-quality.tefsen-web-reference .content-wrap .subject-filter-row {
+  display: none !important;
+}
+
+html.web-quality.tefsen-web-reference .quality-subjects {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 14px 0 12px !important;
+  overflow-x: auto !important;
+  background: transparent !important;
+  scrollbar-width: none;
+}
+html.web-quality.tefsen-web-reference .quality-subjects::-webkit-scrollbar { display: none; }
+html.web-quality.tefsen-web-reference .quality-subjects button {
+  flex: 0 0 auto !important;
+  min-height: 36px !important;
+  padding: 0 13px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--social-line) !important;
+  background: var(--social-panel-2) !important;
+  color: var(--social-muted) !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+}
+html.web-quality.tefsen-web-reference .quality-subjects button.active {
+  color: var(--social-text) !important;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(var(--social-panel-2), var(--social-panel-2)) padding-box,
+    var(--tefsen-gradient) border-box !important;
+}
+
+/* Tefsen-only social discovery row. */
+html.web-quality.tefsen-web-reference .learning-circles {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 0 14px !important;
+  padding: 8px 0 15px !important;
+  display: flex !important;
+  gap: 14px !important;
+  overflow-x: auto !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--social-line) !important;
+  scrollbar-width: none;
+}
+html.web-quality.tefsen-web-reference .learning-circles::-webkit-scrollbar { display: none; }
+html.web-quality.tefsen-web-reference .learning-circle {
+  flex: 0 0 66px !important;
+  display: grid !important;
+  justify-items: center !important;
+  gap: 6px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--social-muted) !important;
+  cursor: pointer;
+}
+html.web-quality.tefsen-web-reference .learning-circle-orb {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 50% !important;
+  padding: 2px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: var(--tefsen-gradient) !important;
+  box-shadow: none !important;
+}
+html.web-quality.tefsen-web-reference .learning-circle-orb > span {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  display: grid !important;
+  place-items: center !important;
+  background: var(--social-panel) !important;
+  color: var(--social-text) !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+}
+html.web-quality.tefsen-web-reference .learning-circle small {
+  width: 68px !important;
+  color: inherit !important;
+  font-size: 9.5px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* ---------- Feed ---------- */
+html.web-quality.tefsen-web-reference .feed-list {
+  width: 100% !important;
+  display: grid !important;
+  gap: 14px !important;
+}
+html.web-quality.tefsen-web-reference .panel.post-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-radius: 18px !important;
+  background: var(--social-panel) !important;
+  color: var(--social-text) !important;
+  border: 1px solid var(--social-line) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,.06) !important;
+}
+html.web-quality.tefsen-web-reference .post-head {
+  padding: 14px 15px 10px !important;
+  color: var(--social-text) !important;
+}
+html.web-quality.tefsen-web-reference .post-head-main b,
+html.web-quality.tefsen-web-reference .post-body h3,
+html.web-quality.tefsen-web-reference .post-body h1 {
+  color: var(--social-text) !important;
+}
+html.web-quality.tefsen-web-reference .post-head-main small,
+html.web-quality.tefsen-web-reference .post-body p,
+html.web-quality.tefsen-web-reference .action-btn,
+html.web-quality.tefsen-web-reference .post-menu {
+  color: var(--social-muted) !important;
+}
+html.web-quality.tefsen-web-reference .post-head-main b { font-size: 14px !important; }
+html.web-quality.tefsen-web-reference .post-head-main small { font-size: 11px !important; }
+html.web-quality.tefsen-web-reference .post-body { padding: 6px 16px 14px !important; }
+html.web-quality.tefsen-web-reference .post-body h3 { font-size: 18px !important; margin: 10px 0 8px !important; }
+html.web-quality.tefsen-web-reference .post-body p { font-size: 14px !important; line-height: 1.62 !important; }
+html.web-quality.tefsen-web-reference .post-subject {
+  min-height: 25px !important;
+  padding: 0 9px !important;
+  border-radius: 999px !important;
+  background: var(--social-soft) !important;
+  color: #16aaa7 !important;
+  font-size: 10px !important;
+}
+html.web-quality.tefsen-web-reference[data-web-theme="dark"] .post-subject { color: #69e0d9 !important; }
+
+html.web-quality.tefsen-web-reference .post-head > button:first-child,
+html.web-quality.tefsen-web-reference .avatar-route-button {
+  padding: 2px !important;
+  border-radius: 50% !important;
+  background: var(--tefsen-gradient) !important;
+}
+html.web-quality.tefsen-web-reference .post-head > button:first-child .avatar,
+html.web-quality.tefsen-web-reference .post-head > .avatar,
+html.web-quality.tefsen-web-reference .avatar-route-button .avatar {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--social-panel) !important;
+}
+
+html.web-quality.tefsen-web-reference .post-body .post-image,
+html.web-quality.tefsen-web-reference .post-body .post-image-grid {
+  width: calc(100% + 32px) !important;
+  max-width: none !important;
+  margin: 13px -16px -14px !important;
+  border-radius: 0 !important;
+}
+html.web-quality.tefsen-web-reference .post-image-grid img { border-radius: 0 !important; }
+
+html.web-quality.tefsen-web-reference .post-actions {
+  min-height: 56px !important;
+  padding: 7px 9px !important;
+  background: color-mix(in srgb, var(--social-panel) 96%, var(--social-bg)) !important;
+  border-top: 1px solid var(--social-line) !important;
+}
+html.web-quality.tefsen-web-reference .post-actions .action-btn {
+  min-height: 40px !important;
+  border-radius: 11px !important;
+  color: var(--social-muted) !important;
+  background: transparent !important;
+}
+html.web-quality.tefsen-web-reference .post-actions .action-btn:hover {
+  background: var(--social-panel-2) !important;
+  color: var(--social-text) !important;
+}
+html.web-quality.tefsen-web-reference .post-actions .action-btn.like.active { color: #ed3167 !important; }
+
+/* Generic panels/screens must remain readable in both themes. */
+html.web-quality.tefsen-web-reference .panel:not(.post-card),
+html.web-quality.tefsen-web-reference .modal,
+html.web-quality.tefsen-web-reference .dropdown,
+html.web-quality.tefsen-web-reference .study-stat-grid article,
+html.web-quality.tefsen-web-reference .continue-empty,
+html.web-quality.tefsen-web-reference .streak-pill {
+  background: var(--social-panel) !important;
+  color: var(--social-text) !important;
+  border-color: var(--social-line) !important;
+}
+html.web-quality.tefsen-web-reference .page-head h1,
+html.web-quality.tefsen-web-reference .profile-info h1,
+html.web-quality.tefsen-web-reference .profile-dashboard-label,
+html.web-quality.tefsen-web-reference .study-head h1 { color: var(--social-text) !important; }
+html.web-quality.tefsen-web-reference .page-head p,
+html.web-quality.tefsen-web-reference .profile-info p,
+html.web-quality.tefsen-web-reference .profile-info .handle,
+html.web-quality.tefsen-web-reference .study-head p { color: var(--social-muted) !important; }
+
+html.web-quality.tefsen-web-reference .input,
+html.web-quality.tefsen-web-reference .textarea,
+html.web-quality.tefsen-web-reference .select {
+  background: var(--social-panel-2) !important;
+  color: var(--social-text) !important;
+  border-color: var(--social-line) !important;
+}
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1220px) {
+  html.web-quality.tefsen-web-reference { --right: 0px; }
+  html.web-quality.tefsen-web-reference .rightbar { display: none !important; }
+  html.web-quality.tefsen-web-reference .main-area { padding-right: 0 !important; }
+}
+
+@media (max-width: 960px) {
+  html.web-quality.tefsen-web-reference { --left: 0px; --top: 70px; }
+  html.web-quality.tefsen-web-reference body { padding-bottom: 80px !important; }
+  html.web-quality.tefsen-web-reference .sidebar { display: none !important; }
+  html.web-quality.tefsen-web-reference .main-area { padding-left: 0 !important; }
+  html.web-quality.tefsen-web-reference .topbar {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 0 16px !important;
+  }
+  html.web-quality.tefsen-web-reference .topbar-brand { display: flex !important; padding-left: 0 !important; }
+  html.web-quality.tefsen-web-reference .topbar-brand span small { display: none !important; }
+  html.web-quality.tefsen-web-reference .topbar-center { flex: 1 !important; padding: 0 !important; }
+  html.web-quality.tefsen-web-reference .topbar-actions { padding-right: 0 !important; }
+  html.web-quality.tefsen-web-reference .content-wrap { width: min(100%, 680px) !important; }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 700px) {
+  html.web-quality.tefsen-web-reference { --top: 62px; }
+  html.web-quality.tefsen-web-reference .topbar { padding: 0 12px !important; }
+  html.web-quality.tefsen-web-reference .topbar-brand img { width: 36px !important; height: 36px !important; }
+  html.web-quality.tefsen-web-reference .topbar-brand span b { font-size: 20px !important; }
+  html.web-quality.tefsen-web-reference .topbar-center { flex: 0 0 auto !important; margin-left: auto !important; }
+  html.web-quality.tefsen-web-reference .global-search input { display: none !important; }
+  html.web-quality.tefsen-web-reference .global-search .search-icon {
+    position: static !important;
+    transform: none !important;
+    width: 38px !important;
+    height: 38px !important;
+    display: grid !important;
+    place-items: center !important;
+    border-radius: 11px !important;
+    background: var(--social-panel-2) !important;
+  }
+  html.web-quality.tefsen-web-reference .topbar-actions .icon-button { display: none !important; }
+  html.web-quality.tefsen-web-reference .top-avatar { width: 38px !important; height: 38px !important; }
+
+  html.web-quality.tefsen-web-reference .content-wrap,
+  html.web-quality.tefsen-web-reference .content-wrap.wide {
+    width: 100% !important;
+    padding: 0 0 100px !important;
+  }
+  html.web-quality.tefsen-web-reference .feed-tabs { padding: 0 4px !important; min-height: 50px !important; }
+  html.web-quality.tefsen-web-reference .feed-tab { min-height: 50px !important; font-size: 11px !important; }
+  html.web-quality.tefsen-web-reference .quality-subjects { padding: 10px 12px 8px !important; }
+  html.web-quality.tefsen-web-reference .learning-circles { padding: 8px 12px 13px !important; margin-bottom: 8px !important; }
+  html.web-quality.tefsen-web-reference .feed-list { gap: 9px !important; }
+  html.web-quality.tefsen-web-reference .panel.post-card {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  html.web-quality.tefsen-web-reference .post-head { padding: 12px 13px 9px !important; }
+  html.web-quality.tefsen-web-reference .post-body { padding: 5px 13px 13px !important; }
+  html.web-quality.tefsen-web-reference .post-body .post-image,
+  html.web-quality.tefsen-web-reference .post-body .post-image-grid {
+    width: calc(100% + 26px) !important;
+    margin: 12px -13px -13px !important;
+  }
+  html.web-quality.tefsen-web-reference .page-head,
+  html.web-quality.tefsen-web-reference .content-wrap > .panel:not(.post-card),
+  html.web-quality.tefsen-web-reference .content-wrap > .academic-achievements,
+  html.web-quality.tefsen-web-reference .content-wrap > .questions-asked-panel {
+    margin-left: 12px !important;
+    margin-right: 12px !important;
+  }
+}
