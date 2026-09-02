@@ -1,341 +1,662 @@
-/* Tefsen reference interface: desktop adaptation of the Android home UI. */
+/*
+ * Tefsen social-learning web interface.
+ * Inspired by familiar social-feed interaction patterns without copying another product.
+ * IMPORTANT: the Tefsen brand gradient is intentionally preserved exactly.
+ */
 html.tefsen-web-reference.tefsen-android-parity {
   --bg: #001215;
-  --bg-2: #031a1e;
-  --surface: #082327;
-  --surface-2: #0b2a2f;
-  --surface-3: #0d3237;
-  --text: #f0fbfb;
-  --muted: #9ab2b2;
-  --line: rgba(147, 195, 195, .18);
-  --brand: #39dfd5;
-  --brand-2: #25cdd0;
-  --brand-3: #20d9aa;
-  --left: 220px;
-  --right: 0px;
-  --top: 92px;
-  --radius: 28px;
+  --bg-2: #03191d;
+  --surface: #071f24;
+  --surface-2: #0a292f;
+  --surface-3: #0d3339;
+  --text: #f2fbfb;
+  --muted: #8fa8aa;
+  --line: rgba(164, 206, 207, .15);
+  --brand: #18c9d2;
+  --brand-2: #168ff8;
+  --brand-3: #31d991;
+  --tefsen-brand-gradient: linear-gradient(105deg, #168ff8, #18c9d2 55%, #31d991);
+  --tefsen-brand-gradient-soft: linear-gradient(105deg, rgba(22,143,248,.18), rgba(24,201,210,.14) 55%, rgba(49,217,145,.16));
+  --left: 244px;
+  --right: 322px;
+  --top: 76px;
+  --radius: 22px;
   color-scheme: dark;
 }
 
 html.tefsen-web-reference body {
-  background: #001215;
-  background-image: none;
+  background:
+    radial-gradient(circle at 46% -16%, rgba(24,201,210,.07), transparent 32rem),
+    #001215;
   color: var(--text);
-  font-family: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
+/* Brand treatment: keep the original Tefsen blue -> cyan -> green gradient. */
+html.tefsen-web-reference .topbar-brand span b,
+html.tefsen-web-reference .mobile-top-brand span b,
+html.tefsen-web-reference .auth-brand span {
+  background: var(--tefsen-brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+html.tefsen-web-reference .btn-primary,
+html.tefsen-web-reference .sidebar-cta .btn-primary,
+html.tefsen-web-reference .floating-ask,
+html.tefsen-web-reference .ask-btn,
+html.tefsen-web-reference .create-mobile.social-create {
+  background: var(--tefsen-brand-gradient) !important;
+  color: #04191c !important;
+  border: 0 !important;
+  box-shadow: 0 12px 30px rgba(24, 201, 210, .16);
+}
+
+/* ---------- Desktop shell ---------- */
 html.tefsen-web-reference .topbar {
   height: var(--top);
-  grid-template-columns: 300px minmax(320px, 1fr) 170px;
-  background: rgba(0, 18, 21, .96);
-  border-bottom: 1px solid rgba(137, 185, 185, .14);
-  box-shadow: 0 8px 34px rgba(0, 0, 0, .16);
+  grid-template-columns: var(--left) minmax(360px, 1fr) var(--right);
+  background: rgba(0, 18, 21, .94);
+  border-bottom: 1px solid rgba(164, 206, 207, .11);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
 }
+
 html.tefsen-web-reference .topbar-brand {
-  padding-left: 28px;
-  gap: 13px;
+  padding-left: 22px;
+  gap: 10px;
+  font-weight: 850;
 }
 html.tefsen-web-reference .topbar-brand img {
-  width: 56px;
-  height: 56px;
-  border-radius: 17px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
 }
-html.tefsen-web-reference .topbar-brand span b {
-  font-size: 25px;
-  color: var(--brand);
-}
+html.tefsen-web-reference .topbar-brand span b { font-size: 23px; }
 html.tefsen-web-reference .topbar-brand span small {
-  font-size: 10px;
-  margin-top: 6px;
-  letter-spacing: .055em;
-  color: #d7e7e6;
+  color: #a9c0c0;
+  font-size: 8.5px;
+  letter-spacing: .045em;
+  margin-top: 4px;
 }
-html.tefsen-web-reference .topbar-center { padding: 0 24px; }
-html.tefsen-web-reference .global-search { max-width: 620px; }
+
+html.tefsen-web-reference .topbar-center { padding: 0 28px; }
+html.tefsen-web-reference .global-search { max-width: 560px; }
 html.tefsen-web-reference .global-search input {
-  height: 48px;
+  height: 44px;
+  border-radius: 14px;
   background: #071d21;
-  border: 1px solid rgba(151, 195, 195, .22);
-  color: #eefafa;
+  border: 1px solid rgba(164, 206, 207, .16);
+  color: #edfafa;
+  padding-left: 44px;
 }
-html.tefsen-web-reference .global-search input::placeholder { color: #819a9a; }
+html.tefsen-web-reference .global-search input::placeholder { color: #718b8e; }
+html.tefsen-web-reference .global-search input:focus {
+  border-color: rgba(24,201,210,.55);
+  box-shadow: 0 0 0 3px rgba(24,201,210,.07);
+}
 html.tefsen-web-reference .global-search .search-kbd { display: none; }
-html.tefsen-web-reference .topbar-actions { padding-right: 28px; }
-html.tefsen-web-reference .topbar-actions .desktop-only { display: none; }
+html.tefsen-web-reference .global-search .search-icon { color: #91a9aa; }
+
+html.tefsen-web-reference .topbar-actions {
+  padding-right: 24px;
+  gap: 10px;
+}
 html.tefsen-web-reference .icon-button,
 html.tefsen-web-reference .top-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   background: #071d21;
-  border: 1px solid rgba(151, 195, 195, .22);
+  border: 1px solid rgba(164, 206, 207, .14);
 }
-html.tefsen-web-reference .top-avatar { border-color: #24cfc7; }
+html.tefsen-web-reference .top-avatar {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#071d21,#071d21) padding-box,
+    var(--tefsen-brand-gradient) border-box;
+}
 
 html.tefsen-web-reference .sidebar {
   top: var(--top);
   width: var(--left);
-  padding: 26px 14px 26px;
-  background: #02171a;
-  border-right: 1px solid rgba(137, 185, 185, .12);
+  padding: 24px 14px 22px;
+  background: rgba(0, 18, 21, .98);
+  border-right: 1px solid rgba(164, 206, 207, .10);
 }
-html.tefsen-web-reference .nav-list { gap: 8px; }
+html.tefsen-web-reference .nav-list { gap: 6px; }
 html.tefsen-web-reference .nav-item {
-  min-height: 52px;
-  border-radius: 16px;
-  color: #9eb5b5;
-  padding: 0 16px;
+  min-height: 48px;
+  border-radius: 14px;
+  padding: 0 14px;
+  color: #a0b4b6;
+  font-size: 14px;
+  font-weight: 700;
+}
+html.tefsen-web-reference .nav-item:hover {
+  color: #f4ffff;
+  background: rgba(255,255,255,.035);
 }
 html.tefsen-web-reference .nav-item.active {
-  color: var(--brand);
-  background: rgba(57, 223, 213, .09);
-  border: 1px solid rgba(57, 223, 213, .14);
+  color: #f5ffff;
+  border-color: transparent;
+  background: var(--tefsen-brand-gradient-soft);
+  position: relative;
 }
+html.tefsen-web-reference .nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--tefsen-brand-gradient);
+}
+html.tefsen-web-reference .sidebar-cta { margin-top: 8px; }
 html.tefsen-web-reference .sidebar-cta .btn-primary {
-  min-height: 52px;
-  border-radius: 17px;
-  background: var(--brand);
-  color: #062124;
+  min-height: 50px;
+  border-radius: 15px;
+  font-size: 14px;
 }
 html.tefsen-web-reference .sidebar-profile {
-  background: #082327;
-  border-color: rgba(151,195,195,.14);
+  background: #061c20;
+  border-color: rgba(164,206,207,.11);
+  border-radius: 16px;
 }
 
-html.tefsen-web-reference .rightbar { display: none !important; }
 html.tefsen-web-reference .main-area {
   padding-top: var(--top);
   padding-left: var(--left);
-  padding-right: 0;
+  padding-right: var(--right);
+  min-height: 100vh;
 }
 html.tefsen-web-reference .content-wrap {
-  width: min(100%, 820px);
+  width: min(100%, 700px);
   padding: 0 22px 130px;
 }
-html.tefsen-web-reference .content-wrap.wide { width: min(100%, 1120px); padding-top: 24px; }
+html.tefsen-web-reference .content-wrap.wide {
+  width: min(100%, 1040px);
+  padding-top: 24px;
+}
 
-/* Home navigation mirrors the Android interface. */
+/* Right rail: a learning-discovery column, not a clone of another social app. */
+html.tefsen-web-reference .rightbar {
+  display: block !important;
+  top: var(--top);
+  width: var(--right);
+  padding: 28px 22px 34px;
+  background: rgba(0, 18, 21, .86);
+  border-left: 1px solid rgba(164,206,207,.08);
+}
+html.tefsen-web-reference .rightbar .widget {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0 22px;
+  margin: 0 0 22px;
+  border-bottom: 1px solid rgba(164,206,207,.10);
+}
+html.tefsen-web-reference .rightbar .widget h3 {
+  margin: 0 0 14px;
+  color: #dceaea;
+  font-size: 14px;
+  letter-spacing: .01em;
+}
+html.tefsen-web-reference .rightbar .widget-link {
+  border-color: transparent !important;
+  border-radius: 14px;
+  padding: 10px 8px;
+}
+html.tefsen-web-reference .rightbar .widget-link:hover { background: rgba(255,255,255,.03) !important; }
+html.tefsen-web-reference .rightbar .widget-link b { color: #eaf6f6; font-size: 13px; }
+html.tefsen-web-reference .rightbar .widget-link small { color: #7e989a; }
+html.tefsen-web-reference .rightbar .trend-number {
+  color: #789193;
+  font-size: 11px;
+  font-weight: 800;
+}
+html.tefsen-web-reference .footer-mini { color: #617a7d; }
+
+/* ---------- Home feed navigation ---------- */
 html.tefsen-web-reference .feed-tabs {
   position: sticky;
   top: var(--top);
-  z-index: 14;
-  margin: 0 -22px 0;
+  z-index: 20;
+  margin: 0 -22px;
   padding: 0 22px;
-  min-height: 74px;
+  min-height: 58px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  align-items: stretch;
-  background: rgba(0, 18, 21, .98);
-  border-bottom: 1px solid rgba(151,195,195,.18);
+  background: rgba(0,18,21,.96);
+  border-bottom: 1px solid rgba(164,206,207,.12);
+  backdrop-filter: blur(18px);
 }
 html.tefsen-web-reference .feed-tab {
-  min-height: 74px;
-  color: #91a7a7;
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: .01em;
+  min-height: 58px;
+  border: 0;
+  background: transparent;
+  color: #7f9799;
+  font-size: 13px;
+  font-weight: 750;
+  position: relative;
 }
-html.tefsen-web-reference .feed-tab.active { color: var(--brand); }
+html.tefsen-web-reference .feed-tab.active { color: #f3ffff; }
 html.tefsen-web-reference .feed-tab.active::after {
-  height: 4px;
-  left: 7%;
-  right: 7%;
+  content: "";
+  position: absolute;
+  height: 3px;
+  left: 18%;
+  right: 18%;
   bottom: -1px;
-  background: var(--brand);
+  border-radius: 999px;
+  background: var(--tefsen-brand-gradient);
 }
 
 html.tefsen-web-reference .subject-filter-row {
-  margin: 0 -22px 0;
-  padding: 28px 22px 26px;
-  gap: 14px;
+  margin: 0 -22px;
+  padding: 16px 22px 10px;
+  gap: 9px;
   background: #001215;
 }
 html.tefsen-web-reference .subject-chip {
-  min-height: 50px;
-  padding: 0 22px;
-  border-radius: 18px;
-  background: #061b1f;
-  border: 1px solid rgba(151,195,195,.18);
-  color: #aabebe;
-  font-size: 15px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #061c20;
+  border: 1px solid rgba(164,206,207,.13);
+  color: #91a7a9;
+  font-size: 12px;
+  font-weight: 700;
 }
+html.tefsen-web-reference .subject-chip:hover { border-color: rgba(24,201,210,.32); color: #dffafa; }
 html.tefsen-web-reference .subject-chip.active {
-  border-color: #1fc3dd;
-  box-shadow: inset 0 0 0 1px rgba(31,195,221,.5);
-  color: #f0ffff;
+  border-color: transparent;
+  background:
+    linear-gradient(#061c20,#061c20) padding-box,
+    var(--tefsen-brand-gradient) border-box;
+  color: #efffff;
+  box-shadow: none;
 }
 html.tefsen-web-reference .composer-mini { display: none; }
 
-html.tefsen-web-reference .feed-list { display: grid; gap: 22px; }
+/* ---------- Tefsen Learning Circles ---------- */
+html.tefsen-web-reference .learning-circles {
+  margin: 0 -22px 18px;
+  padding: 14px 22px 18px;
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid rgba(164,206,207,.08);
+  background: #001215;
+}
+html.tefsen-web-reference .learning-circles::-webkit-scrollbar { display: none; }
+html.tefsen-web-reference .learning-circle {
+  flex: 0 0 72px;
+  border: 0;
+  background: transparent;
+  color: #93aaac;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+}
+html.tefsen-web-reference .learning-circle-orb {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+  background: var(--tefsen-brand-gradient);
+  box-shadow: 0 7px 22px rgba(24,201,210,.10);
+}
+html.tefsen-web-reference .learning-circle-orb > span {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  display: grid;
+  place-items: center;
+  background: #061c20;
+  color: #eaffff;
+  font-size: 20px;
+  font-weight: 850;
+}
+html.tefsen-web-reference .learning-circle small {
+  width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: inherit;
+}
+html.tefsen-web-reference .learning-circle:hover { color: #e9ffff; }
+
+/* ---------- Feed cards ---------- */
+html.tefsen-web-reference .feed-list {
+  display: grid;
+  gap: 18px;
+}
 html.tefsen-web-reference .panel.post-card {
   overflow: hidden;
-  border-radius: 28px;
-  background: #082327;
-  border: 1px solid rgba(151,195,195,.18);
-  box-shadow: none;
+  border-radius: 20px;
+  background: #061c20;
+  border: 1px solid rgba(164,206,207,.13);
+  box-shadow: 0 12px 36px rgba(0,0,0,.12);
 }
 html.tefsen-web-reference .panel.post-card:hover {
   transform: none;
-  border-color: rgba(57,223,213,.30);
+  border-color: rgba(24,201,210,.24);
 }
+
 html.tefsen-web-reference .post-head {
-  padding: 22px 24px 12px;
-  gap: 14px;
+  padding: 16px 17px 12px;
+  gap: 11px;
+  align-items: center;
+}
+html.tefsen-web-reference .post-head > button:first-child,
+html.tefsen-web-reference .avatar-route-button {
+  border-radius: 50%;
+  padding: 2px !important;
+  background: var(--tefsen-brand-gradient) !important;
 }
 html.tefsen-web-reference .post-head > button:first-child .avatar,
-html.tefsen-web-reference .post-head > .avatar {
-  width: 54px;
-  height: 54px;
+html.tefsen-web-reference .post-head > .avatar,
+html.tefsen-web-reference .avatar-route-button .avatar {
+  width: 43px;
+  height: 43px;
   border-radius: 50%;
-  border: 1px solid rgba(57,223,213,.26);
+  border: 2px solid #061c20;
 }
 html.tefsen-web-reference .post-head-main b {
-  font-size: 17px;
-  color: #f1fbfb;
+  color: #effafa;
+  font-size: 14px;
 }
 html.tefsen-web-reference .post-head-main small {
-  margin-top: 6px;
-  color: #93aaaa;
+  margin-top: 4px;
+  color: #769093;
+  font-size: 11px;
 }
 html.tefsen-web-reference .role-pill {
-  background: #0a2f4a;
-  border-color: rgba(57,144,255,.16);
-  color: #5c9cff;
+  padding: 4px 8px;
   border-radius: 999px;
+  background: rgba(22,143,248,.10);
+  border-color: rgba(22,143,248,.17);
+  color: #74b7ff;
+  font-size: 10px;
 }
-html.tefsen-web-reference .post-menu { color: #a2b8b8; }
-html.tefsen-web-reference .post-body { padding: 12px 28px 22px; }
+html.tefsen-web-reference .verified-badge { transform: translateY(2px); }
+html.tefsen-web-reference .post-menu { color: #7e9799; }
+
+html.tefsen-web-reference .post-body {
+  padding: 6px 18px 16px;
+}
 html.tefsen-web-reference .post-subject {
-  color: var(--brand);
-  font-size: 12px;
-  letter-spacing: .12em;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--tefsen-brand-gradient-soft);
+  color: #7ce6df;
+  font-size: 10px;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  font-weight: 850;
+  font-weight: 800;
 }
 html.tefsen-web-reference .post-body h3,
 html.tefsen-web-reference .post-body h1 {
-  margin-top: 14px;
   color: #f4fbfb;
-  letter-spacing: -.02em;
-  line-height: 1.25;
+  margin: 12px 0 8px;
+  letter-spacing: -.025em;
+  line-height: 1.28;
 }
-html.tefsen-web-reference .post-body h3 { font-size: 22px; }
+html.tefsen-web-reference .post-body h3 { font-size: 18px; }
+html.tefsen-web-reference .post-body h1 { font-size: 25px; }
 html.tefsen-web-reference .post-body p {
-  color: #d8e7e6;
-  line-height: 1.75;
-  font-size: 16px;
+  margin: 0 0 12px;
+  color: #c9d9da;
+  font-size: 14px;
+  line-height: 1.65;
 }
-html.tefsen-web-reference .post-image,
-html.tefsen-web-reference .post-image-grid {
-  border-radius: 20px;
+html.tefsen-web-reference .tag-row { gap: 7px; }
+html.tefsen-web-reference .tag { color: #55cfd1; background: transparent; border: 0; padding: 0; font-size: 12px; }
+
+/* Media becomes the visual anchor when a learner includes an image. */
+html.tefsen-web-reference .post-body .post-image,
+html.tefsen-web-reference .post-body .post-image-grid {
+  width: calc(100% + 36px);
+  max-width: none;
+  margin-left: -18px;
+  margin-right: -18px;
+  margin-top: 14px;
+  margin-bottom: -16px;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
 }
+html.tefsen-web-reference .post-image-grid img { border-radius: 0; }
+
 html.tefsen-web-reference .post-actions {
-  min-height: 70px;
-  padding: 10px 20px;
-  border-top: 1px solid rgba(151,195,195,.12);
-  background: #071f23;
+  min-height: 58px;
+  padding: 7px 11px;
+  border-top: 1px solid rgba(164,206,207,.09);
+  background: #05191d;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
 }
 html.tefsen-web-reference .post-actions .action-btn {
-  min-height: 44px;
-  min-width: 54px;
-  border-radius: 15px;
-  color: #d7e5e4;
+  min-height: 42px;
+  min-width: 44px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: #c8d7d8;
+  font-size: 12px;
 }
-html.tefsen-web-reference .post-actions .action-btn:hover { background: rgba(57,223,213,.07); }
-html.tefsen-web-reference .post-actions .action-btn.like.active { color: #ff2f70; }
+html.tefsen-web-reference .post-actions .action-btn:hover { background: rgba(255,255,255,.035); }
+html.tefsen-web-reference .post-actions .action-btn.like.active { color: #ff4679; }
 html.tefsen-web-reference .post-actions .action-btn:nth-child(1) { order: 1; }
 html.tefsen-web-reference .post-actions .action-btn:nth-child(2) { order: 2; }
 html.tefsen-web-reference .post-actions .action-btn:nth-child(4) { order: 3; font-size: 0; }
 html.tefsen-web-reference .post-actions .action-btn:nth-child(3) { order: 4; margin-left: auto; font-size: 0; }
 html.tefsen-web-reference .post-actions .action-btn:nth-child(3) svg,
-html.tefsen-web-reference .post-actions .action-btn:nth-child(4) svg { width: 21px; height: 21px; }
+html.tefsen-web-reference .post-actions .action-btn:nth-child(4) svg { width: 20px; height: 20px; }
 
 html.tefsen-web-reference .floating-ask {
-  right: 30px;
-  bottom: 30px;
-  min-width: 210px;
-  min-height: 62px;
-  padding: 0 26px;
-  border-radius: 20px;
-  background: #39dfd5;
-  color: #052125;
-  font-size: 16px;
-  box-shadow: 0 18px 50px rgba(0,0,0,.32);
+  right: calc(var(--right) + 28px);
+  bottom: 28px;
+  min-width: 178px;
+  min-height: 54px;
+  padding: 0 20px;
+  border-radius: 17px;
+  font-size: 14px;
+  font-weight: 850;
 }
 
+/* Empty states keep the feed feeling purposeful. */
+html.tefsen-web-reference .academic-empty,
+html.tefsen-web-reference .notification-empty,
+html.tefsen-web-reference .leaderboard-empty {
+  min-height: 420px;
+  background: transparent;
+}
+
+/* Other screens inherit the same visual language. */
+html.tefsen-web-reference .panel:not(.post-card),
 html.tefsen-web-reference .dropdown.profile-dropdown,
 html.tefsen-web-reference .modal {
-  background: #082327;
-  border-color: rgba(151,195,195,.20);
+  background: #061c20;
+  border-color: rgba(164,206,207,.13);
+  box-shadow: 0 18px 55px rgba(0,0,0,.16);
+}
+html.tefsen-web-reference .page-head h1 { color: #effafa; }
+html.tefsen-web-reference .page-head p { color: #849d9f; }
+html.tefsen-web-reference .input,
+html.tefsen-web-reference .textarea,
+html.tefsen-web-reference .select {
+  background: #04171a;
+  border-color: rgba(164,206,207,.15);
 }
 
-@media (max-width: 1180px) {
-  html.tefsen-web-reference.tefsen-android-parity { --left: 190px; }
-  html.tefsen-web-reference .topbar { grid-template-columns: 270px minmax(260px,1fr) 150px; }
-  html.tefsen-web-reference .nav-item { padding: 0 12px; }
+/* ---------- Tablet ---------- */
+@media (max-width: 1220px) {
+  html.tefsen-web-reference.tefsen-android-parity { --right: 0px; }
+  html.tefsen-web-reference .rightbar { display: none !important; }
+  html.tefsen-web-reference .main-area { padding-right: 0; }
+  html.tefsen-web-reference .floating-ask { right: 28px; }
 }
 
-@media (max-width: 980px) {
-  html.tefsen-web-reference.tefsen-android-parity { --left: 0px; }
-  html.tefsen-web-reference body { padding-bottom: 92px; }
+@media (max-width: 960px) {
+  html.tefsen-web-reference.tefsen-android-parity { --left: 0px; --top: 72px; }
+  html.tefsen-web-reference body { padding-bottom: 82px; }
   html.tefsen-web-reference .sidebar { display: none !important; }
   html.tefsen-web-reference .main-area { padding-left: 0; }
+  html.tefsen-web-reference .topbar {
+    display: flex;
+    gap: 12px;
+    padding: 0 18px;
+  }
+  html.tefsen-web-reference .topbar-brand { display: flex; padding-left: 0; min-width: max-content; }
+  html.tefsen-web-reference .topbar-brand span small { display: none; }
+  html.tefsen-web-reference .topbar-center { flex: 1; padding: 0; }
+  html.tefsen-web-reference .topbar-actions { padding-right: 0; }
+  html.tefsen-web-reference .mobile-top-brand { display: none !important; }
+
   html.tefsen-web-reference .mobile-bottom {
     position: fixed;
     z-index: 150;
-    left: 0; right: 0; bottom: 0;
-    height: 88px;
-    padding: 8px 18px max(10px, env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 78px;
+    padding: 6px 16px max(8px, env(safe-area-inset-bottom));
     background: rgba(0,18,21,.98);
-    border-top: 1px solid rgba(151,195,195,.12);
+    border-top: 1px solid rgba(164,206,207,.11);
     display: grid;
     grid-template-columns: repeat(5, 1fr);
+    backdrop-filter: blur(18px);
   }
   html.tefsen-web-reference .mobile-bottom > button,
   html.tefsen-web-reference .mobile-bottom .create-mobile {
     width: 100%;
-    height: 64px;
+    height: 58px;
     border: 0;
     border-radius: 0;
-    background: transparent;
+    background: transparent !important;
     box-shadow: none;
-    color: #8fa5a4;
+    color: #789092 !important;
   }
-  html.tefsen-web-reference .mobile-bottom > button.active { color: var(--brand); }
-  html.tefsen-web-reference .floating-ask { bottom: 108px; }
+  html.tefsen-web-reference .mobile-bottom > button.active { color: #3ad7d0 !important; }
+  html.tefsen-web-reference .mobile-bottom .create-mobile {
+    position: relative;
+  }
+  html.tefsen-web-reference .mobile-bottom .create-mobile svg {
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+    box-sizing: content-box;
+    border-radius: 12px;
+    background: var(--tefsen-brand-gradient);
+    color: #04191c;
+  }
+  html.tefsen-web-reference .floating-ask { bottom: 94px; }
 }
 
-@media (max-width: 760px) {
-  html.tefsen-web-reference.tefsen-android-parity { --top: 98px; }
-  html.tefsen-web-reference .topbar { padding: 12px 18px; }
-  html.tefsen-web-reference .topbar-actions .hide-small { display: none !important; }
-  html.tefsen-web-reference .content-wrap { padding: 0 16px 126px; }
-  html.tefsen-web-reference .feed-tabs {
-    margin: 0 -16px;
-    padding: 0 8px;
-    min-height: 62px;
+/* ---------- Mobile ---------- */
+@media (max-width: 700px) {
+  html.tefsen-web-reference.tefsen-android-parity { --top: 64px; }
+  html.tefsen-web-reference .topbar { padding: 0 13px; gap: 8px; }
+  html.tefsen-web-reference .topbar-brand img { width: 37px; height: 37px; border-radius: 11px; }
+  html.tefsen-web-reference .topbar-brand span b { font-size: 20px; }
+  html.tefsen-web-reference .topbar-center { margin-left: auto; flex: 0 1 auto; }
+  html.tefsen-web-reference .global-search input { display: none; }
+  html.tefsen-web-reference .global-search .search-icon {
+    position: static;
+    transform: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #061c20;
   }
-  html.tefsen-web-reference .feed-tab { min-height: 62px; font-size: 13px; }
-  html.tefsen-web-reference .subject-filter-row { margin: 0 -16px; padding: 22px 16px 22px; }
-  html.tefsen-web-reference .subject-chip { min-height: 48px; padding: 0 18px; }
-  html.tefsen-web-reference .feed-list { gap: 18px; }
-  html.tefsen-web-reference .panel.post-card { border-radius: 25px; }
-  html.tefsen-web-reference .post-head { padding: 20px 18px 10px; }
+  html.tefsen-web-reference .topbar-actions .icon-button { display: none !important; }
+  html.tefsen-web-reference .top-avatar { width: 40px !important; height: 40px !important; }
+
+  html.tefsen-web-reference .content-wrap,
+  html.tefsen-web-reference .content-wrap.wide {
+    width: 100%;
+    padding: 0 0 112px;
+  }
+  html.tefsen-web-reference .feed-tabs {
+    margin: 0;
+    padding: 0 6px;
+    min-height: 52px;
+  }
+  html.tefsen-web-reference .feed-tab { min-height: 52px; font-size: 11.5px; }
+  html.tefsen-web-reference .feed-tab.active::after { left: 20%; right: 20%; }
+
+  html.tefsen-web-reference .subject-filter-row {
+    margin: 0;
+    padding: 12px 13px 8px;
+  }
+  html.tefsen-web-reference .subject-chip { min-height: 34px; padding: 0 12px; font-size: 11px; }
+
+  html.tefsen-web-reference .learning-circles {
+    margin: 0 0 12px;
+    padding: 12px 13px 15px;
+    gap: 12px;
+  }
+  html.tefsen-web-reference .learning-circle { flex-basis: 64px; }
+  html.tefsen-web-reference .learning-circle-orb { width: 54px; height: 54px; }
+  html.tefsen-web-reference .learning-circle small { width: 66px; font-size: 9.5px; }
+
+  html.tefsen-web-reference .feed-list { gap: 10px; }
+  html.tefsen-web-reference .panel.post-card {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  html.tefsen-web-reference .post-head { padding: 13px 14px 10px; }
   html.tefsen-web-reference .post-head > button:first-child .avatar,
-  html.tefsen-web-reference .post-head > .avatar { width: 50px; height: 50px; }
-  html.tefsen-web-reference .post-body { padding: 10px 20px 18px; }
-  html.tefsen-web-reference .post-body h3 { font-size: 20px; }
-  html.tefsen-web-reference .post-body p { font-size: 15px; }
-  html.tefsen-web-reference .post-actions { min-height: 64px; padding: 8px 12px; }
+  html.tefsen-web-reference .post-head > .avatar,
+  html.tefsen-web-reference .avatar-route-button .avatar { width: 40px; height: 40px; }
+  html.tefsen-web-reference .post-head-main b { font-size: 13.5px; }
+  html.tefsen-web-reference .post-body { padding: 5px 14px 14px; }
+  html.tefsen-web-reference .post-body h3 { font-size: 17px; }
+  html.tefsen-web-reference .post-body p { font-size: 13.5px; line-height: 1.58; }
+  html.tefsen-web-reference .post-body .post-image,
+  html.tefsen-web-reference .post-body .post-image-grid {
+    width: calc(100% + 28px);
+    margin-left: -14px;
+    margin-right: -14px;
+    margin-bottom: -14px;
+  }
+  html.tefsen-web-reference .post-actions { min-height: 56px; border-radius: 0; }
+  html.tefsen-web-reference .post-actions .action-btn { padding: 0 9px; }
+
   html.tefsen-web-reference .floating-ask {
-    right: 18px;
-    bottom: 110px;
-    min-width: 170px;
-    min-height: 58px;
-    padding: 0 20px;
+    right: 14px;
+    bottom: 91px;
+    min-width: 0;
+    width: 52px;
+    height: 52px;
+    min-height: 52px;
+    padding: 0;
+    border-radius: 16px;
+  }
+  html.tefsen-web-reference .floating-ask span { display: none; }
+
+  html.tefsen-web-reference .page-head,
+  html.tefsen-web-reference .content-wrap > .panel:not(.post-card),
+  html.tefsen-web-reference .content-wrap > .academic-achievements,
+  html.tefsen-web-reference .content-wrap > .questions-asked-panel {
+    margin-left: 13px;
+    margin-right: 13px;
   }
 }
