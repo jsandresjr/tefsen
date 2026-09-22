@@ -1,0 +1,683 @@
+/* Tefsen Web UI V3 — premium logged-in product polish
+ * Loaded after V2. Targets the active tefsen-v2 shell directly.
+ */
+
+html.tefsen-v2{
+  --left:232px;
+  --right:292px;
+  --top:72px;
+  --v3-bg:#031114;
+  --v3-surface:#071c1f;
+  --v3-surface-2:#0a2428;
+  --v3-surface-3:#0e2c31;
+  --v3-text:#f6fcfb;
+  --v3-muted:#91aaa8;
+  --v3-line:rgba(177,222,217,.12);
+  --v3-line-strong:rgba(177,222,217,.22);
+  --v3-accent:#51e2d4;
+  --v3-accent-soft:rgba(81,226,212,.09);
+  --v3-blue:#54c8e8;
+  --v3-good:#7ce0a5;
+  --v3-warn:#f0c86d;
+  background:var(--v3-bg);
+}
+
+html.tefsen-v2 body{
+  background:
+    radial-gradient(circle at 48% -15%,rgba(81,226,212,.07),transparent 34rem),
+    var(--v3-bg)!important;
+  color:var(--v3-text)!important;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ---------- app chrome ---------- */
+html.tefsen-v2 .topbar{
+  height:var(--top)!important;
+  background:rgba(3,17,20,.91)!important;
+  border-bottom:1px solid var(--v3-line)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.01);
+}
+html.tefsen-v2 .topbar-brand{
+  padding-left:18px!important;
+  gap:10px!important;
+  font-size:19px!important;
+}
+html.tefsen-v2 .topbar-brand img{
+  width:38px!important;height:38px!important;border-radius:12px!important;
+}
+html.tefsen-v2 .topbar-center{padding-inline:18px!important}
+html.tefsen-v2 .global-search{max-width:720px!important}
+html.tefsen-v2 .global-search input{
+  height:46px!important;
+  background:rgba(10,36,40,.72)!important;
+  border:1px solid var(--v3-line)!important;
+  border-radius:16px!important;
+  color:var(--v3-text)!important;
+  padding-left:44px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+html.tefsen-v2 .global-search input::placeholder{color:#78928f!important}
+html.tefsen-v2 .global-search input:focus{
+  border-color:rgba(81,226,212,.48)!important;
+  box-shadow:0 0 0 4px rgba(81,226,212,.065)!important;
+}
+
+html.tefsen-v2 .sidebar{
+  width:var(--left)!important;
+  padding:18px 14px 20px!important;
+  background:#041518!important;
+  border-right:1px solid var(--v3-line)!important;
+}
+html.tefsen-v2 .nav-list{gap:5px!important}
+html.tefsen-v2 .nav-item{
+  min-height:46px!important;
+  padding:0 13px!important;
+  border:1px solid transparent!important;
+  border-radius:13px!important;
+  color:#9db4b2!important;
+  font-size:14px!important;
+  font-weight:720!important;
+}
+html.tefsen-v2 .nav-item svg{opacity:.8}
+html.tefsen-v2 .nav-item:hover{
+  background:rgba(255,255,255,.025)!important;
+  color:#eaf8f6!important;
+}
+html.tefsen-v2 .nav-item.active{
+  background:var(--v3-accent-soft)!important;
+  border-color:rgba(81,226,212,.14)!important;
+  color:var(--v3-accent)!important;
+}
+html.tefsen-v2 .sidebar-cta{margin-top:12px!important}
+html.tefsen-v2 .sidebar-cta .btn{
+  min-height:43px!important;
+  padding:0 10px!important;
+  border-radius:13px!important;
+  white-space:nowrap!important;
+  font-size:12px!important;
+  letter-spacing:-.01em;
+}
+html.tefsen-v2 .sidebar-profile{
+  border:1px solid var(--v3-line)!important;
+  border-radius:15px!important;
+  background:rgba(255,255,255,.022)!important;
+  padding:10px!important;
+}
+
+html.tefsen-v2 .rightbar{
+  width:var(--right)!important;
+  padding:22px 18px 28px!important;
+  background:#041518!important;
+  border-left:1px solid var(--v3-line)!important;
+}
+html.tefsen-v2 .rightbar .widget{
+  padding:0!important;
+  margin-bottom:26px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+}
+html.tefsen-v2 .rightbar .widget h3{
+  margin:0 0 9px!important;
+  padding-inline:3px;
+  color:#c8d8d6!important;
+  font-size:12px!important;
+  text-transform:uppercase;
+  letter-spacing:.08em!important;
+}
+html.tefsen-v2 .widget-link{
+  min-height:66px!important;
+  margin:0 0 6px!important;
+  padding:10px!important;
+  border:1px solid transparent!important;
+  border-radius:14px!important;
+  background:transparent!important;
+}
+html.tefsen-v2 .widget-link:hover{
+  background:rgba(255,255,255,.025)!important;
+  border-color:var(--v3-line)!important;
+}
+html.tefsen-v2 .widget-link b{font-size:13px!important;color:#dce9e7!important}
+html.tefsen-v2 .widget-link small{color:#829b98!important;line-height:1.35!important}
+html.tefsen-v2 .notification-icon{
+  background:rgba(81,226,212,.07)!important;
+  color:var(--v3-accent)!important;
+}
+html.tefsen-v2 .footer-mini{padding:4px;color:#657f7c!important}
+
+/* ---------- shared content ---------- */
+html.tefsen-v2 .main-area{
+  background:
+    radial-gradient(circle at 55% 0%,rgba(81,226,212,.035),transparent 26rem),
+    transparent;
+}
+html.tefsen-v2 .content-wrap{
+  padding:32px 26px 110px!important;
+}
+html.tefsen-v2 .content-wrap.wide{
+  width:min(100%,1160px)!important;
+}
+html.tefsen-v2 .panel,
+html.tefsen-v2 .opportunity-card,
+html.tefsen-v2 .opportunity-detail-card,
+html.tefsen-v2 .passport-hero,
+html.tefsen-v2 .journey-panel,
+html.tefsen-v2 .community-card{
+  background:linear-gradient(180deg,rgba(10,36,40,.94),rgba(7,28,31,.96))!important;
+  border:1px solid var(--v3-line)!important;
+  box-shadow:0 14px 42px rgba(0,0,0,.11)!important;
+}
+html.tefsen-v2 .page-head{margin-bottom:20px!important}
+html.tefsen-v2 .page-head h1{
+  color:var(--v3-text)!important;
+  font-size:clamp(28px,3.2vw,40px)!important;
+  letter-spacing:-.045em!important;
+}
+html.tefsen-v2 .page-head h2{letter-spacing:-.03em!important}
+html.tefsen-v2 .page-head p{
+  color:var(--v3-muted)!important;
+  max-width:68ch;
+  line-height:1.55;
+}
+html.tefsen-v2 .opportunity-kicker{
+  color:#8cece3!important;
+  font-size:10px!important;
+  letter-spacing:.14em!important;
+  font-weight:850!important;
+}
+html.tefsen-v2 .opportunity-chip{
+  min-height:27px!important;
+  padding:3px 9px!important;
+  background:rgba(81,226,212,.055)!important;
+  border:1px solid rgba(81,226,212,.12)!important;
+  color:#b8e7e2!important;
+  font-size:11px!important;
+}
+html.tefsen-v2 .btn{
+  border-radius:13px!important;
+  font-weight:780!important;
+  letter-spacing:-.01em;
+}
+html.tefsen-v2 .btn-primary{
+  background:linear-gradient(110deg,#64e8dc,#44d1ce)!important;
+  color:#042123!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  box-shadow:0 9px 26px rgba(50,199,190,.11)!important;
+}
+html.tefsen-v2 .btn-secondary{
+  background:#0a292d!important;
+  border:1px solid var(--v3-line)!important;
+  color:#dcebe9!important;
+}
+html.tefsen-v2 .btn-ghost{
+  background:transparent!important;
+  border:1px solid var(--v3-line)!important;
+  color:#aec1bf!important;
+}
+html.tefsen-v2 .btn:hover{
+  filter:brightness(1.06)!important;
+  transform:translateY(-1px)!important;
+}
+html.tefsen-v2 .input,
+html.tefsen-v2 .textarea,
+html.tefsen-v2 .select{
+  background:#061a1d!important;
+  border:1px solid var(--v3-line)!important;
+  border-radius:13px!important;
+  color:var(--v3-text)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+html.tefsen-v2 .field label{
+  color:#bfd0ce!important;
+  font-size:12px!important;
+  font-weight:720!important;
+}
+html.tefsen-v2 .input:focus,
+html.tefsen-v2 .textarea:focus,
+html.tefsen-v2 .select:focus{
+  border-color:rgba(81,226,212,.5)!important;
+  box-shadow:0 0 0 4px rgba(81,226,212,.06)!important;
+}
+
+/* ---------- premium profile ---------- */
+html.tefsen-v2 .v3-profile-page{
+  width:min(100%,1080px);
+  margin:0 auto;
+  display:grid;
+  gap:18px;
+}
+html.tefsen-v2 .v3-profile-shell{
+  display:grid;
+  grid-template-columns:minmax(0,1.22fr) minmax(310px,.78fr);
+  gap:16px;
+}
+html.tefsen-v2 .v3-profile-identity,
+html.tefsen-v2 .v3-profile-path{
+  position:relative;
+  overflow:hidden;
+  min-height:310px;
+  border:1px solid var(--v3-line)!important;
+  border-radius:24px;
+  background:
+    radial-gradient(circle at 0 0,rgba(81,226,212,.08),transparent 17rem),
+    linear-gradient(145deg,#0a292d,#071d20);
+}
+html.tefsen-v2 .v3-profile-identity{
+  padding:30px;
+  display:grid;
+  grid-template-columns:112px minmax(0,1fr);
+  gap:24px;
+  align-items:start;
+}
+html.tefsen-v2 .v3-profile-identity::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;top:0;height:3px;
+  background:linear-gradient(90deg,var(--v3-accent),rgba(84,200,232,.8),transparent 78%);
+}
+html.tefsen-v2 .v3-profile-avatar{
+  width:108px;height:108px;
+  padding:3px;
+  border-radius:31px;
+  background:linear-gradient(145deg,var(--v3-accent),#53bee0 60%,#89e5b0);
+  box-shadow:0 18px 45px rgba(0,0,0,.2);
+}
+html.tefsen-v2 .v3-profile-avatar .avatar.lg{
+  width:102px!important;height:102px!important;
+  border-radius:28px!important;
+  background:#092429!important;
+  border:4px solid #092429!important;
+}
+html.tefsen-v2 .v3-profile-copy{min-width:0;padding-top:3px}
+html.tefsen-v2 .v3-profile-name-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+}
+html.tefsen-v2 .v3-profile-name-row h1{
+  margin:0 0 5px;
+  font-size:clamp(30px,3.6vw,44px);
+  line-height:1;
+  letter-spacing:-.05em;
+}
+html.tefsen-v2 .v3-profile-name-row .handle{
+  color:#8ba5a2;
+  font-size:14px;
+}
+html.tefsen-v2 .v3-profile-copy>p{
+  max-width:620px;
+  margin:24px 0 22px;
+  color:#aabfbc;
+  font-size:15px;
+  line-height:1.65;
+}
+html.tefsen-v2 .v3-profile-actions{
+  display:flex;gap:9px;flex-wrap:wrap;
+}
+html.tefsen-v2 .v3-profile-actions .btn{min-height:42px!important}
+html.tefsen-v2 .v3-profile-path{
+  min-height:310px;
+  padding:26px;
+  display:grid;
+  align-content:start;
+  gap:15px;
+}
+html.tefsen-v2 .v3-profile-path-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+html.tefsen-v2 .v3-private-chip{
+  padding:5px 9px;
+  border-radius:999px;
+  background:rgba(81,226,212,.07);
+  border:1px solid rgba(81,226,212,.13);
+  color:#a5ded8;
+  font-size:10px;
+  font-weight:800;
+}
+html.tefsen-v2 .v3-profile-path h2{
+  margin:2px 0 6px;
+  font-size:clamp(20px,2.4vw,27px);
+  line-height:1.25;
+  letter-spacing:-.035em;
+}
+html.tefsen-v2 .v3-profile-path.public p{
+  margin:0;
+  color:var(--v3-muted);
+  line-height:1.6;
+}
+html.tefsen-v2 .v3-profile-path-row{
+  display:grid;gap:7px;
+}
+html.tefsen-v2 .v3-profile-path-row>div:first-child{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  color:var(--v3-muted);font-size:12px;
+}
+html.tefsen-v2 .v3-profile-path-row strong{color:var(--v3-accent);font-size:14px}
+html.tefsen-v2 .v3-profile-path-grid{
+  display:grid;grid-template-columns:1fr;gap:8px;margin-top:4px;
+}
+html.tefsen-v2 .v3-profile-path-grid button{
+  width:100%;
+  min-height:66px;
+  padding:11px;
+  display:grid;
+  grid-template-columns:38px 1fr;
+  gap:11px;
+  align-items:center;
+  text-align:left;
+  color:inherit;
+  border:1px solid transparent;
+  border-radius:14px;
+  background:rgba(255,255,255,.018);
+  cursor:pointer;
+}
+html.tefsen-v2 .v3-profile-path-grid button:hover{
+  border-color:var(--v3-line-strong);
+  background:rgba(255,255,255,.03);
+}
+html.tefsen-v2 .v3-profile-path-grid button>span{
+  width:36px;height:36px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(81,226,212,.075);color:var(--v3-accent);
+}
+html.tefsen-v2 .v3-profile-path-grid b,
+html.tefsen-v2 .v3-profile-path-grid small{display:block}
+html.tefsen-v2 .v3-profile-path-grid b{font-size:13px}
+html.tefsen-v2 .v3-profile-path-grid small{margin-top:2px;color:#78928f;font-size:11px}
+html.tefsen-v2 .v3-profile-metrics{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  padding:8px;
+  border:1px solid var(--v3-line);
+  border-radius:18px;
+  background:rgba(7,28,31,.8);
+}
+html.tefsen-v2 .v3-profile-metrics.compact{grid-template-columns:repeat(3,minmax(0,1fr))}
+html.tefsen-v2 .v3-profile-metrics>div{
+  min-height:78px;
+  padding:12px 15px;
+  display:grid;
+  align-content:center;
+  border-radius:13px;
+  background:rgba(255,255,255,.015);
+}
+html.tefsen-v2 .v3-profile-metrics strong{
+  font-size:22px;
+  letter-spacing:-.04em;
+}
+html.tefsen-v2 .v3-profile-metrics span{
+  margin-top:3px;
+  color:#829b98;
+  font-size:11px;
+}
+html.tefsen-v2 .v3-profile-activity{
+  display:grid;gap:13px;margin-top:5px;
+}
+html.tefsen-v2 .v3-section-head{
+  display:flex;align-items:end;justify-content:space-between;gap:16px;
+  padding:8px 2px 2px;
+}
+html.tefsen-v2 .v3-section-head h2{
+  margin:4px 0 0;
+  font-size:24px;
+  letter-spacing:-.035em;
+}
+html.tefsen-v2 .v3-section-head p{
+  margin:5px 0 0;
+  color:var(--v3-muted);
+  font-size:13px;
+}
+html.tefsen-v2 .v3-empty-profile{
+  min-height:230px;
+  padding:34px;
+  display:grid;
+  justify-items:center;
+  align-content:center;
+  text-align:center;
+  border:1px dashed rgba(177,222,217,.16);
+  border-radius:20px;
+  background:rgba(7,28,31,.6);
+}
+html.tefsen-v2 .v3-empty-icon{
+  width:52px;height:52px;border-radius:16px;display:grid;place-items:center;
+  background:rgba(81,226,212,.075);color:var(--v3-accent);
+}
+html.tefsen-v2 .v3-empty-profile h3{
+  margin:15px 0 6px;font-size:18px;
+}
+html.tefsen-v2 .v3-empty-profile p{
+  max-width:600px;margin:0;color:var(--v3-muted);line-height:1.55;
+}
+html.tefsen-v2 .v3-empty-actions{
+  display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:18px;
+}
+
+/* ---------- opportunities ---------- */
+html.tefsen-v2 .opportunity-hero{
+  grid-template-columns:minmax(0,1.5fr) minmax(240px,.5fr)!important;
+  gap:14px!important;
+}
+html.tefsen-v2 .opportunity-hero-card{
+  min-height:265px;
+  padding:30px!important;
+  border:1px solid var(--v3-line)!important;
+  border-radius:24px!important;
+  background:
+    radial-gradient(circle at 88% 5%,rgba(81,226,212,.12),transparent 18rem),
+    linear-gradient(145deg,#0a2a2f,#071d20)!important;
+}
+html.tefsen-v2 .opportunity-hero-card h1{
+  max-width:750px;
+  margin:.45rem 0 .7rem!important;
+  font-size:clamp(32px,4.2vw,52px)!important;
+  line-height:1.02!important;
+  letter-spacing:-.055em!important;
+}
+html.tefsen-v2 .opportunity-stat-card{
+  border:1px solid var(--v3-line)!important;
+  border-radius:24px!important;
+  background:linear-gradient(180deg,#0a2529,#071d20)!important;
+}
+html.tefsen-v2 .opportunity-stat-card strong{font-size:36px!important;letter-spacing:-.05em}
+html.tefsen-v2 .opportunity-grid{gap:12px!important}
+html.tefsen-v2 .opportunity-card{
+  min-height:240px;
+  padding:20px!important;
+  border-radius:18px!important;
+  transition:border-color .18s ease,transform .18s ease,background .18s ease;
+}
+html.tefsen-v2 .opportunity-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(81,226,212,.28)!important;
+  background:linear-gradient(180deg,#0b292d,#081f22)!important;
+}
+html.tefsen-v2 .opportunity-card h3{font-size:17px!important;letter-spacing:-.025em}
+html.tefsen-v2 .opportunity-card p{color:#8fa8a5!important}
+
+/* ---------- Student Passport ---------- */
+html.tefsen-v2 .passport-page{gap:14px!important}
+html.tefsen-v2 .passport-hero{
+  min-height:240px;
+  padding:30px!important;
+  border-radius:24px!important;
+  background:
+    radial-gradient(circle at 82% 12%,rgba(84,200,232,.10),transparent 18rem),
+    linear-gradient(145deg,#0a292d,#071d20)!important;
+}
+html.tefsen-v2 .passport-hero h1{
+  margin:.35rem 0 .6rem!important;
+  font-size:clamp(32px,4vw,48px)!important;
+  letter-spacing:-.05em!important;
+}
+html.tefsen-v2 .passport-progress{
+  border-left:1px solid var(--v3-line)!important;
+}
+html.tefsen-v2 .passport-progress strong{
+  color:var(--v3-accent);
+  font-size:42px!important;
+  letter-spacing:-.05em;
+}
+html.tefsen-v2 .passport-private-note{
+  border-radius:15px!important;
+  background:rgba(81,226,212,.045)!important;
+  border:1px solid rgba(81,226,212,.11)!important;
+}
+html.tefsen-v2 .passport-form-section{
+  padding:26px!important;
+  border-radius:20px!important;
+}
+html.tefsen-v2 .passport-doc{
+  min-height:50px!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.015)!important;
+  border-color:var(--v3-line)!important;
+}
+
+/* ---------- Journey ---------- */
+html.tefsen-v2 .journey-page{gap:14px!important}
+html.tefsen-v2 .journey-overview{gap:10px!important}
+html.tefsen-v2 .journey-overview>article{
+  border-radius:20px!important;
+  border-color:var(--v3-line)!important;
+  background:linear-gradient(180deg,#0a2529,#071d20)!important;
+}
+html.tefsen-v2 .journey-overview>article:first-child{
+  background:
+    radial-gradient(circle at 92% 0,rgba(81,226,212,.10),transparent 15rem),
+    linear-gradient(145deg,#0a292d,#071d20)!important;
+}
+html.tefsen-v2 .journey-overview h1{
+  font-size:clamp(30px,3.8vw,46px)!important;
+  letter-spacing:-.05em!important;
+}
+html.tefsen-v2 .journey-stat strong{
+  color:var(--v3-accent);
+  font-size:32px!important;
+}
+html.tefsen-v2 .journey-card{
+  padding:18px 20px!important;
+  border-radius:16px!important;
+  border-color:var(--v3-line)!important;
+  background:linear-gradient(180deg,#092327,#071c1f)!important;
+}
+html.tefsen-v2 .journey-panel{
+  border-radius:20px!important;
+  padding:22px!important;
+}
+html.tefsen-v2 .journey-stage-pill{
+  border-color:var(--v3-line)!important;
+  background:rgba(255,255,255,.012)!important;
+}
+html.tefsen-v2 .journey-stage-pill.current{
+  color:var(--v3-accent)!important;
+  border-color:rgba(81,226,212,.24)!important;
+  background:rgba(81,226,212,.06)!important;
+}
+
+/* ---------- Community ---------- */
+html.tefsen-v2 .community-hub{gap:16px!important}
+html.tefsen-v2 .community-hero{
+  min-height:245px;
+  padding:30px!important;
+  border-radius:24px!important;
+  border-color:var(--v3-line)!important;
+  background:
+    radial-gradient(circle at 84% 5%,rgba(84,200,232,.09),transparent 18rem),
+    linear-gradient(145deg,#0a292d,#071d20)!important;
+}
+html.tefsen-v2 .community-hero h1{
+  max-width:780px;
+  font-size:clamp(32px,4.2vw,50px)!important;
+  letter-spacing:-.052em!important;
+  line-height:1.03!important;
+}
+html.tefsen-v2 .community-grid{gap:10px!important}
+html.tefsen-v2 .community-card{
+  min-height:158px;
+  padding:18px!important;
+  border-radius:16px!important;
+}
+html.tefsen-v2 .community-card:hover{
+  border-color:rgba(81,226,212,.24)!important;
+  background:linear-gradient(180deg,#0b292d,#081f22)!important;
+}
+
+/* ---------- posts and empty states ---------- */
+html.tefsen-v2 .post-card{
+  padding:19px!important;
+  border-radius:18px!important;
+  background:linear-gradient(180deg,#092327,#071c1f)!important;
+  border:1px solid var(--v3-line)!important;
+  box-shadow:none!important;
+}
+html.tefsen-v2 .post-body h3{
+  font-size:19px!important;
+  color:#eef9f7!important;
+}
+html.tefsen-v2 .post-body p{color:#9fb5b2!important;line-height:1.6!important}
+html.tefsen-v2 .post-actions{border-color:var(--v3-line)!important}
+html.tefsen-v2 .action-btn{color:#819a97!important}
+html.tefsen-v2 .action-btn:hover{background:rgba(255,255,255,.025)!important;color:#cbdcda!important}
+html.tefsen-v2 .empty-state{
+  min-height:220px;
+  padding:38px!important;
+  border:1px dashed rgba(177,222,217,.15);
+  border-radius:19px!important;
+  background:rgba(7,28,31,.58);
+}
+html.tefsen-v2 .empty-state .empty-icon{
+  background:rgba(81,226,212,.075)!important;
+  color:var(--v3-accent)!important;
+}
+
+/* ---------- modals ---------- */
+html.tefsen-v2 .modal{
+  background:#071c20!important;
+  border:1px solid var(--v3-line-strong)!important;
+  border-radius:22px!important;
+  box-shadow:0 28px 90px rgba(0,0,0,.42)!important;
+}
+html.tefsen-v2 .modal-head{
+  background:rgba(7,28,32,.94)!important;
+  border-color:var(--v3-line)!important;
+}
+html.tefsen-v2 .close-btn{background:#0c2a2e!important;color:#c6d8d6!important}
+
+/* ---------- responsive ---------- */
+@media(max-width:1180px){
+  html.tefsen-v2{--right:0px}
+  html.tefsen-v2 .rightbar{display:none!important}
+  html.tefsen-v2 .main-area{padding-right:0!important}
+  html.tefsen-v2 .content-wrap.wide{width:min(100%,1080px)!important}
+}
+@media(max-width:900px){
+  html.tefsen-v2 .v3-profile-shell{grid-template-columns:1fr}
+  html.tefsen-v2 .v3-profile-identity,
+  html.tefsen-v2 .v3-profile-path{min-height:auto}
+  html.tefsen-v2 .v3-profile-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  html.tefsen-v2{--left:0px}
+  html.tefsen-v2 .content-wrap{padding:18px 14px 96px!important}
+  html.tefsen-v2 .v3-profile-identity{
+    grid-template-columns:78px minmax(0,1fr);
+    gap:16px;
+    padding:20px;
+  }
+  html.tefsen-v2 .v3-profile-avatar{width:76px;height:76px;border-radius:23px}
+  html.tefsen-v2 .v3-profile-avatar .avatar.lg{
+    width:70px!important;height:70px!important;border-radius:20px!important;
+  }
+  html.tefsen-v2 .v3-profile-name-row{display:block}
+  html.tefsen-v2 .v3-profile-name-row .role-pill{margin-top:9px}
+  html.tefsen-v2 .v3-profile-name-row h1{font-size:29px}
+  html.tefsen-v2 .v3-profile-copy>p{margin:17px 0}
+  html.tefsen-v2 .v3-profile-actions{grid-column:1/-1}
+  html.tefsen-v2 .v3-profile-actions .btn{flex:1 1 160px}
+  html.tefsen-v2 .v3-profile-path{padding:20px}
+  html.tefsen-v2 .v3-profile-metrics{grid-template-columns:1fr 1fr}
+  html.tefsen-v2 .v3-profile-metrics>div{min-height:68px}
+  html.tefsen-v2 .v3-section-head{align-items:flex-start}
+  html.tefsen-v2 .opportunity-hero{grid-template-columns:1fr!important}
+  html.tefsen-v2 .passport-hero{grid-template-columns:1fr!important}
+  html.tefsen-v2 .passport-progress{border-left:0!important;border-top:1px solid var(--v3-line)!important;padding-top:18px}
+}
