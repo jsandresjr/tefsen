@@ -12,13 +12,14 @@ import { getOpportunities, getOpportunityById } from './services/opportunity-ser
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
-  listJourneyStates, getJourneyState, setOpportunitySaved, startJourney,
+  listJourneyStates, getJourneyState, setOpportunitySaved, removeSavedOpportunity, startJourney,
   updateJourneyStage, updateJourneyPlanning, toggleJourneyTask,
   addCustomJourneyTask, deleteCustomJourneyTask, journeyProgress,
   allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
+import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -47,6 +48,8 @@ let currentProfileView = null;
 let currentStudentPassport = null;
 let passportOnboardingJustCompleted = false;
 let currentJourneyStates = new Map();
+let currentSavedWorkspace = null;
+let savedOpportunityCompareIds = new Set();
 const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
   query: '',
   country: 'all',
@@ -150,6 +153,8 @@ async function handleAuthChange(user) {
   reactionState = { saved: new Set(), liked: new Set() };
   currentStudentPassport = null;
   passportOnboardingJustCompleted = false;
+  currentSavedWorkspace = null;
+  savedOpportunityCompareIds = new Set();
   adminCapability = false;
   currentAdminOpportunities = [];
   adminPreviewRows = [];
