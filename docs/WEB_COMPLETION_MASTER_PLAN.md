@@ -58,4 +58,13 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - Product direction / V2 shell: complete
 - V3 global polish foundation: complete
 - Profile V4 + profile-photo management: complete
-- **Step 1: Opportunity catalogue bootstrap — in progress**
+- **Step 1: Opportunity catalogue bootstrap — complete on branch `tefsen-web-completion-01-opportunities`**
+- Firestore-empty dead end removed
+- 4 official-source starter opportunities added
+- starter records are clearly labelled and source-dated
+- dated starter records age out automatically
+- live Firestore catalogue remains primary when published records exist
+- starter detail pages resolve without relying on nonexistent Firestore documents
+- service-worker cache updated for the starter catalogue
+
+**Next: Step 2 — opportunity search, filters, sorting and closing-soon views**
