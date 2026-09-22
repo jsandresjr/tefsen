@@ -1184,21 +1184,21 @@ async function renderStudentPassport() {
 
 function eligibilityCheckMarkup(result) {
   const marks = { met:'✓', action:'!', not_met:'×', unknown:'?' };
-  const score = result.compatibility === null ? '—' : `${result.compatibility}%`;
-  return `<section class="opportunity-section">
-    <h2>Can I Apply?</h2>
-    <div class="eligibility-summary">
-      <div class="eligibility-score"><div><strong>${score}</strong><br><span style="color:var(--muted)">known criteria matched</span></div></div>
+  return `<div class="eligibility-compare-block">
+    <div class="eligibility-compare-summary">
       <div>
-        <h3 style="margin-top:0">${escapeHTML(result.summary)}</h3>
-        <p style="color:var(--muted);line-height:1.6">${escapeHTML(result.disclaimer)}</p>
-        <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
+        <b>${escapeHTML(result.summary)}</b>
+        <p>${escapeHTML(result.disclaimer)}</p>
       </div>
+      <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
     </div>
     <div class="eligibility-checks">
-      ${result.checks.map(item => `<div class="eligibility-check ${item.status}"><span class="eligibility-mark">${marks[item.status] || '?'}</span><div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div></div>`).join('')}
+      ${result.checks.map(item => `<div class="eligibility-check ${item.status}">
+        <span class="eligibility-mark">${marks[item.status] || '?'}</span>
+        <div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div>
+      </div>`).join('')}
     </div>
-  </section>`;
+  </div>`;
 }
 
 function opportunityAudienceLabel(item = {}) {
