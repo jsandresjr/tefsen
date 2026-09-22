@@ -9,6 +9,7 @@ on:
       - 'app/js/services/journey-service.js'
       - 'app/js/services/opportunity-service.js'
       - 'app/js/services/opportunity-admin-service.js'
+      - 'app/js/services/eligibility-engine.js'
   workflow_dispatch:
 
 permissions:
