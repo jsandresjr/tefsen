@@ -62,7 +62,7 @@ Status: **Implemented on `tefsen-web-v1` for structured matching and explainable
 
 ## Milestone 4 — Save, deadlines and application journey
 
-Planned:
+Status: **Implemented on `tefsen-web-journey-v1` (production journey security rules still required)**
 
 - Save opportunity
 - Personal status
