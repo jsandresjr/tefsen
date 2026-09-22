@@ -1140,18 +1140,18 @@ async function renderStudentPassport() {
           <h2>Academic direction</h2>
           <p>Use the information you know now. You can update it later.</p>
           <div class="passport-form-grid">
-            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="e.g. Sri Lanka"></div>
-            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="e.g. Sri Lankan"></div>
+            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="Enter your current country"></div>
+            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="Enter your nationality"></div>
             <div class="field"><label>Current education level</label><select class="select" name="currentEducationLevel">${passportSelectOptions(levels, passport.currentEducationLevel)}</select></div>
             <div class="field"><label>Target education level</label><select class="select" name="targetEducationLevel">${passportSelectOptions(levels, passport.targetEducationLevel)}</select></div>
             <div class="field"><label>Main field / subject</label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science"></div>
             <div class="field"><label>Current institution</label><input class="input" name="institution" value="${escapeHTML(passport.institution)}" maxlength="160" placeholder="University or school"></div>
             <div class="field"><label>GPA (optional)</label><input class="input" name="gpa" type="number" min="0" max="5" step="0.01" value="${passport.gpa ?? ''}" placeholder="e.g. 3.67"></div>
             <div class="field"><label>GPA scale</label><select class="select" name="gpaScale"><option value="4" ${Number(passport.gpaScale) === 4 ? 'selected' : ''}>4.0</option><option value="5" ${Number(passport.gpaScale) === 5 ? 'selected' : ''}>5.0</option></select></div>
-            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, USA"></div>
+            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, Canada"></div>
             <div class="field"><label>Funding preference</label><select class="select" name="fundingPreference">${passportSelectOptions(funding, passport.fundingPreference)}</select></div>
             <div class="field"><label>English-test status</label><select class="select" name="englishTestStatus">${passportSelectOptions(english, passport.englishTestStatus)}</select></div>
-            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="Sinhala, English"></div>
+            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="English, Spanish, Arabic"></div>
             <div class="field passport-field-wide"><label>Skills</label><input class="input" name="skills" value="${escapeHTML((passport.skills || []).join(', '))}" maxlength="600" placeholder="Python, UI design, research"></div>
             <div class="field passport-field-wide"><label>Study / career goal</label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What opportunity are you trying to reach?">${escapeHTML(passport.studyGoal)}</textarea></div>
           </div>
