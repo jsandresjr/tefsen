@@ -12,13 +12,14 @@ import { getOpportunities, getOpportunityById } from './services/opportunity-ser
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
-  listJourneyStates, getJourneyState, setOpportunitySaved, startJourney,
+  listJourneyStates, getJourneyState, setOpportunitySaved, removeSavedOpportunity, startJourney,
   updateJourneyStage, updateJourneyPlanning, toggleJourneyTask,
   addCustomJourneyTask, deleteCustomJourneyTask, journeyProgress,
   allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
+import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -47,6 +48,8 @@ let currentProfileView = null;
 let currentStudentPassport = null;
 let passportOnboardingJustCompleted = false;
 let currentJourneyStates = new Map();
+let currentSavedWorkspace = null;
+let savedOpportunityCompareIds = new Set();
 const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
   query: '',
   country: 'all',
@@ -150,6 +153,8 @@ async function handleAuthChange(user) {
   reactionState = { saved: new Set(), liked: new Set() };
   currentStudentPassport = null;
   passportOnboardingJustCompleted = false;
+  currentSavedWorkspace = null;
+  savedOpportunityCompareIds = new Set();
   adminCapability = false;
   currentAdminOpportunities = [];
   adminPreviewRows = [];
@@ -1940,6 +1945,225 @@ function formatHistoryTime(value) {
   return date.toLocaleString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
+function savedOpportunityCardMarkup(row) {
+  const journey = row.journey || {};
+  const item = row.opportunity || null;
+  const opportunityId = String(journey.opportunityId || item?.id || '');
+  const title = item?.title || 'Opportunity unavailable';
+  const provider = item?.provider || item?.university || 'The original opportunity is not currently public.';
+  const selected = savedOpportunityCompareIds.has(opportunityId);
+  const expired = row.deadline?.state === 'expired';
+  const source = safeUrl(item?.officialSourceUrl || '');
+
+  const matchView = item
+    ? opportunityMatchPresentation(scoreOpportunityMatch(currentStudentPassport || {}, item))
+    : { personalized:false, score:0, label:'Match unavailable', detail:'The opportunity record is not currently public.' };
+  const deadline = item
+    ? opportunityDeadlinePresentation(item)
+    : { tone:'unknown', label:'Deadline unavailable', detail:'The opportunity record is not currently public.' };
+  const trust = item
+    ? opportunityTrustPresentation(item)
+    : { tone:'unverified', label:'Source unavailable', detail:'Review this saved item before taking action.' };
+
+  return `<article class="saved-opportunity-card ${selected ? 'compare-selected' : ''} ${expired ? 'expired' : ''}" data-saved-card="${escapeHTML(opportunityId)}">
+    <div class="saved-opportunity-top">
+      <div class="saved-opportunity-type">
+        <span>${icon('bookmark',15)} SAVED FOR REVIEW</span>
+        ${expired ? '<b class="saved-expired-badge">Expired deadline</b>' : ''}
+      </div>
+      ${item ? `<button class="saved-compare-toggle ${selected ? 'active' : ''}" type="button" data-saved-compare="${escapeHTML(opportunityId)}" aria-pressed="${selected}" aria-label="${selected ? 'Remove from comparison' : 'Add to comparison'}">${icon('check',14)} <span>${selected ? 'Comparing' : 'Compare'}</span></button>` : ''}
+    </div>
+
+    <div class="saved-opportunity-heading">
+      <h3>${escapeHTML(title)}</h3>
+      <p>${escapeHTML(provider)}</p>
+    </div>
+
+    ${item ? `<div class="saved-opportunity-badges">
+      <span class="opportunity-funding-badge">${escapeHTML(item.fundingType || 'Funding not specified')}</span>
+      <span class="opportunity-location-badge">${escapeHTML(item.country || 'Multiple / global')}</span>
+      <span class="saved-study-level">${escapeHTML((item.studyLevels || []).slice(0,2).join(' · ') || 'Study level varies')}</span>
+    </div>` : ''}
+
+    <div class="saved-decision-signals">
+      <div class="saved-signal ${matchView.personalized ? 'match' : 'neutral'}">
+        <span>${icon('user',15)}</span>
+        <div><b>${escapeHTML(matchView.label)}</b><small>${escapeHTML(matchView.detail)}</small></div>
+      </div>
+      <div class="saved-signal deadline ${escapeHTML(deadline.tone)}">
+        <span>${icon('info',15)}</span>
+        <div><b>${escapeHTML(deadline.label)}</b><small>${escapeHTML(deadline.detail)}</small></div>
+      </div>
+    </div>
+
+    <div class="saved-trust-row">
+      <div class="saved-trust ${escapeHTML(trust.tone)}">
+        <span>${icon('check',14)}</span>
+        <div><b>${escapeHTML(trust.label)}</b><small>${escapeHTML(trust.detail)}</small></div>
+      </div>
+      ${source ? `<a href="${source}" target="_blank" rel="noopener noreferrer">Official source ↗</a>` : ''}
+    </div>
+
+    ${expired ? `<div class="saved-expired-note">${icon('info',15)}<span>The stored deadline has passed. Keep this only if you want to check whether the provider opens a new cycle; Tefsen will not assume recurrence.</span></div>` : ''}
+
+    <details class="saved-decision-note" ${journey.notes ? 'open' : ''}>
+      <summary><span>${icon('info',15)} Private decision note</span><small>${journey.notes ? 'Saved' : 'Optional'}</small></summary>
+      <form data-saved-note-form="${escapeHTML(opportunityId)}">
+        <textarea class="textarea" name="notes" maxlength="3000" placeholder="Why did you save this? What do you still need to verify?">${escapeHTML(journey.notes || '')}</textarea>
+        <div><small>Private to your account. This is not shared with the community.</small><button class="btn btn-secondary" type="submit">Save note</button></div>
+      </form>
+    </details>
+
+    <div class="saved-opportunity-actions">
+      ${item ? `<button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(opportunityId)}">Review details</button>` : '<span class="saved-unavailable">Opportunity details unavailable</span>'}
+      ${item && !expired ? `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(opportunityId)}">Start Journey</button>` : ''}
+      <button class="saved-remove-button" type="button" data-saved-remove="${escapeHTML(opportunityId)}" data-saved-title="${escapeHTML(title)}">Remove saved</button>
+    </div>
+  </article>`;
+}
+
+function savedComparisonPanelMarkup() {
+  const workspace = currentSavedWorkspace;
+  if (!workspace) return '';
+  const selectedRows = workspace.savedReview.filter(row => savedOpportunityCompareIds.has(String(row.journey?.opportunityId || '')));
+  if (!selectedRows.length) return '';
+
+  const comparison = buildSavedComparison(selectedRows);
+  return `<section class="saved-compare-panel">
+    <header>
+      <div>
+        <span class="opportunity-kicker">COMPARE SAVED OPPORTUNITIES</span>
+        <h2>${comparison.length} selected</h2>
+        <p>Compare structured facts side-by-side. Official provider pages remain authoritative.</p>
+      </div>
+      <button class="btn btn-ghost" type="button" data-saved-compare-clear>Clear comparison</button>
+    </header>
+    <div class="saved-compare-grid">
+      ${comparison.map(item => {
+        const deadline = opportunityDeadlinePresentation({
+          deadline:item.deadline,
+          deadlineNote:item.deadline ? '' : 'Deadline varies — check official source'
+        });
+        const source = safeUrl(item.officialSourceUrl || '');
+        return `<article class="saved-compare-column">
+          <div class="saved-compare-column-head">
+            <div><h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(item.provider)}</p></div>
+            <button type="button" data-saved-compare="${escapeHTML(item.id)}" aria-label="Remove ${escapeHTML(item.title)} from comparison">×</button>
+          </div>
+          <dl>
+            <div><dt>Funding</dt><dd>${escapeHTML(item.funding)}</dd></div>
+            <div><dt>Destination</dt><dd>${escapeHTML(item.country)}</dd></div>
+            <div><dt>Study level</dt><dd>${escapeHTML(item.studyLevel)}</dd></div>
+            <div><dt>Profile match</dt><dd>${item.profileScore > 0 ? `${item.profileScore}%` : 'Not personalized'}</dd></div>
+            <div><dt>Deadline</dt><dd class="${escapeHTML(deadline.tone)}">${escapeHTML(deadline.label)}</dd></div>
+            <div><dt>Source status</dt><dd>${escapeHTML(item.verificationStatus)}</dd></div>
+          </dl>
+          <div class="saved-compare-actions">
+            <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">Review details</button>
+            ${source ? `<a href="${source}" target="_blank" rel="noopener noreferrer">Official source ↗</a>` : ''}
+          </div>
+        </article>`;
+      }).join('')}
+      ${comparison.length < 3 ? `<article class="saved-compare-add"><div>${icon('plus',20)}</div><b>Add up to ${3-comparison.length} more</b><p>Choose Compare on another saved opportunity.</p></article>` : ''}
+    </div>
+  </section>`;
+}
+
+function syncSavedComparisonUI() {
+  document.querySelectorAll('[data-saved-compare]').forEach(button => {
+    const id = String(button.dataset.savedCompare || '');
+    const selected = savedOpportunityCompareIds.has(id);
+    button.classList.toggle('active', selected);
+    if (button.hasAttribute('aria-pressed')) button.setAttribute('aria-pressed', String(selected));
+    const label = button.querySelector('span');
+    if (label) label.textContent = selected ? 'Comparing' : 'Compare';
+  });
+  document.querySelectorAll('[data-saved-card]').forEach(card => {
+    card.classList.toggle('compare-selected', savedOpportunityCompareIds.has(String(card.dataset.savedCard || '')));
+  });
+  const tray = document.querySelector('[data-saved-compare-tray]');
+  if (tray) tray.innerHTML = savedComparisonPanelMarkup();
+  const count = document.querySelector('[data-saved-compare-count]');
+  if (count) count.textContent = String(savedOpportunityCompareIds.size);
+}
+
+function toggleSavedComparison(button) {
+  const id = String(button?.dataset?.savedCompare || '');
+  if (!id || !currentSavedWorkspace?.savedReview?.some(row => String(row.journey?.opportunityId || '') === id)) return;
+  if (savedOpportunityCompareIds.has(id)) savedOpportunityCompareIds.delete(id);
+  else {
+    if (savedOpportunityCompareIds.size >= 3) {
+      toast('Compare up to 3 saved opportunities at a time.', 'error');
+      return;
+    }
+    savedOpportunityCompareIds.add(id);
+  }
+  syncSavedComparisonUI();
+}
+
+function openSavedRemoveConfirm(button) {
+  const opportunityId = String(button?.dataset?.savedRemove || '');
+  if (!opportunityId) return;
+  const title = String(button.dataset.savedTitle || 'this opportunity');
+  const row = currentSavedWorkspace?.savedReview?.find(item => String(item.journey?.opportunityId || '') === opportunityId);
+  const hasNote = Boolean(String(row?.journey?.notes || '').trim());
+
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <section class="modal saved-remove-modal">
+      <header class="modal-head"><h2>Remove saved opportunity?</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header>
+      <div class="modal-body">
+        <p><b>${escapeHTML(title)}</b> will be removed from your saved review list.</p>
+        ${hasNote ? '<p class="saved-remove-warning">Your private decision note for this saved-only item will also be removed.</p>' : ''}
+        <p style="color:var(--muted)">This action is available only before the application Journey has started. Started Journey history is never deleted by this control.</p>
+        <div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-modal>Keep saved</button><button class="btn btn-danger" type="button" data-confirm-remove-saved="${escapeHTML(opportunityId)}">Remove saved</button></div>
+      </div>
+    </section>
+  </div>`;
+}
+
+async function confirmRemoveSaved(button) {
+  const opportunityId = String(button?.dataset?.confirmRemoveSaved || '');
+  if (!opportunityId) return;
+  await withButton(button, async () => {
+    try {
+      await removeSavedOpportunity(state.mode, state.user.uid, opportunityId);
+      currentJourneyStates.delete(opportunityId);
+      savedOpportunityCompareIds.delete(opportunityId);
+      modalRoot.innerHTML = '';
+      toast('Removed from saved opportunities.', 'success');
+      await renderJourneys();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleSavedDecisionNote(form) {
+  const opportunityId = String(form?.dataset?.savedNoteForm || '');
+  if (!opportunityId) return;
+  const journey = currentJourneyStates.get(opportunityId);
+  if (!journey) {
+    toast('Saved opportunity state is unavailable.', 'error');
+    return;
+  }
+  const notes = String(new FormData(form).get('notes') || '').trim();
+  const submit = form.querySelector('button[type="submit"]');
+
+  await withButton(submit, async () => {
+    try {
+      const updated = await updateJourneyPlanning(state.mode, state.user.uid, opportunityId, {
+        personalTargetDate: journey.personalTargetDate || '',
+        notes
+      });
+      currentJourneyStates.set(opportunityId, updated);
+      toast(notes ? 'Private decision note saved.' : 'Private decision note cleared.', 'success');
+      await renderJourneys();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
 function journeyCardMarkup(journey, opportunity) {
   const progress = journeyProgress(journey);
   const official = deadlineInfo(opportunity?.deadline || '');
@@ -1960,55 +2184,140 @@ function journeyCardMarkup(journey, opportunity) {
       </div>
     </div>
     ${journey.started
-      ? `<button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open journey</button>`
-      : `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(journey.opportunityId)}">Start journey</button>`}
+      ? `<button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open Journey</button>`
+      : `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(journey.opportunityId)}">Start Journey</button>`}
   </article>`;
 }
 
 async function renderJourneys() {
-  renderShell(`<header class="page-head"><div><h1>Your Journey</h1><p>Loading saved opportunities and application progress…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  renderShell(`<header class="page-head"><div><h1>Your Journey</h1><p>Loading saved decisions and application progress…</p></div></header><div class="loading-card"></div>`, { wide:true });
   try {
-    const [journeys, opportunities] = await Promise.all([
+    const [journeys, initialOpportunities, passport] = await Promise.all([
       listJourneyStates(state.mode, state.user.uid),
-      getOpportunities(state.mode).catch(() => [])
+      getOpportunities(state.mode).catch(() => []),
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid))
     ]);
-    currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
-    const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
-    const visibleJourneys = journeys.filter(row => row.saved || row.started);
-    visibleJourneys.sort((a, b) => {
-      const aInfo = deadlineInfo(opportunityMap.get(a.opportunityId)?.deadline || '');
-      const bInfo = deadlineInfo(opportunityMap.get(b.opportunityId)?.deadline || '');
-      const aDays = aInfo.valid && aInfo.daysRemaining >= 0 ? aInfo.daysRemaining : Number.POSITIVE_INFINITY;
-      const bDays = bInfo.valid && bInfo.daysRemaining >= 0 ? bInfo.daysRemaining : Number.POSITIVE_INFINITY;
-      return aDays - bDays;
-    });
-    const active = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
-    const saved = visibleJourneys.filter(row => row.saved).length;
-    const withDeadline = visibleJourneys
-      .map(row => ({ row, info: deadlineInfo(opportunityMap.get(row.opportunityId)?.deadline || '') }))
-      .filter(entry => entry.info.valid && entry.info.daysRemaining >= 0)
-      .sort((a,b) => a.info.daysRemaining - b.info.daysRemaining);
-    const nearest = withDeadline[0]?.info;
 
+    currentStudentPassport = passport;
+    currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
+
+    const opportunityMap = new Map(initialOpportunities.map(item => [item.id, item]));
+    const missingIds = [...new Set(journeys
+      .filter(row => row.saved || row.started)
+      .map(row => String(row.opportunityId || ''))
+      .filter(id => id && !opportunityMap.has(id)))].slice(0,25);
+
+    if (missingIds.length) {
+      const recovered = await Promise.all(missingIds.map(id => getOpportunityById(state.mode, id).catch(() => null)));
+      recovered.filter(Boolean).forEach(item => opportunityMap.set(item.id, item));
+    }
+
+    const opportunities = [...opportunityMap.values()];
+    const profileScores = new Map();
+    for (const item of opportunities) {
+      const view = opportunityMatchPresentation(scoreOpportunityMatch(passport, item));
+      profileScores.set(item.id, view.personalized ? view.score : 0);
+    }
+
+    const workspace = buildSavedOpportunityWorkspace({
+      journeys,
+      opportunities,
+      profileScores
+    });
+    currentSavedWorkspace = workspace;
+
+    const validSavedIds = new Set(workspace.savedReview.map(row => String(row.journey?.opportunityId || '')));
+    savedOpportunityCompareIds = new Set([...savedOpportunityCompareIds].filter(id => validSavedIds.has(id)));
+
+    const totalPersonal = workspace.counts.savedReview + workspace.counts.active + workspace.counts.completed;
     const content = `${demoBanner()}
-      <div class="journey-page">
-        <section class="journey-overview">
-          <article>
-            <span class="opportunity-kicker">PRIVATE APPLICATION WORKSPACE</span>
-            <h1>Keep your next step visible.</h1>
-            <p>Save opportunities, prepare required documents, set a personal target, and update your journey manually as your real application progresses.</p>
-          </article>
-          <article class="journey-stat"><strong>${active.length}</strong><span>active journeys</span></article>
-          <article class="journey-stat"><strong>${nearest ? nearest.daysRemaining : '—'}</strong><span>${nearest ? 'days to nearest official deadline' : 'no dated deadline yet'} · ${saved} saved</span></article>
+      <div class="journey-page saved-workspace-page">
+        <section class="saved-workspace-hero">
+          <div>
+            <span class="opportunity-kicker">PRIVATE DECISION & APPLICATION WORKSPACE</span>
+            <h1>Decide what is worth pursuing.</h1>
+            <p>Saving is for review. Starting a Journey means you are actively preparing. Tefsen keeps those two decisions separate so your workspace stays useful.</p>
+            <div class="saved-workspace-actions">
+              <button class="btn btn-primary" type="button" data-route="opportunities">Find opportunities</button>
+              <button class="btn btn-secondary" type="button" data-route="passport">Review Student Passport</button>
+            </div>
+          </div>
+          <div class="saved-workspace-stats">
+            <div><strong>${workspace.counts.savedReview || '—'}</strong><span>saved for review</span></div>
+            <div><strong>${workspace.counts.active || '—'}</strong><span>active applications</span></div>
+            <div><strong>${workspace.counts.closingSaved || '—'}</strong><span>saved closing within 30 days</span></div>
+          </div>
         </section>
-        <div class="passport-private-note"><span>${icon('info',18)}</span><div><b>Private by default.</b><br>Application stage, notes, targets and checklist status are not published to your Tefsen community profile.</div></div>
-        <header class="page-head"><div><h2 style="margin:0">Saved & active opportunities</h2><p>Official deadlines remain separate from your personal preparation target.</p></div><button class="btn btn-secondary" data-route="opportunities">Find opportunities</button></header>
-        <div class="journey-list">${visibleJourneys.length ? visibleJourneys.map(row => journeyCardMarkup(row, opportunityMap.get(row.opportunityId))).join('') : emptyState('bookmark','No journeys yet','Save an opportunity or start a journey from an opportunity page.')}</div>
+
+        <div class="passport-private-note"><span>${icon('info',18)}</span><div><b>Private by default.</b><br>Saved decisions, notes, application stages, targets and checklist status are not published to your Tefsen community profile.</div></div>
+
+        ${!totalPersonal ? `<section class="saved-workspace-empty-start">
+          <div>${icon('bookmark',25)}</div>
+          <h2>Your private opportunity workspace is empty.</h2>
+          <p>Explore the global catalogue, save opportunities worth a second look, and start a Journey only when you decide to prepare seriously.</p>
+          <button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button>
+        </section>` : ''}
+
+        <section class="saved-review-section">
+          <header class="saved-section-head">
+            <div>
+              <span class="opportunity-kicker">SAVED FOR REVIEW</span>
+              <h2>Compare before you commit.</h2>
+              <p>Saved opportunities have not started an application Journey yet. Review requirements, add a private note, compare up to three, then decide.</p>
+            </div>
+            <div class="saved-section-tools"><span><b data-saved-compare-count>${savedOpportunityCompareIds.size}</b>/3 comparing</span><button class="btn btn-ghost" type="button" data-route="opportunities">Add more</button></div>
+          </header>
+
+          <div data-saved-compare-tray>${savedComparisonPanelMarkup()}</div>
+
+          <div class="saved-opportunity-grid">
+            ${workspace.savedReview.length
+              ? workspace.savedReview.map(savedOpportunityCardMarkup).join('')
+              : `<section class="saved-section-empty">
+                  <div>${icon('bookmark',21)}</div>
+                  <h3>No opportunities waiting for review.</h3>
+                  <p>Save an opportunity from Discovery when you want to compare it before starting a Journey.</p>
+                  <button class="btn btn-secondary" type="button" data-route="opportunities">Browse opportunities</button>
+                </section>`}
+          </div>
+
+          ${workspace.counts.expiredSaved ? `<div class="saved-expired-summary">${icon('info',16)}<span>${workspace.counts.expiredSaved} saved opportunit${workspace.counts.expiredSaved === 1 ? 'y has' : 'ies have'} a passed stored deadline. They remain visible so you can verify a new cycle or remove them manually.</span></div>` : ''}
+        </section>
+
+        <section class="saved-active-foundation">
+          <header class="saved-section-head compact">
+            <div>
+              <span class="opportunity-kicker">ACTIVE APPLICATIONS</span>
+              <h2>Journeys you already started.</h2>
+              <p>These are no longer simple bookmarks. Stage, checklist, notes and deadlines stay in the private Journey workspace.</p>
+            </div>
+            <span class="saved-count-chip">${workspace.counts.active}</span>
+          </header>
+          <div class="journey-list">
+            ${workspace.active.length
+              ? workspace.active.map(row => journeyCardMarkup(row.journey, row.opportunity)).join('')
+              : `<section class="saved-section-empty compact"><h3>No active application Journey.</h3><p>When you start preparing a saved opportunity, it will move here automatically.</p></section>`}
+          </div>
+        </section>
+
+        ${workspace.completed.length ? `<section class="saved-completed-foundation">
+          <header class="saved-section-head compact">
+            <div>
+              <span class="opportunity-kicker">OUTCOMES</span>
+              <h2>Completed application decisions.</h2>
+              <p>Accepted, rejected and withdrawn Journeys stay separate from opportunities you are still deciding about.</p>
+            </div>
+            <span class="saved-count-chip">${workspace.counts.completed}</span>
+          </header>
+          <div class="journey-list">${workspace.completed.map(row => journeyCardMarkup(row.journey, row.opportunity)).join('')}</div>
+        </section>` : ''}
       </div>`;
+
     renderShell(content, { wide:true });
+    requestAnimationFrame(syncSavedComparisonUI);
   } catch (error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Journey unavailable','Secure journey access is not configured yet. Review Firestore rules before production use.')}`, { wide:true });
+    renderShell(`${demoBanner()}${emptyState('info','Journey unavailable','Secure Journey access is not configured yet. Review Firestore rules before production use.')}`, { wide:true });
   }
 }
 
@@ -2754,6 +3063,18 @@ async function handleClick(event) {
   if (adminReview) { await handleAdminReview(adminReview); return; }
   const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
   if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
+  const savedCompare = event.target.closest('[data-saved-compare]');
+  if (savedCompare) { toggleSavedComparison(savedCompare); return; }
+  if (event.target.closest('[data-saved-compare-clear]')) {
+    savedOpportunityCompareIds.clear();
+    syncSavedComparisonUI();
+    return;
+  }
+  const savedRemove = event.target.closest('[data-saved-remove]');
+  if (savedRemove) { openSavedRemoveConfirm(savedRemove); return; }
+  const confirmSavedRemove = event.target.closest('[data-confirm-remove-saved]');
+  if (confirmSavedRemove) { await confirmRemoveSaved(confirmSavedRemove); return; }
+
   const opportunityView = event.target.closest('[data-opportunity-view]');
   if (opportunityView) {
     opportunityDiscoveryFilters.view = opportunityView.dataset.opportunityView || 'all';
@@ -2841,6 +3162,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-success-story-form]')) { event.preventDefault(); await handleSuccessStorySubmit(form); return; }
   if (form.matches('[data-journey-story-form]')) { event.preventDefault(); await handleJourneyStorySubmit(form); return; }
   if (form.matches('[data-community-post-form]')) { event.preventDefault(); await handleCommunityPostSubmit(form); return; }
+  if (form.matches('[data-saved-note-form]')) { event.preventDefault(); await handleSavedDecisionNote(form); return; }
   if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
@@ -2979,8 +3301,14 @@ async function handleOpportunitySave(button) {
       const opportunity = await getOpportunityById(state.mode, opportunityId);
       if (!opportunity) throw new Error('Opportunity is not available.');
       const isSaved = button.dataset.opportunitySaved === 'true';
-      const journey = await setOpportunitySaved(state.mode, state.user.uid, opportunity, !isSaved);
-      if (journey) currentJourneyStates.set(opportunityId, journey);
+      if (isSaved) {
+        const journey = await removeSavedOpportunity(state.mode, state.user.uid, opportunityId);
+        if (journey) currentJourneyStates.set(opportunityId, journey);
+        else currentJourneyStates.delete(opportunityId);
+      } else {
+        const journey = await setOpportunitySaved(state.mode, state.user.uid, opportunity, true);
+        if (journey) currentJourneyStates.set(opportunityId, journey);
+      }
       toast(isSaved ? 'Removed from saved opportunities.' : 'Opportunity saved.', 'success');
       renderRoute();
     } catch (error) {
