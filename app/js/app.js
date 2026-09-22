@@ -214,10 +214,10 @@ function renderAuth(mode = 'login') {
       <section class="auth-art">
         <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
         <div class="auth-message">
-          <h1>Learn. Share.<br><span>Grow together.</span></h1>
-          <p>Your Tefsen community on the web — the same place for thoughtful questions, useful answers, student profiles and knowledge that moves between people.</p>
+          <h1>Find your path.<br><span>Build your future.</span></h1>
+          <p>Discover student opportunities, understand requirements, prepare your application journey, and learn from students moving toward similar goals.</p>
         </div>
-        <div class="auth-proof"><span>✓ Student focused</span><span>✓ Community powered</span><span>✓ Cross-platform ready</span></div>
+        <div class="auth-proof"><span>✓ Student focused</span><span>✓ Opportunity driven</span><span>✓ Private journey tools</span></div>
       </section>
       <section class="auth-panel">
         <div class="auth-card">
@@ -1290,7 +1290,9 @@ async function renderAdmin() {
       ${preview.length ? `<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" type="button" data-admin-import-confirm ${readyCount ? '' : 'disabled'}>Import ${readyCount} ready record${readyCount===1?'':'s'} as pending</button></div>` : ''}
     </section>`;
 
+    const appCheckConfigured = Boolean(window.TEFSEN_APPCHECK_SITE_KEY);
     const content = `${demoBanner()}<div class="admin-shell">
+      ${state.mode === 'firebase' && !appCheckConfigured ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check is not configured yet. Add the Web reCAPTCHA/App Check site key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
       <section class="admin-hero">
         <div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div>
         <div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div>
