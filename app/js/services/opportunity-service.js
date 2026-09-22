@@ -50,6 +50,7 @@ export async function getOpportunities(mode) {
   const q = query(
     collection(db, C.opportunities),
     where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
     limit(60)
   );
   const snap = await getDocs(q);

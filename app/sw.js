@@ -1,8 +1,8 @@
-const CACHE = 'tefsen-web-shell-v22-profile-social-redesign';
+const CACHE = 'tefsen-web-shell-v23-opportunity-launch';
 const SHELL = [
   './', './index.html',
-  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css', './css/social-cleanup.css', './css/profile-page-fix.css',
-  './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/reference-interface.js', './js/config/firebase-config.js',
+  './css/app.css', './css/android-parity.css', './css/web-polish.css', './css/reference-interface.css', './css/social-cleanup.css', './css/profile-page-fix.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css',
+  './js/app.js', './js/android-parity.js', './js/web-polish.js', './js/reference-interface.js', './js/config/firebase-config.js', './js/config/schema.js', './js/firebase-client.js', './js/store.js', './js/utils.js', './js/services/opportunity-service.js', './js/services/student-passport-service.js', './js/services/eligibility-engine.js', './js/services/journey-service.js', './js/services/deadline-engine.js', './js/services/community-service.js', './js/services/opportunity-admin-service.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
 
