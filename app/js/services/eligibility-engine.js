@@ -67,7 +67,7 @@ export function evaluateEligibility(passport = {}, opportunity = {}) {
   const minGpa = Number(opportunity.minGpa);
   if (!Number.isFinite(minGpa) || minGpa <= 0) {
     checks.push(check('gpa','Academic grade','unknown','No comparable structured GPA minimum is stored. Check the official grading requirement.'));
-  } else if (!Number.isFinite(Number(passport.gpa))) {
+  } else if (passport.gpa === null || passport.gpa === undefined || passport.gpa === '' || !Number.isFinite(Number(passport.gpa))) {
     checks.push(check('gpa','Academic grade','action','Add your GPA to Student Passport to compare this criterion.'));
   } else if (Number(passport.gpaScale || 4) !== Number(opportunity.gpaScale || 4)) {
     checks.push(check('gpa','Academic grade','unknown','Your GPA scale differs from the opportunity data, so Tefsen will not make an automatic pass/fail decision.'));
