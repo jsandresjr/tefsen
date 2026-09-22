@@ -274,7 +274,7 @@ function renderShell(content, options = {}) {
           ${navItems.filter(([id]) => ['home','opportunities','passport','journeys','explore'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
         </nav>
         <div class="nav-divider"></div>
-        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Explore opportunities</button></div>
+        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
         <nav class="nav-list">
           ${navItems.filter(([id]) => ['notifications','messages','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
@@ -1223,24 +1223,122 @@ async function renderProfile(userId = '') {
     profile = await getUserById(state.mode, userId).catch(() => null);
     profile = profile || state.leaderboard.find(u => u.uid === userId) || { uid:userId, fullName:'Tefsen User', role:'Student' };
   }
+
   currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
   const posts = state.posts.filter(p => postBelongsToUser(p, profile?.uid || ''));
-  let follow = { following: false, followersCount: Number(profile?.followersCount || 0), followingCount: Number(profile?.followingCount || 0) };
-  try { follow = await getFollowState(state.mode, state.user.uid, profile?.uid || ''); } catch { /* keep profile available */ }
+
+  let follow = {
+    following: false,
+    followersCount: Number(profile?.followersCount || 0),
+    followingCount: Number(profile?.followingCount || 0)
+  };
+  try {
+    follow = await getFollowState(state.mode, state.user.uid, profile?.uid || '');
+  } catch {
+    // Keep the public profile usable if follow state is temporarily unavailable.
+  }
+
+  let passport = null;
+  let journeys = [];
+  if (own) {
+    [passport, journeys] = await Promise.all([
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
+      listJourneyStates(state.mode, state.user.uid).catch(() => [])
+    ]);
+  }
+
+  const completeness = own ? studentPassportCompleteness(passport || {}) : 0;
+  const activeJourneys = own
+    ? journeys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status))
+    : [];
+  const savedOpportunities = own ? journeys.filter(row => row.saved).length : 0;
+  const goal = own
+    ? (passport?.studyGoal || (passport?.mainField
+        ? `${passport.targetEducationLevel || 'Study'} opportunity in ${passport.mainField}`
+        : 'Add your education goal to Student Passport'))
+    : '';
+
   const actions = own
-    ? `<button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit profile</button>`
-    : `<div class="profile-actions"><button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button><button class="btn btn-secondary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button></div>`;
-  const content = `${demoBanner()}<section class="panel" style="overflow:hidden">
-    <div class="profile-cover"></div>
-    <div class="profile-main">
-      <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${actions}</div></div>
-      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Building my education journey with Tefsen.')}</p>${rolePill(profile?.role || 'Student')}
-      <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(follow.followersCount)}</b>Followers</span><span><b>${formatCount(follow.followingCount)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
-    </div></section>
-    <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
-    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Share a useful community post or student outcome.':'This member has not published yet.')}</div>`;
-  renderShell(content);
+    ? `<div class="v3-profile-actions"><button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit public profile</button><button class="btn btn-primary" type="button" data-route="passport">Student Passport</button></div>`
+    : `<div class="v3-profile-actions"><button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button><button class="btn btn-secondary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button></div>`;
+
+  const stats = own
+    ? `<div class="v3-profile-metrics">
+        <div><strong>${completeness}%</strong><span>Passport ready</span></div>
+        <div><strong>${savedOpportunities}</strong><span>Saved opportunities</span></div>
+        <div><strong>${activeJourneys.length}</strong><span>Active journeys</span></div>
+        <div><strong>${posts.length}</strong><span>Community posts</span></div>
+      </div>`
+    : `<div class="v3-profile-metrics compact">
+        <div><strong>${formatCount(posts.length)}</strong><span>Posts</span></div>
+        <div><strong>${formatCount(follow.followersCount)}</strong><span>Followers</span></div>
+        <div><strong>${formatCount(follow.followingCount)}</strong><span>Following</span></div>
+      </div>`;
+
+  const pathPanel = own
+    ? `<aside class="v3-profile-path">
+        <div class="v3-profile-path-head"><span class="opportunity-kicker">PRIVATE TO YOU</span><span class="v3-private-chip">Student path</span></div>
+        <h2>${escapeHTML(goal)}</h2>
+        <div class="v3-profile-path-row">
+          <div><span>Student Passport</span><strong>${completeness}%</strong></div>
+          <div class="v2-progress-track"><i style="width:${completeness}%"></i></div>
+        </div>
+        <div class="v3-profile-path-grid">
+          <button type="button" data-route="opportunities"><span>${icon('compass',18)}</span><div><b>Find opportunities</b><small>See structured matches</small></div></button>
+          <button type="button" data-route="journeys"><span>${icon('check',18)}</span><div><b>Continue Journey</b><small>${activeJourneys.length ? `${activeJourneys.length} active application${activeJourneys.length===1?'':'s'}` : 'Start from a saved opportunity'}</small></div></button>
+        </div>
+      </aside>`
+    : `<aside class="v3-profile-path public">
+        <span class="opportunity-kicker">PUBLIC PROFILE</span>
+        <h2>Student community profile</h2>
+        <p>Public posts and shared outcomes appear here. Private Student Passport and application progress are never shown.</p>
+      </aside>`;
+
+  const activity = posts.length
+    ? posts.map(postCard).join('')
+    : `<section class="v3-empty-profile">
+        <div class="v3-empty-icon">${icon('comment',22)}</div>
+        <h3>${own ? 'Your community space is ready.' : 'No public posts yet.'}</h3>
+        <p>${own ? 'Share a useful discussion, scholarship success, or selected journey story when you have something that can help another student.' : 'This student has not shared any public community posts yet.'}</p>
+        ${own ? '<div class="v3-empty-actions"><button class="btn btn-primary" type="button" data-route="explore">Open Community</button><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></div>' : ''}
+      </section>`;
+
+  const content = `${demoBanner()}<div class="v3-profile-page">
+    <section class="v3-profile-shell">
+      <div class="v3-profile-identity">
+        <div class="v3-profile-avatar">${avatar(profile,'lg')}</div>
+        <div class="v3-profile-copy">
+          <div class="v3-profile-name-row">
+            <div>
+              <h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1>
+              <span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span>
+            </div>
+            ${rolePill(profile?.role || 'Student')}
+          </div>
+          <p>${escapeHTML(profile?.bio || 'Building my education journey with Tefsen.')}</p>
+          ${actions}
+        </div>
+      </div>
+      ${pathPanel}
+    </section>
+
+    ${stats}
+
+    <section class="v3-profile-activity">
+      <header class="v3-section-head">
+        <div>
+          <span class="opportunity-kicker">COMMUNITY</span>
+          <h2>${own ? 'Your public activity' : 'Public activity'}</h2>
+          <p>${own ? 'Discussions and outcomes you choose to share publicly.' : 'Public discussions and outcomes shared by this student.'}</p>
+        </div>
+        ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Community</button>' : ''}
+      </header>
+      <div class="feed-list">${activity}</div>
+    </section>
+  </div>`;
+
+  renderShell(content, { wide:true, right:false });
 }
 
 async function renderSubscription() {
