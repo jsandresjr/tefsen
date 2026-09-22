@@ -733,7 +733,12 @@ export async function searchAll(mode, term) {
 export async function updateUserProfile(mode, userId, data) {
   if (mode === 'demo') {
     const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
-    Object.assign(existing, data);
+    const { profileImageFile, ...profileFields } = data;
+    Object.assign(existing, profileFields);
+    if (profileImageFile instanceof File && profileImageFile.size) {
+      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
+      existing.photoURL = existing.profileImageUrl;
+    }
     return normalizeUser(existing, userId);
   }
 
