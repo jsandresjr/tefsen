@@ -84,7 +84,7 @@ Status: **Implemented on `tefsen-web-communities-v1` using explicit public post 
 
 ## Milestone 6 — Trust, admin and launch hardening
 
-Planned:
+Status: **Implemented on `tefsen-web-launch-v1`; production launch remains blocked by external Firebase configuration/tests listed in the launch checklist**
 
 - Verified/pending/stale opportunity states
 - Admin opportunity review
