@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (request.auth.token.admin == true
+          || request.auth.token.role == "ADMIN");
+    }
+
+    match /student_passports/{uid} {
+      allow read, create, update, delete: if isOwner(uid);
+    }
+
+    match /journeys/{uid}/opportunities/{opportunityId} {
+      allow read, create, update, delete: if isOwner(uid);
+    }
+
+    match /opportunities/{opportunityId} {
+      allow read: if isAdmin()
+        || (resource.data.status == "published"
+          && resource.data.visibility == "public");
+
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /opportunity_audit/{auditId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // This isolated test ruleset intentionally denies every legacy collection.
+    // It exists only to mechanically test the new Web V1 privacy/admin contract.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
