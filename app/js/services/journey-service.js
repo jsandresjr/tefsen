@@ -1,7 +1,7 @@
 import { db } from '../firebase-client.js';
 import { SCHEMA } from '../config/schema.js';
 import {
-  collection, doc, getDoc, getDocs, limit, serverTimestamp, setDoc
+  collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
 const C = SCHEMA.collections;
@@ -151,7 +151,7 @@ export async function listJourneyStates(mode, userId) {
       .sort((a, b) => Number(b.updatedAtMillis || 0) - Number(a.updatedAtMillis || 0));
   }
 
-  const snap = await getDocs(limit(journeyCollection(userId), 100));
+  const snap = await getDocs(query(journeyCollection(userId), limit(100)));
   return snap.docs.map(row => normalizeJourney(row.data(), row.id, userId));
 }
 
