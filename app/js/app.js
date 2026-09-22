@@ -147,6 +147,8 @@ async function handleAuthChange(user) {
   stopComments?.(); stopComments = null;
   stopMessages?.(); stopMessages = null;
   reactionState = { saved: new Set(), liked: new Set() };
+  currentStudentPassport = null;
+  passportOnboardingJustCompleted = false;
   adminCapability = false;
   currentAdminOpportunities = [];
   adminPreviewRows = [];
@@ -2454,7 +2456,15 @@ async function handleClick(event) {
     catch (error) { toast(humanError(error), 'error'); }
     return;
   }
-  if (routeEl) { event.preventDefault(); state.ui.profileMenu = false; document.documentElement.classList.remove('profile-menu-open'); document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove()); go(routeEl.dataset.route); return; }
+  if (routeEl) {
+    event.preventDefault();
+    if (passportOnboardingJustCompleted && routeEl.dataset.route !== 'passport') passportOnboardingJustCompleted = false;
+    state.ui.profileMenu = false;
+    document.documentElement.classList.remove('profile-menu-open');
+    document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
+    go(routeEl.dataset.route);
+    return;
+  }
   const switchEl = event.target.closest('[data-auth-switch]');
   if (switchEl) { renderAuth(switchEl.dataset.authSwitch); return; }
   if (event.target.closest('[data-google]')) { await withButton(event.target.closest('[data-google]'), () => signInGoogle(state.mode).catch(e=>toast(humanError(e),'error'))); return; }
