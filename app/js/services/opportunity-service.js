@@ -1,6 +1,7 @@
 import { db } from '../firebase-client.js';
 import { SCHEMA } from '../config/schema.js';
 import { DEMO_OPPORTUNITIES } from './opportunity-demo-data.js';
+import { STARTER_OPPORTUNITIES } from './opportunity-starter-data.js';
 import {
   collection, doc, getDoc, getDocs, limit, query, where
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
@@ -34,9 +35,13 @@ export function normalizeOpportunity(raw = {}, id = '') {
     minGpa: raw.minGpa === '' || raw.minGpa === null || raw.minGpa === undefined ? null : Number(raw.minGpa),
     gpaScale: Number(raw.gpaScale || 4),
     deadline: raw.deadline || raw.applicationDeadline || '',
+    deadlineNote: String(raw.deadlineNote || ''),
     applicationOpen: raw.applicationOpen !== false && raw.status !== 'closed' && raw.status !== 'archived',
     verificationStatus: String(raw.verificationStatus || 'unverified').toLowerCase(),
     lastVerifiedAt: raw.lastVerifiedAt || null,
+    sourceCheckedAt: raw.sourceCheckedAt || raw.lastVerifiedAt || null,
+    catalogSource: String(raw.catalogSource || 'firestore').toLowerCase(),
+    sourceNote: String(raw.sourceNote || ''),
     summary: String(raw.summary || raw.description || ''),
     officialSourceUrl: String(raw.officialSourceUrl || raw.sourceUrl || raw.officialUrl || ''),
     status: String(raw.status || 'published').toLowerCase(),
@@ -54,9 +59,13 @@ export async function getOpportunities(mode) {
     limit(60)
   );
   const snap = await getDocs(q);
-  return snap.docs
+  const live = snap.docs
     .map(row => normalizeOpportunity(row.data(), row.id))
     .filter(item => item.visibility === 'public');
+
+  if (live.length) return live;
+
+  return STARTER_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
 }
 
 export async function getOpportunityById(mode, opportunityId) {
@@ -69,8 +78,12 @@ export async function getOpportunityById(mode, opportunityId) {
   }
 
   const snap = await getDoc(doc(db, C.opportunities, id));
-  if (!snap.exists()) return null;
-  const item = normalizeOpportunity(snap.data(), snap.id);
-  if (item.status !== 'published' || item.visibility !== 'public') return null;
-  return item;
+  if (snap.exists()) {
+    const item = normalizeOpportunity(snap.data(), snap.id);
+    if (item.status !== 'published' || item.visibility !== 'public') return null;
+    return item;
+  }
+
+  const starter = STARTER_OPPORTUNITIES.find(item => item.id === id);
+  return starter ? normalizeOpportunity(starter, starter.id) : null;
 }
