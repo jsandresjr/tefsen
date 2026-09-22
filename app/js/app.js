@@ -9,6 +9,8 @@ import {
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
 import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
+import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, emptyStudentPassport } from './services/student-passport-service.js';
+import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
@@ -25,6 +27,7 @@ let currentComments = [];
 let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
 let currentProfileView = null;
+let currentStudentPassport = null;
 let settingsTab = 'profile';
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
@@ -36,6 +39,7 @@ let likeHydrationRun = 0;
 const navItems = [
   ['home', 'Home', 'home'],
   ['opportunities', 'Opportunities', 'compass'],
+  ['passport', 'Student Passport', 'user'],
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
   ['messages', 'Messages', 'message'],
@@ -411,7 +415,7 @@ function opportunityDateLabel(value) {
   return `Deadline ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
 }
 
-function opportunityCard(item) {
+function opportunityCard(item, match = null) {
   const preview = item.verificationStatus === 'preview';
   const chips = [
     item.opportunityType,
@@ -424,7 +428,10 @@ function opportunityCard(item) {
         <div class="opportunity-meta">${chips.map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}</div>
         <h3 style="margin-top:12px">${escapeHTML(item.title)}</h3>
       </div>
-      <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${match && match.score > 0 ? `<span class="opportunity-chip match-badge">${match.score}% match</span>` : ''}
+        <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
+      </div>
     </div>
     <p>${escapeHTML(item.summary || 'Open this opportunity to review the available details and requirements.')}</p>
     <div class="opportunity-meta">
@@ -440,8 +447,16 @@ function opportunityCard(item) {
 async function renderOpportunities() {
   renderShell(`<header class="page-head"><div><h1>Opportunities</h1><p>Finding opportunities that fit your education journey…</p></div></header><div class="loading-card"></div>`, { wide:true });
   try {
-    const items = await getOpportunities(state.mode);
-    const fundedCount = items.filter(item => /funded/i.test(item.fundingType || '')).length;
+    const [rawItems, passport] = await Promise.all([
+      getOpportunities(state.mode),
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid))
+    ]);
+    currentStudentPassport = passport;
+    const completeness = studentPassportCompleteness(passport);
+    const items = rawItems
+      .map(item => ({ item, match: scoreOpportunityMatch(passport, item) }))
+      .sort((a, b) => b.match.score - a.match.score);
+    const fundedCount = rawItems.filter(item => /funded/i.test(item.fundingType || '')).length;
     const content = `${demoBanner()}
       <section class="opportunity-hero">
         <div class="opportunity-hero-card">
@@ -451,12 +466,16 @@ async function renderOpportunities() {
         </div>
         <div class="opportunity-stat-card">
           <span>Available now</span>
-          <strong>${items.length}</strong>
+          <strong>${rawItems.length}</strong>
           <span>${fundedCount} funded opportunities in this view</span>
         </div>
       </section>
       <header class="page-head"><div><h2 style="margin:0">Discover opportunities</h2><p>Open a listing to review funding, subjects, requirements and source status.</p></div></header>
-      <div class="opportunity-grid">${items.length ? items.map(opportunityCard).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
+      <div class="passport-private-note" style="margin-bottom:16px">
+        <span>${icon('user',18)}</span>
+        <div><b>${completeness ? `Personalized using your Student Passport · ${completeness}% complete` : 'Complete your Student Passport for personalized matching'}</b><br><span>${completeness ? 'Matches are rule-based and explainable; they are not admission guarantees.' : 'Add your study level, field, nationality and funding preference to improve opportunity ranking.'}</span> <button class="btn btn-ghost" style="margin-left:8px;min-height:34px" type="button" data-route="passport">Open Passport</button></div>
+      </div>
+      <div class="opportunity-grid">${items.length ? items.map(({item,match}) => opportunityCard(item, match)).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
     renderShell(content, { wide:true });
   } catch (error) {
     console.error(error);
@@ -464,10 +483,111 @@ async function renderOpportunities() {
   }
 }
 
+
+function passportSelectOptions(values, current = '', placeholder = 'Choose one') {
+  return `<option value="">${escapeHTML(placeholder)}</option>${values.map(value => `<option value="${escapeHTML(value)}" ${String(value) === String(current) ? 'selected' : ''}>${escapeHTML(value)}</option>`).join('')}`;
+}
+
+function checked(value) { return value ? 'checked' : ''; }
+
+async function renderStudentPassport() {
+  renderShell(`<header class="page-head"><div><h1>Student Passport</h1><p>Preparing your private opportunity profile…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  try {
+    const passport = await getStudentPassport(state.mode, state.user.uid);
+    currentStudentPassport = passport;
+    const completeness = studentPassportCompleteness(passport);
+    const levels = ['Secondary school','Diploma','Undergraduate','Master','Doctorate','Other'];
+    const funding = ['Fully funded only','Fully or partially funded','Any funding','Undecided'];
+    const english = ['Not started','Planning a test','Test booked','Test completed','Waiver / other evidence','Not sure'];
+    const docs = passport.documentsReady || {};
+
+    const content = `${demoBanner()}
+      <div class="passport-page">
+        <section class="passport-hero">
+          <div>
+            <span class="opportunity-kicker">PRIVATE OPPORTUNITY PROFILE</span>
+            <h1>Build your Student Passport.</h1>
+            <p>Tefsen uses this information to compare structured scholarship and program requirements. It is separate from your public community profile and is private by design.</p>
+          </div>
+          <div class="passport-progress"><div><strong>${completeness}%</strong><br><span>profile complete</span></div></div>
+        </section>
+
+        <div class="passport-private-note">
+          <span>${icon('info',18)}</span>
+          <div><b>Private by default.</b><br>Your nationality, GPA, preparation status and goals should not appear on your public Tefsen profile unless you explicitly choose to share something in a future feature.</div>
+        </div>
+
+        <form class="panel passport-form-section" data-student-passport-form>
+          <h2>Academic direction</h2>
+          <p>Use the information you know now. You can update it later.</p>
+          <div class="passport-form-grid">
+            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="e.g. Sri Lanka"></div>
+            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="e.g. Sri Lankan"></div>
+            <div class="field"><label>Current education level</label><select class="select" name="currentEducationLevel">${passportSelectOptions(levels, passport.currentEducationLevel)}</select></div>
+            <div class="field"><label>Target education level</label><select class="select" name="targetEducationLevel">${passportSelectOptions(levels, passport.targetEducationLevel)}</select></div>
+            <div class="field"><label>Main field / subject</label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science"></div>
+            <div class="field"><label>Current institution</label><input class="input" name="institution" value="${escapeHTML(passport.institution)}" maxlength="160" placeholder="University or school"></div>
+            <div class="field"><label>GPA (optional)</label><input class="input" name="gpa" type="number" min="0" max="5" step="0.01" value="${passport.gpa ?? ''}" placeholder="e.g. 3.67"></div>
+            <div class="field"><label>GPA scale</label><select class="select" name="gpaScale"><option value="4" ${Number(passport.gpaScale) === 4 ? 'selected' : ''}>4.0</option><option value="5" ${Number(passport.gpaScale) === 5 ? 'selected' : ''}>5.0</option></select></div>
+            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, USA"></div>
+            <div class="field"><label>Funding preference</label><select class="select" name="fundingPreference">${passportSelectOptions(funding, passport.fundingPreference)}</select></div>
+            <div class="field"><label>English-test status</label><select class="select" name="englishTestStatus">${passportSelectOptions(english, passport.englishTestStatus)}</select></div>
+            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="Sinhala, English"></div>
+            <div class="field passport-field-wide"><label>Skills</label><input class="input" name="skills" value="${escapeHTML((passport.skills || []).join(', '))}" maxlength="600" placeholder="Python, UI design, research"></div>
+            <div class="field passport-field-wide"><label>Study / career goal</label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What opportunity are you trying to reach?">${escapeHTML(passport.studyGoal)}</textarea></div>
+          </div>
+
+          <div class="opportunity-section">
+            <h2>Document readiness</h2>
+            <p style="color:var(--muted)">Tefsen stores readiness status only here. Do not upload sensitive documents in this milestone.</p>
+            <div class="passport-doc-grid">
+              <label class="passport-doc"><input type="checkbox" name="docPassport" ${checked(docs.passport)}> Passport ready</label>
+              <label class="passport-doc"><input type="checkbox" name="docTranscript" ${checked(docs.transcript)}> Academic transcript ready</label>
+              <label class="passport-doc"><input type="checkbox" name="docEnglish" ${checked(docs.englishCertificate)}> English certificate ready</label>
+              <label class="passport-doc"><input type="checkbox" name="docRecommendation" ${checked(docs.recommendationLetter)}> Recommendation letter ready</label>
+              <label class="passport-doc"><input type="checkbox" name="docCv" ${checked(docs.cv)}> CV / resume ready</label>
+              <label class="passport-doc"><input type="checkbox" name="docStatement" ${checked(docs.personalStatement)}> Personal statement ready</label>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px">
+            <button class="btn btn-secondary" type="button" data-route="opportunities">View opportunities</button>
+            <button class="btn btn-primary" type="submit">Save Student Passport</button>
+          </div>
+        </form>
+      </div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Student Passport unavailable','Secure Student Passport access is not configured yet. Review Firestore rules before production use.')}`, { wide:true });
+  }
+}
+
+function eligibilityCheckMarkup(result) {
+  const marks = { met:'✓', action:'!', not_met:'×', unknown:'?' };
+  const score = result.compatibility === null ? '—' : `${result.compatibility}%`;
+  return `<section class="opportunity-section">
+    <h2>Can I Apply?</h2>
+    <div class="eligibility-summary">
+      <div class="eligibility-score"><div><strong>${score}</strong><br><span style="color:var(--muted)">known criteria matched</span></div></div>
+      <div>
+        <h3 style="margin-top:0">${escapeHTML(result.summary)}</h3>
+        <p style="color:var(--muted);line-height:1.6">${escapeHTML(result.disclaimer)}</p>
+        <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
+      </div>
+    </div>
+    <div class="eligibility-checks">
+      ${result.checks.map(item => `<div class="eligibility-check ${item.status}"><span class="eligibility-mark">${marks[item.status] || '?'}</span><div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div></div>`).join('')}
+    </div>
+  </section>`;
+}
+
 async function renderOpportunityDetail(opportunityId) {
   renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button><div class="loading-card" style="margin-top:14px"></div>`, { wide:true });
   try {
     const item = await getOpportunityById(state.mode, opportunityId);
+    const passport = await getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid));
+    currentStudentPassport = passport;
     if (!item) {
       renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Opportunity not found','This listing may be unavailable, private, expired, or not yet published.')}`, { wide:true });
       return;
@@ -475,6 +595,7 @@ async function renderOpportunityDetail(opportunityId) {
 
     const source = safeUrl(item.officialSourceUrl || '');
     const preview = item.verificationStatus === 'preview';
+    const eligibility = evaluateEligibility(passport, item);
     const list = (values, fallback) => values?.length
       ? `<ul class="opportunity-list">${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul>`
       : `<p style="color:var(--muted)">${escapeHTML(fallback)}</p>`;
@@ -508,6 +629,7 @@ async function renderOpportunityDetail(opportunityId) {
             <h2>Required documents</h2>
             ${list(item.requiredDocuments, 'Required-document information has not been added yet.')}
           </section>
+          ${eligibilityCheckMarkup(eligibility)}
         </article>
 
         <aside class="opportunity-detail-card">
@@ -786,6 +908,7 @@ function renderRoute() {
   switch (route || 'home') {
     case 'home': renderHome(); break;
     case 'opportunities': renderOpportunities(); break;
+    case 'passport': renderStudentPassport(); break;
     case 'opportunity': renderOpportunityDetail(param || ''); break;
     case 'explore': renderExplore(); break;
     case 'saved': renderHome('saved'); break;
@@ -917,6 +1040,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
   if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
+  if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
   if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
 }
 
@@ -1080,6 +1204,45 @@ async function handleProfileSave(form) {
   const fd=new FormData(form), submit=form.querySelector('button[type="submit"]');
   await withButton(submit,async()=>{ try { const profile=await updateUserProfile(state.mode,state.user.uid,{fullName:String(fd.get('fullName')||'').trim(),username:String(fd.get('username')||'').trim(),bio:String(fd.get('bio')||'').trim()}); state.profile={...state.profile,...profile}; modalRoot.innerHTML=''; toast('Profile updated','success'); renderRoute(); }catch(e){toast(humanError(e),'error');} });
 }
+async function handleStudentPassportSave(form) {
+  const fd = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  const csv = name => String(fd.get(name) || '').split(',').map(item => item.trim()).filter(Boolean);
+  const input = {
+    currentCountry: String(fd.get('currentCountry') || '').trim(),
+    nationality: String(fd.get('nationality') || '').trim(),
+    currentEducationLevel: String(fd.get('currentEducationLevel') || '').trim(),
+    targetEducationLevel: String(fd.get('targetEducationLevel') || '').trim(),
+    mainField: String(fd.get('mainField') || '').trim(),
+    institution: String(fd.get('institution') || '').trim(),
+    gpa: fd.get('gpa') === '' ? null : Number(fd.get('gpa')),
+    gpaScale: Number(fd.get('gpaScale') || 4),
+    preferredCountries: csv('preferredCountries'),
+    fundingPreference: String(fd.get('fundingPreference') || '').trim(),
+    englishTestStatus: String(fd.get('englishTestStatus') || '').trim(),
+    languages: csv('languages'),
+    skills: csv('skills'),
+    studyGoal: String(fd.get('studyGoal') || '').trim(),
+    documentsReady: {
+      passport: fd.get('docPassport') === 'on',
+      transcript: fd.get('docTranscript') === 'on',
+      englishCertificate: fd.get('docEnglish') === 'on',
+      recommendationLetter: fd.get('docRecommendation') === 'on',
+      cv: fd.get('docCv') === 'on',
+      personalStatement: fd.get('docStatement') === 'on'
+    }
+  };
+  await withButton(submit, async () => {
+    try {
+      currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, input);
+      toast('Student Passport saved.', 'success');
+      await renderStudentPassport();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
 async function handleReport(form) {
   const fd=new FormData(form); try { await reportPost(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Report submitted. Thank you.','success'); } catch(e){toast(humanError(e),'error');}
 }
