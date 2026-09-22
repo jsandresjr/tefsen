@@ -813,7 +813,6 @@ export async function removeProfilePhoto(mode, userId) {
   await setDoc(userRef, {
     profileImageUrl: '',
     photoURL: '',
-    photoUrl: '',
     updatedAt: serverTimestamp()
   }, { merge: true });
 
