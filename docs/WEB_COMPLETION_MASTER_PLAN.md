@@ -166,4 +166,22 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - deterministic Passport quality tests added
 - service-worker cache bumped for the editor redesign
 
-**Next: Step 8 — Home dashboard next-action logic and empty/new-user state**
+**Step 8: Home dashboard next-action logic and empty/new-user state — complete on branch `tefsen-web-completion-08-home-next-actions`**
+- Home now uses a deterministic next-action model instead of Passport-completeness gating
+- action priority: urgent saved deadline → accepted next-stage planning → active Journey → incomplete Passport essentials → saved opportunity review → strongest profile match → global discovery
+- terminal application outcomes do not surface stale original application deadlines
+- multiple active Journeys use one consistent priority Journey across the primary action and Journey panel
+- new/empty students get a three-step getting-started experience instead of a zero-heavy dashboard
+- saved-but-not-started opportunities route back through opportunity review before Journey start
+- Home cards show profile-based match only when meaningful; no source-verification bonus is presented as profile fit
+- accepted students get a dedicated next-stage state
+- dashboard explains why the recommended next action was chosen
+- KPI strip uses softer empty states instead of emphasizing zeros
+- opportunity discovery remains available even before full Passport completion
+- global-first copy remains country-neutral
+- responsive desktop/tablet/mobile Home redesign added
+- deterministic Home next-action tests added
+- CI now runs when the Home dashboard service changes
+- service-worker cache bumped for the new Home experience
+
+**Next: Step 9 — Saved opportunities experience**
