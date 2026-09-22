@@ -155,3 +155,90 @@ Additional recommended tests:
 2. a public journey story serializes only explicitly entered public milestones
 3. community aggregation reads only public posts and published/public opportunities
 4. deleting a public post removes it from subject/university/intake aggregation without touching private Journey data
+
+
+## Admin authorization and opportunity verification
+
+The web admin interface must **not** rely on the public/private user profile role as its security boundary.
+
+Production admin access should be granted by a Firebase Auth custom claim created from a trusted server/Admin SDK environment, for example one of:
+
+- `admin: true`
+- `role: "ADMIN"`
+
+The client checks the ID-token claim before showing admin tools, but Firestore rules remain the authoritative boundary.
+
+Conceptual helper:
+
+```text
+function isAdmin() {
+  return request.auth != null
+    && (request.auth.token.admin == true
+        || request.auth.token.role == "ADMIN");
+}
+```
+
+Conceptual opportunity rules to merge into the existing production ruleset:
+
+```text
+match /opportunities/{opportunityId} {
+  allow read:
+    if resource.data.status == "published"
+       && resource.data.visibility == "public";
+
+  allow create, update, delete:
+    if isAdmin();
+}
+
+match /opportunity_audit/{auditId} {
+  allow read, create:
+    if isAdmin();
+
+  allow update, delete:
+    if false;
+}
+```
+
+Do not copy this fragment over the entire production rules file. Merge it with existing Tefsen rules and emulator-test all old and new flows.
+
+### Verification rules
+
+A verified opportunity must have:
+
+- a valid official/provider source URL
+- `verificationStatus == "verified"`
+- `status == "published"`
+- `visibility == "public"`
+- a recent `lastVerifiedAt` timestamp
+
+Normal users must never be able to modify:
+
+- verification status
+- publication status
+- visibility
+- last verified date
+- admin/audit fields
+
+Imports always enter as:
+
+- `verificationStatus = "pending"`
+- `status = "draft"`
+- `visibility = "private"`
+
+The client enforces this as a safety layer; Firestore rules must still enforce the privileged write boundary.
+
+## App Check launch requirement
+
+The current Web client supports Firebase App Check with a reCAPTCHA v3 site key through `TEFSEN_APPCHECK_SITE_KEY`.
+
+At the time of the V1 hardening pass, that value is still empty in the repository configuration.
+
+Before enforcement:
+
+1. register/configure the Tefsen Web app in Firebase App Check
+2. add the correct public site key to Web configuration
+3. deploy without enforcement first
+4. confirm valid production requests in Firebase App Check metrics
+5. enable enforcement service-by-service only after validation
+
+Do not place server secrets, service-account JSON, or private keys in the web repository.
