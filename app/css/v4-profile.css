@@ -1,0 +1,368 @@
+/* Tefsen Web Profile V4
+ * A softer, more personal profile surface with direct photo controls.
+ * Loaded after V3.
+ */
+
+html.tefsen-v2 .v3-profile-page{
+  width:min(100%,1040px);
+  gap:24px;
+}
+
+html.tefsen-v2 .v3-profile-shell{
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);
+  gap:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:32px;
+  background:
+    radial-gradient(circle at 14% 8%,rgba(81,226,212,.11),transparent 22rem),
+    radial-gradient(circle at 92% 94%,rgba(84,200,232,.08),transparent 20rem),
+    linear-gradient(145deg,#092529,#06191c 72%);
+  box-shadow:0 28px 76px rgba(0,0,0,.22);
+}
+html.tefsen-v2 .v3-profile-shell::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(110deg,rgba(255,255,255,.018),transparent 32%);
+}
+
+html.tefsen-v2 .v3-profile-identity{
+  position:relative;
+  z-index:1;
+  min-height:318px!important;
+  padding:42px 40px!important;
+  display:grid!important;
+  grid-template-columns:132px minmax(0,1fr)!important;
+  gap:30px!important;
+  align-items:center!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+html.tefsen-v2 .v3-profile-identity::after{display:none!important}
+
+html.tefsen-v2 .v4-profile-photo-wrap{
+  display:grid;
+  justify-items:center;
+  align-content:center;
+  gap:12px;
+}
+html.tefsen-v2 .v4-profile-photo-button{
+  position:relative;
+  width:124px;
+  height:124px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+}
+html.tefsen-v2 .v3-profile-avatar{
+  width:124px!important;
+  height:124px!important;
+  padding:3px!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:50%!important;
+  background:linear-gradient(145deg,#7ff1e7,#59cfe2 62%,#90e7b1)!important;
+  box-shadow:0 20px 52px rgba(0,0,0,.27)!important;
+}
+html.tefsen-v2 .v3-profile-avatar .avatar.lg{
+  width:118px!important;
+  height:118px!important;
+  min-width:118px!important;
+  min-height:118px!important;
+  border:4px solid #082125!important;
+  border-radius:50%!important;
+  background:#0a292d!important;
+}
+html.tefsen-v2 .v3-profile-avatar .avatar.lg img{
+  border-radius:50%!important;
+}
+html.tefsen-v2 .v4-profile-photo-badge{
+  position:absolute;
+  right:1px;
+  bottom:5px;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:#e9fffc;
+  color:#073337;
+  border:4px solid #082125;
+  box-shadow:0 8px 18px rgba(0,0,0,.24);
+}
+html.tefsen-v2 .v4-profile-photo-button:hover .v3-profile-avatar{
+  filter:brightness(1.07);
+}
+html.tefsen-v2 .v4-profile-photo-actions{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:wrap;
+}
+html.tefsen-v2 .v4-profile-photo-actions button{
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#9fd9d3;
+  font-size:11px;
+  font-weight:760;
+  cursor:pointer;
+}
+html.tefsen-v2 .v4-profile-photo-actions button:hover{color:#e5fbf8}
+html.tefsen-v2 .v4-profile-photo-actions button.danger{color:#d6969d}
+html.tefsen-v2 .v4-profile-photo-actions button.danger:hover{color:#ffadb6}
+
+html.tefsen-v2 .v3-profile-copy{
+  padding:0!important;
+  align-self:center;
+}
+html.tefsen-v2 .v3-profile-name-row{
+  align-items:center!important;
+}
+html.tefsen-v2 .v3-profile-name-row h1{
+  margin:0 0 7px!important;
+  font-size:clamp(34px,4.4vw,50px)!important;
+  line-height:.98!important;
+  letter-spacing:-.057em!important;
+}
+html.tefsen-v2 .v3-profile-name-row .handle{
+  color:#91aaa7!important;
+  font-size:14px!important;
+}
+html.tefsen-v2 .v3-profile-name-row .role-pill{
+  align-self:flex-start;
+  margin-top:3px;
+  opacity:.76;
+}
+html.tefsen-v2 .v3-profile-copy>p{
+  max-width:610px!important;
+  margin:25px 0 22px!important;
+  color:#b1c5c2!important;
+  font-size:15px!important;
+  line-height:1.68!important;
+}
+html.tefsen-v2 .v3-profile-actions .btn{
+  min-height:42px!important;
+  padding:0 15px!important;
+}
+
+/* Student path now feels integrated into the hero rather than a second frame. */
+html.tefsen-v2 .v3-profile-path{
+  position:relative;
+  z-index:1;
+  min-height:auto!important;
+  margin:18px 18px 18px 0!important;
+  padding:25px!important;
+  align-self:stretch;
+  border:1px solid rgba(177,222,217,.11)!important;
+  border-radius:24px!important;
+  background:rgba(4,24,27,.46)!important;
+  backdrop-filter:blur(12px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018)!important;
+}
+html.tefsen-v2 .v3-profile-path h2{
+  max-width:330px;
+  margin:8px 0 10px!important;
+  font-size:clamp(21px,2.4vw,29px)!important;
+}
+html.tefsen-v2 .v3-profile-path-grid button{
+  background:rgba(255,255,255,.018)!important;
+}
+html.tefsen-v2 .v3-profile-path-grid button:hover{
+  background:rgba(81,226,212,.035)!important;
+}
+
+/* Metrics are light-weight information, not another framed dashboard. */
+html.tefsen-v2 .v3-profile-metrics{
+  padding:2px 0!important;
+  gap:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+html.tefsen-v2 .v3-profile-metrics>div{
+  min-height:72px!important;
+  padding:12px 22px!important;
+  border-radius:0!important;
+  background:transparent!important;
+  border-left:1px solid var(--v3-line)!important;
+}
+html.tefsen-v2 .v3-profile-metrics>div:first-child{
+  border-left:0!important;
+  padding-left:2px!important;
+}
+html.tefsen-v2 .v3-profile-metrics strong{
+  font-size:24px!important;
+  color:#eefaf8;
+}
+html.tefsen-v2 .v3-profile-metrics span{
+  font-size:11px!important;
+  color:#7f9996!important;
+}
+
+/* Activity has more editorial breathing room. */
+html.tefsen-v2 .v3-profile-activity{
+  margin-top:8px!important;
+  gap:16px!important;
+}
+html.tefsen-v2 .v3-section-head{
+  padding:10px 0 0!important;
+  border-top:1px solid rgba(177,222,217,.08);
+}
+html.tefsen-v2 .v3-empty-profile{
+  min-height:210px!important;
+  border:0!important;
+  border-radius:22px!important;
+  background:
+    radial-gradient(circle at 50% 0,rgba(81,226,212,.035),transparent 14rem),
+    rgba(7,28,31,.34)!important;
+}
+
+/* ---------- profile photo editor ---------- */
+html.tefsen-v2 .v4-profile-modal{
+  width:min(100%,600px)!important;
+}
+html.tefsen-v2 .v4-photo-editor{
+  display:grid;
+  grid-template-columns:96px minmax(0,1fr);
+  gap:18px;
+  align-items:center;
+  padding:16px;
+  border-radius:18px;
+  background:rgba(81,226,212,.035);
+  border:1px solid rgba(81,226,212,.10);
+}
+html.tefsen-v2 .v4-photo-preview{
+  width:92px;
+  height:92px;
+  display:grid;
+  place-items:center;
+}
+html.tefsen-v2 .v4-photo-preview .avatar.lg,
+html.tefsen-v2 .v4-modal-avatar{
+  width:88px!important;
+  height:88px!important;
+  min-width:88px!important;
+  min-height:88px!important;
+  border-radius:50%!important;
+  border:3px solid rgba(81,226,212,.26)!important;
+}
+html.tefsen-v2 .v4-photo-preview img{border-radius:50%!important}
+html.tefsen-v2 .v4-photo-editor-copy b{
+  display:block;
+  font-size:14px;
+}
+html.tefsen-v2 .v4-photo-editor-copy p{
+  margin:5px 0 12px;
+  color:var(--v3-muted);
+  font-size:12px;
+  line-height:1.5;
+}
+html.tefsen-v2 .v4-photo-editor-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+html.tefsen-v2 .v4-remove-photo{color:#e5a4aa!important}
+html.tefsen-v2 .v4-profile-modal-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:9px;
+  flex-wrap:wrap;
+  margin-top:2px;
+}
+html.tefsen-v2 .v4-confirm-modal{
+  width:min(100%,460px)!important;
+}
+html.tefsen-v2 .v4-confirm-modal .modal-body{
+  text-align:center;
+}
+html.tefsen-v2 .v4-confirm-modal .modal-body p{
+  margin:16px auto 22px;
+  max-width:390px;
+  color:var(--v3-muted);
+  line-height:1.6;
+}
+html.tefsen-v2 .v4-remove-photo-preview{
+  display:grid;
+  place-items:center;
+  padding-top:5px;
+}
+html.tefsen-v2 .v4-remove-photo-preview .avatar.lg{
+  width:92px!important;
+  height:92px!important;
+  min-width:92px!important;
+  min-height:92px!important;
+  border-radius:50%!important;
+}
+html.tefsen-v2 .v4-remove-photo-preview img{border-radius:50%!important}
+
+/* ---------- mobile ---------- */
+@media(max-width:900px){
+  html.tefsen-v2 .v3-profile-shell{
+    grid-template-columns:1fr!important;
+  }
+  html.tefsen-v2 .v3-profile-path{
+    margin:0 18px 18px!important;
+  }
+}
+@media(max-width:680px){
+  html.tefsen-v2 .v3-profile-shell{
+    border-radius:26px;
+  }
+  html.tefsen-v2 .v3-profile-identity{
+    grid-template-columns:1fr!important;
+    gap:18px!important;
+    padding:26px 22px!important;
+    text-align:center;
+  }
+  html.tefsen-v2 .v4-profile-photo-wrap{justify-self:center}
+  html.tefsen-v2 .v3-profile-name-row{
+    display:grid!important;
+    justify-items:center;
+    gap:8px;
+  }
+  html.tefsen-v2 .v3-profile-copy>p{
+    margin:18px auto!important;
+  }
+  html.tefsen-v2 .v3-profile-actions{
+    justify-content:center;
+  }
+  html.tefsen-v2 .v3-profile-path{
+    margin:0 12px 12px!important;
+    padding:20px!important;
+  }
+  html.tefsen-v2 .v3-profile-metrics{
+    grid-template-columns:1fr 1fr!important;
+    gap:0!important;
+  }
+  html.tefsen-v2 .v3-profile-metrics>div{
+    border-left:0!important;
+    border-top:1px solid var(--v3-line)!important;
+    padding:14px 8px!important;
+    text-align:center;
+  }
+  html.tefsen-v2 .v3-profile-metrics>div:nth-child(1),
+  html.tefsen-v2 .v3-profile-metrics>div:nth-child(2){
+    border-top:0!important;
+  }
+  html.tefsen-v2 .v4-photo-editor{
+    grid-template-columns:1fr;
+    justify-items:center;
+    text-align:center;
+  }
+  html.tefsen-v2 .v4-photo-editor-actions{
+    justify-content:center;
+  }
+}

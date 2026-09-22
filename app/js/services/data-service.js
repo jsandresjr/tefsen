@@ -7,7 +7,7 @@ import {
   onSnapshot, query, where, limit, serverTimestamp,
   getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
 const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
@@ -733,7 +733,12 @@ export async function searchAll(mode, term) {
 export async function updateUserProfile(mode, userId, data) {
   if (mode === 'demo') {
     const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
-    Object.assign(existing, data);
+    const { profileImageFile, ...profileFields } = data;
+    Object.assign(existing, profileFields);
+    if (profileImageFile instanceof File && profileImageFile.size) {
+      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
+      existing.photoURL = existing.profileImageUrl;
+    }
     return normalizeUser(existing, userId);
   }
 
@@ -750,14 +755,16 @@ export async function updateUserProfile(mode, userId, data) {
   const role = normalizeRoleValue(current.role, email);
   let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
 
-  const photoInput = document.querySelector('[data-profile-form] input[name="profileImage"]');
-  const photoFile = photoInput?.files?.[0] || null;
+  const photoFile = data.profileImageFile instanceof File && data.profileImageFile.size
+    ? data.profileImageFile
+    : null;
   if (photoFile) {
-    if (!String(photoFile.type || '').startsWith('image/')) {
-      throw new Error('Profile photo must be an image.');
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(String(photoFile.type || '').toLowerCase())) {
+      throw new Error('Profile photo must be JPG, PNG or WebP.');
     }
-    if (photoFile.size >= 5 * 1024 * 1024) {
-      throw new Error('Profile photo must be smaller than 5 MB.');
+    if (photoFile.size > 5 * 1024 * 1024) {
+      throw new Error('Profile photo must be 5 MB or smaller.');
     }
     const objectRef = ref(storage, `profile_images/${userId}.jpg`);
     const upload = await uploadBytes(objectRef, photoFile, { contentType: photoFile.type });
@@ -785,6 +792,38 @@ export async function updateUserProfile(mode, userId, data) {
   await setDoc(userRef, payload, { merge: true });
   userProfileCache.delete(`${mode}:${userId}`);
   return normalizeUser({ ...current, ...payload }, userId);
+}
+
+export async function removeProfilePhoto(mode, userId) {
+  if (!userId) throw new Error('Missing user ID.');
+
+  if (mode === 'demo') {
+    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
+    if (existing) {
+      existing.profileImageUrl = '';
+      existing.photoURL = '';
+      existing.photoUrl = '';
+    }
+    return existing ? normalizeUser(existing, userId) : null;
+  }
+
+  const objectRef = ref(storage, `profile_images/${userId}.jpg`);
+  try {
+    await deleteObject(objectRef);
+  } catch (error) {
+    if (error?.code !== 'storage/object-not-found') throw error;
+  }
+
+  const userRef = doc(db, C.users, userId);
+  await setDoc(userRef, {
+    profileImageUrl: '',
+    photoURL: '',
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  userProfileCache.delete(`${mode}:${userId}`);
+  const snap = await getDoc(userRef);
+  return snap.exists() ? normalizeUser(snap.data(), userId) : null;
 }
 
 export async function reportPost(mode, userId, postId, reason, details = '') {
