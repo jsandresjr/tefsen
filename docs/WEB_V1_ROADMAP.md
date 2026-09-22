@@ -36,7 +36,7 @@ Status: **Implemented on `tefsen-web-v1`**
 
 ## Milestone 2 — Student Passport
 
-Planned:
+Status: **Implemented on `tefsen-web-v1` (production security-rule deployment still required)**
 
 - Extend existing user profile safely
 - Current country and nationality
@@ -52,7 +52,7 @@ Planned:
 
 ## Milestone 3 — Eligibility and matching
 
-Planned:
+Status: **Implemented on `tefsen-web-v1` for structured matching and explainable eligibility checks**
 
 - Rule-based "Can I Apply?" checks
 - Explainable matches and gaps

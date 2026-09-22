@@ -16,6 +16,10 @@ export const DEMO_OPPORTUNITIES = [
     summary: 'Illustrative opportunity used to preview Tefsen scholarship discovery. This is not a real scholarship listing.',
     benefits: ['Tuition support', 'Living support', 'Travel support'],
     requirements: ['Relevant academic background', 'Academic transcript', 'Personal statement'],
+    requiredDocuments: ['Passport', 'Academic transcript', 'Personal statement', 'Recommendation letter'],
+    languageRequirements: ['English proficiency evidence may be required'],
+    minGpa: 3.0,
+    gpaScale: 4,
     officialSourceUrl: ''
   },
   {
@@ -35,6 +39,8 @@ export const DEMO_OPPORTUNITIES = [
     summary: 'Illustrative research opportunity for testing the Tefsen opportunity experience.',
     benefits: ['Research mentorship', 'Project support'],
     requirements: ['Current undergraduate enrollment', 'CV', 'Academic transcript'],
+    requiredDocuments: ['CV', 'Academic transcript'],
+    languageRequirements: ['English proficiency may be reviewed by the provider'],
     officialSourceUrl: ''
   },
   {
@@ -54,6 +60,7 @@ export const DEMO_OPPORTUNITIES = [
     summary: 'Illustrative exchange listing. Real opportunities will always link to the official provider source.',
     benefits: ['Partial tuition support', 'Orientation support'],
     requirements: ['Current university enrollment', 'Academic transcript'],
+    requiredDocuments: ['Passport', 'Academic transcript'],
     officialSourceUrl: ''
   }
 ];

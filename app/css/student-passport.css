@@ -1,0 +1,56 @@
+.passport-page { display:grid; gap:16px; }
+.passport-hero {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 220px;
+  gap:18px;
+  padding:26px;
+  border:1px solid var(--border);
+  border-radius:24px;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(30,194,255,.14), transparent 40%),
+    var(--panel);
+}
+.passport-hero h1 { margin:.35rem 0 .55rem; }
+.passport-hero p { margin:0; color:var(--muted); line-height:1.6; }
+.passport-progress { display:grid; place-items:center; text-align:center; border-left:1px solid var(--border); }
+.passport-progress strong { font-size:2.6rem; }
+.passport-progress span { color:var(--muted); font-size:.82rem; }
+.passport-form-section { padding:22px; }
+.passport-form-section h2 { margin:0 0 6px; }
+.passport-form-section > p { margin:0 0 18px; color:var(--muted); }
+.passport-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.passport-field-wide { grid-column:1 / -1; }
+.passport-doc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.passport-doc {
+  display:flex; align-items:center; gap:10px; min-height:46px; padding:10px 12px;
+  border:1px solid var(--border); border-radius:13px; background:rgba(255,255,255,.02);
+}
+.passport-private-note {
+  display:flex; gap:10px; align-items:flex-start; padding:14px; border-radius:14px;
+  background:rgba(30,194,255,.06); border:1px solid rgba(30,194,255,.14); color:var(--muted);
+}
+.eligibility-summary { display:grid; grid-template-columns:180px minmax(0,1fr); gap:18px; align-items:center; }
+.eligibility-score {
+  min-height:150px; display:grid; place-items:center; text-align:center;
+  border-radius:20px; border:1px solid var(--border); background:rgba(255,255,255,.025);
+}
+.eligibility-score strong { font-size:2.3rem; }
+.eligibility-checks { display:grid; gap:10px; margin-top:16px; }
+.eligibility-check {
+  display:grid; grid-template-columns:34px minmax(0,1fr); gap:10px; padding:13px;
+  border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.02);
+}
+.eligibility-mark { width:30px; height:30px; display:grid; place-items:center; border-radius:999px; font-weight:800; }
+.eligibility-check.met .eligibility-mark { background:rgba(61,214,140,.12); color:#79e6aa; }
+.eligibility-check.action .eligibility-mark { background:rgba(255,190,82,.12); color:#ffd078; }
+.eligibility-check.not_met .eligibility-mark { background:rgba(255,99,114,.12); color:#ff8793; }
+.eligibility-check.unknown .eligibility-mark { background:rgba(145,166,191,.12); color:#b8c7d8; }
+.eligibility-check b { display:block; margin-bottom:3px; }
+.eligibility-check p { margin:0; color:var(--muted); line-height:1.45; font-size:.9rem; }
+.match-badge { min-width:64px; text-align:center; }
+@media (max-width:800px) {
+  .passport-hero, .eligibility-summary { grid-template-columns:1fr; }
+  .passport-progress { border-left:0; border-top:1px solid var(--border); padding-top:18px; }
+  .passport-form-grid, .passport-doc-grid { grid-template-columns:1fr; }
+  .passport-field-wide { grid-column:auto; }
+}

@@ -10,6 +10,7 @@ export const SCHEMA = Object.freeze({
     conversations: 'conversations',
     reports: 'reports',
     opportunities: 'opportunities',
+    studentPassports: 'student_passports',
     journeys: 'journeys'
   },
   subcollections: {
