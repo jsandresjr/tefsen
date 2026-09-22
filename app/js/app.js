@@ -864,7 +864,7 @@ function opportunityMatchPresentation(match = null) {
   if (!reasons.length) {
     return {
       personalized:false,
-      score:null,
+      score:0,
       label:'Build your match',
       detail:'Complete Student Passport for a profile-based comparison.'
     };
@@ -877,11 +877,24 @@ function opportunityMatchPresentation(match = null) {
     'funding preference':'funding',
     'nationality':'nationality'
   };
+  const weights = {
+    'field of study':30,
+    'study level':25,
+    'preferred country':15,
+    'funding preference':15,
+    'nationality':10
+  };
+  const rawProfileScore = reasons.reduce((sum, reason) => sum + (weights[reason] || 0), 0);
+  const adjustedProfileScore = match?.eligibility?.hasBlockingMismatch
+    ? Math.max(0, rawProfileScore - 45)
+    : rawProfileScore;
+  const profileScore = Math.max(0, Math.min(100, Math.round((adjustedProfileScore / 95) * 100)));
   const readable = reasons.map(reason => reasonLabels[reason] || reason);
+
   return {
     personalized:true,
-    score:Number(match?.score || 0),
-    label:`${Number(match?.score || 0)}% profile match`,
+    score:profileScore,
+    label:`${profileScore}% profile match`,
     detail:`Matches ${readable.slice(0,3).join(' · ')}${readable.length > 3 ? ` +${readable.length - 3}` : ''}`
   };
 }
@@ -910,7 +923,7 @@ function opportunityCard(item, match = null, journey = null) {
     data-type="${escapeHTML(String(item.opportunityType || '').toLowerCase())}"
     data-deadline-days="${deadlineDays}"
     data-saved="${saved ? 'true' : 'false'}"
-    data-match="${Number(match?.score || 0)}"
+    data-match="${Number(matchView.score || 0)}"
     data-title="${escapeHTML(String(item.title || '').toLowerCase())}">
 
     <div class="opportunity-card-eyebrow">
@@ -983,8 +996,11 @@ async function renderOpportunities() {
 
     const completeness = studentPassportCompleteness(passport);
     const rankedItems = rawItems
-      .map(item => ({ item, match: scoreOpportunityMatch(passport, item), journey: currentJourneyStates.get(item.id) || null }))
-      .sort((a, b) => b.match.score - a.match.score);
+      .map(item => {
+        const match = scoreOpportunityMatch(passport, item);
+        return { item, match, profileMatch: opportunityMatchPresentation(match), journey: currentJourneyStates.get(item.id) || null };
+      })
+      .sort((a, b) => (b.profileMatch.score - a.profileMatch.score) || (b.match.score - a.match.score));
 
     const fundedCount = rawItems.filter(item => /funded|scholarship/i.test(item.fundingType || '')).length;
     const closingCount = rawItems.filter(item => {
