@@ -1,0 +1,13 @@
+{
+  "firestore": {
+    "rules": "firestore.web-v1.test.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8088
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
