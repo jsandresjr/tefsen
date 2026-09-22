@@ -324,7 +324,7 @@ function renderProfileDropdown() {
       <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
       <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
       <button type="button" data-route="explore" role="menuitem">${icon('compass',17)} <span>Community</span><small>Subjects, universities and outcomes</small></button>
-      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved community posts</span><small>Discussions and student stories you saved</small></button>
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
       <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
@@ -1235,11 +1235,11 @@ async function renderProfile(userId = '') {
     <div class="profile-cover"></div>
     <div class="profile-main">
       <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${actions}</div></div>
-      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
+      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Building my education journey with Tefsen.')}</p>${rolePill(profile?.role || 'Student')}
       <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(follow.followersCount)}</b>Followers</span><span><b>${formatCount(follow.followingCount)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
     </div></section>
     <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
-    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Ask your first question or share something useful.':'This member has not published yet.')}</div>`;
+    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Share a useful community post or student outcome.':'This member has not published yet.')}</div>`;
   renderShell(content);
 }
 
