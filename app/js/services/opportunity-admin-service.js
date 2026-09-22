@@ -45,7 +45,7 @@ export async function getAdminCapability(mode, user, profile = {}) {
   if (!user) return false;
   if (mode === 'demo') return String(profile?.role || '').toUpperCase() === 'ADMIN';
   try {
-    const token = await getIdTokenResult(user, true);
+    const token = await getIdTokenResult(user, false);
     const claims = token?.claims || {};
     return claims.admin === true || String(claims.role || '').toUpperCase() === 'ADMIN';
   } catch {
@@ -54,12 +54,22 @@ export async function getAdminCapability(mode, user, profile = {}) {
 }
 
 export function opportunityFreshness(opportunity = {}, now = new Date()) {
-  const deadline = opportunity.deadline ? new Date(opportunity.deadline) : null;
+  const rawDeadline = String(opportunity.deadline || '').trim();
+  let deadline = null;
+  const dateOnly = rawDeadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnly) {
+    deadline = new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])));
+  } else if (rawDeadline) {
+    const parsed = new Date(rawDeadline);
+    if (!Number.isNaN(parsed.getTime())) deadline = parsed;
+  }
   const verified = timestampToDate(opportunity.lastVerifiedAt);
   const nowMs = now.getTime();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
 
-  if (deadline && !Number.isNaN(deadline.getTime()) && deadline.getTime() < nowMs) {
-    return { state: 'expired', label: 'Expired', needsReview: true };
+  if (deadline) {
+    const deadlineDay = Date.UTC(deadline.getUTCFullYear(), deadline.getUTCMonth(), deadline.getUTCDate());
+    if (deadlineDay < todayUtc) return { state: 'expired', label: 'Expired', needsReview: true };
   }
 
   if (opportunity.verificationStatus === 'pending') {
@@ -222,7 +232,6 @@ export async function reviewOpportunity(mode, user, profile, opportunity, action
   if (action === 'verify' && !officialSourceUrl) throw new Error('Verified opportunities require a valid official source URL.');
 
   const update = {
-    ...patch,
     officialSourceUrl,
     updatedAt: serverTimestamp()
   };
