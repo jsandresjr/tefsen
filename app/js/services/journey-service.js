@@ -1,7 +1,7 @@
 import { db } from '../firebase-client.js';
 import { SCHEMA } from '../config/schema.js';
 import {
-  collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc
+  collection, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
 const C = SCHEMA.collections;
@@ -189,6 +189,31 @@ async function persistJourney(mode, userId, opportunityId, value) {
   return normalized;
 }
 
+export async function removeSavedOpportunity(mode, userId, opportunityId) {
+  const id = String(opportunityId || '').trim();
+  if (!userId || !id) return null;
+
+  const existing = await getJourneyState(mode, userId, id);
+  if (!existing) return null;
+
+  // Once an application Journey has started, removing a bookmark must never
+  // destroy stage history, notes, checklist progress or outcome data.
+  if (existing.started) {
+    existing.saved = false;
+    return persistJourney(mode, userId, id, existing);
+  }
+
+  if (mode === 'demo') {
+    const rows = readDemo(userId);
+    delete rows[id];
+    writeDemo(userId, rows);
+    return null;
+  }
+
+  await deleteDoc(journeyDoc(userId, id));
+  return null;
+}
+
 export async function setOpportunitySaved(mode, userId, opportunity, saved) {
   const opportunityId = String(opportunity?.id || '').trim();
   if (!opportunityId) throw new Error('Opportunity ID is missing.');
@@ -254,7 +279,7 @@ export async function updateJourneyStage(mode, userId, opportunityId, nextStatus
 
 export async function updateJourneyPlanning(mode, userId, opportunityId, { personalTargetDate = '', notes = '' } = {}) {
   const journey = await getJourneyState(mode, userId, opportunityId);
-  if (!journey) throw new Error('Start the journey before adding planning details.');
+  if (!journey) throw new Error('Save or start the opportunity before adding private planning details.');
   journey.personalTargetDate = clean(personalTargetDate, 20);
   journey.notes = clean(notes, 3000);
   return persistJourney(mode, userId, opportunityId, journey);

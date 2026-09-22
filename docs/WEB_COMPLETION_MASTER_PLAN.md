@@ -184,4 +184,25 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now runs when the Home dashboard service changes
 - service-worker cache bumped for the new Home experience
 
-**Next: Step 9 — Saved opportunities experience**
+**Step 9: Saved opportunities experience — complete on branch `tefsen-web-completion-09-saved-opportunities`**
+- saved-but-not-started opportunities now live in a dedicated decision workspace
+- active Journeys are separated from simple bookmarks
+- accepted / rejected / withdrawn outcomes are separated from both saved review and active applications
+- saved cards show funding, destination, study level, profile-match context, deadline state and source trust
+- saved deadlines sort by urgency while expired items remain visible for manual review
+- expired saved items are clearly marked and never assumed to recur automatically
+- students can compare up to 3 saved opportunities side-by-side
+- comparison includes funding, destination, study level, profile match, deadline and source status
+- private decision notes can be written before starting a Journey
+- private decision notes survive when a saved opportunity becomes an active Journey
+- saved-only records can be removed cleanly; started Journey history is never deleted by Remove saved
+- remove confirmation warns when a private decision note will also be deleted
+- unavailable/archived saved records remain removable even when the public opportunity record cannot be loaded
+- unsaving from Opportunity cards now uses the same safe cleanup behavior
+- owner-only Journey deletion is covered by Firestore rules tests
+- deterministic saved-workspace grouping/comparison tests added
+- CI now runs when the saved-workspace service changes
+- responsive desktop/tablet/mobile saved decision workspace added
+- service-worker cache bumped for the saved workspace
+
+**Next: Step 10 — Journey list experience and deadline priority**
