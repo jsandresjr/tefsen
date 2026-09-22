@@ -8,7 +8,9 @@ export const SCHEMA = Object.freeze({
     posts: 'posts',
     notifications: 'notifications',
     conversations: 'conversations',
-    reports: 'reports'
+    reports: 'reports',
+    opportunities: 'opportunities',
+    journeys: 'journeys'
   },
   subcollections: {
     comments: 'comments',
