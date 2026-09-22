@@ -223,7 +223,7 @@ function renderAuth(mode = 'login') {
         <div class="auth-card">
           ${state.mode === 'demo' ? `<div class="demo-banner"><span><b>Preview mode:</b> Firebase is not connected yet.</span><a href="#" data-demo-info>Setup</a></div>` : ''}
           <h2>${isRegister ? 'Create your account' : 'Welcome back'}</h2>
-          <p>${isRegister ? 'Join a community built around useful knowledge.' : 'Sign in to continue to Tefsen Web.'}</p>
+          <p>${isRegister ? 'Build your Student Passport and start finding opportunities that fit your goals.' : 'Sign in to continue to Tefsen Web.'}</p>
           <form class="form-grid" data-auth-form="${isRegister ? 'register' : 'login'}">
             ${isRegister ? `<div class="field"><label for="fullName">Full name</label><input class="input" id="fullName" name="fullName" autocomplete="name" required maxlength="80"></div>` : ''}
             <div class="field"><label for="email">Email</label><input class="input" id="email" name="email" type="email" autocomplete="email" required></div>
@@ -258,7 +258,7 @@ function renderShell(content, options = {}) {
           <form class="global-search" data-global-search-form>
             <span class="mobile-top-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></span>
             <span class="search-icon">${icon('search',18)}</span>
-            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search questions, people, subjects…" aria-label="Search Tefsen">
+            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen">
             <span class="search-kbd">Ctrl K</span>
           </form>
         </div>
@@ -271,12 +271,12 @@ function renderShell(content, options = {}) {
 
       <aside class="sidebar">
         <nav class="nav-list" aria-label="Tefsen navigation">
-          ${navItems.slice(0,6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
+          ${navItems.filter(([id]) => ['home','opportunities','passport','journeys','explore'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
         </nav>
         <div class="nav-divider"></div>
-        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-action="compose">${icon('plus',18)} Ask a question</button></div>
+        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Explore opportunities</button></div>
         <nav class="nav-list">
-          ${navItems.slice(6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
+          ${navItems.filter(([id]) => ['notifications','messages','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
           ${avatar(p,'sm')}
@@ -291,9 +291,9 @@ function renderShell(content, options = {}) {
       <nav class="mobile-bottom" aria-label="Mobile navigation">
         ${mobileNavButton('home','home',route,'Home')}
         ${mobileNavButton('opportunities','compass',route,'Opportunities')}
-        <button class="create-mobile" type="button" data-action="compose" aria-label="Ask a question">${icon('plus',24)}</button>
+        ${mobileNavButton('passport','user',route,'Student Passport')}
         ${mobileNavButton('journeys','check',route,'Journey')}
-        ${mobileNavButton('profile','user',route,'Profile')}
+        ${mobileNavButton('explore','compass',route,'Community')}
       </nav>
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
@@ -324,7 +324,7 @@ function renderProfileDropdown() {
       <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
       <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
       <button type="button" data-route="explore" role="menuitem">${icon('compass',17)} <span>Community</span><small>Subjects, universities and outcomes</small></button>
-      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved community posts</span><small>Discussions and student stories you saved</small></button>
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
       <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
@@ -348,17 +348,18 @@ function syncProfileMenu() {
 }
 
 function renderRightbar() {
-  const trending = [...state.posts].sort((a,b) => scorePost(b) - scorePost(a)).slice(0,4);
+  const successCount = state.posts.filter(post => post.postType === 'success_story').length;
   return `
     <section class="widget">
-      <h3>Trending discussions</h3>
-      ${trending.length ? trending.map((p,i) => `<button class="widget-link" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left;cursor:pointer" data-route="post/${encodeURIComponent(p.id)}"><span class="trend-number">0${i+1}</span><div><b>${escapeHTML(p.title || p.content.slice(0,60))}</b><small>${escapeHTML(p.subject || 'General')} · ${formatCount(p.likeCount)} likes</small></div></button>`).join('') : '<small style="color:var(--muted)">Discussions will appear here.</small>'}
+      <h3>Your path</h3>
+      <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="passport"><span class="notification-icon">${icon('user',17)}</span><div><b>Student Passport</b><small>Keep your opportunity profile current</small></div></button>
+      <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="journeys"><span class="notification-icon">${icon('check',17)}</span><div><b>Application Journey</b><small>Tasks, deadlines and progress</small></div></button>
+      <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="opportunities"><span class="notification-icon">${icon('compass',17)}</span><div><b>Opportunities</b><small>Find verified paths worth pursuing</small></div></button>
     </section>
     <section class="widget">
-      <h3>Your Tefsen</h3>
-      <div class="widget-link">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(state.profile?.role || 'Student'))} · ${formatCount(state.profile?.points || 0)} points</small></div></div>
-      <div class="widget-link"><span class="notification-icon">${icon('bookmark',17)}</span><div><b>${reactionState.saved.size} saved items</b><small>Knowledge for later</small></div></div>
-      <button class="widget-link subscription-widget-link" type="button" data-route="subscription"><span class="notification-icon">${icon('info',17)}</span><div><b>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (state.profile?.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><small>${String(state.profile?.role || '').trim().toLowerCase() === 'admin' ? 'Unlimited daily posting · full web access' : (state.profile?.subscriptionActive ? '2 images · 6 MB · 6 image posts/day' : '1 image · 2 MB · 2 image posts/day')}</small></div></button>
+      <h3>Community outcomes</h3>
+      <div class="widget-link"><span class="notification-icon">${icon('check',17)}</span><div><b>${successCount} success stor${successCount===1?'y':'ies'}</b><small>Shared voluntarily by students</small></div></div>
+      <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="explore"><span class="notification-icon">${icon('compass',17)}</span><div><b>Open Community</b><small>Subjects, universities and intakes</small></div></button>
     </section>
     <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
 }
@@ -443,19 +444,136 @@ function postCard(post) {
   </article>`;
 }
 
-function renderHome(forcedTab = null) {
-  if (forcedTab) state.activeFeedTab = forcedTab;
-  const posts = getFilteredPosts();
-  const content = `${demoBanner()}
-    <div class="feed-tabs" role="tablist">
-      ${['latest','trending','saved','liked'].map(t => `<button class="feed-tab ${state.activeFeedTab === t ? 'active' : ''}" data-feed-tab="${t}" role="tab">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
-    </div>
-    <section class="panel composer-mini">
-      ${avatar(state.profile,'sm')}
-      <button class="fake-input" type="button" data-action="compose">Ask something or share what you learned…</button>
-      <button class="ask-btn" type="button" data-action="compose">${icon('plus',16)} Ask</button>
-    </section>
-    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState(state.activeFeedTab === 'saved' ? 'bookmark' : 'compass', state.activeFeedTab === 'saved' ? 'No saved posts yet' : 'Nothing here yet', state.activeFeedTab === 'saved' ? 'Save useful discussions and they will appear here.' : 'New discussions will appear as the community contributes.')}</div>`;
+async function renderHome() {
+  renderShell(`<div class="v2-home"><section class="v2-dashboard-hero"><div><span class="opportunity-kicker">YOUR STUDENT JOURNEY</span><h1>Building your next step…</h1><p>Loading your Student Passport, opportunities and application progress.</p></div></section></div>`, { wide:true, right:false });
+
+  try {
+    const [passport, opportunities, journeys] = await Promise.all([
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
+      getOpportunities(state.mode).catch(() => []),
+      listJourneyStates(state.mode, state.user.uid).catch(() => [])
+    ]);
+
+    currentStudentPassport = passport;
+    currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
+
+    const completeness = studentPassportCompleteness(passport);
+    const ranked = opportunities
+      .map(item => ({ item, match: scoreOpportunityMatch(passport, item) }))
+      .sort((a,b) => b.match.score - a.match.score);
+
+    const visibleJourneys = journeys.filter(row => row.saved || row.started);
+    const activeJourneys = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
+    const savedCount = visibleJourneys.filter(row => row.saved).length;
+    const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
+
+    const dated = visibleJourneys
+      .map(row => ({ row, opportunity: opportunityMap.get(row.opportunityId), info: deadlineInfo(opportunityMap.get(row.opportunityId)?.deadline || '') }))
+      .filter(entry => entry.info.valid && entry.info.daysRemaining >= 0)
+      .sort((a,b) => a.info.daysRemaining - b.info.daysRemaining);
+    const nearest = dated[0] || null;
+
+    let nextAction = {
+      title: 'Complete your Student Passport',
+      detail: 'Add your education direction so Tefsen can make opportunity matching more useful.',
+      route: 'passport',
+      button: 'Open Passport'
+    };
+    if (completeness >= 70 && nearest && nearest.info.daysRemaining <= 14) {
+      nextAction = {
+        title: nearest.info.daysRemaining === 0 ? 'A deadline is today' : `Deadline in ${nearest.info.daysRemaining} days`,
+        detail: nearest.opportunity?.title || 'Continue preparing your saved opportunity.',
+        route: `journey/${encodeURIComponent(nearest.row.opportunityId)}`,
+        button: 'Continue Journey'
+      };
+    } else if (completeness >= 70 && activeJourneys.length) {
+      const row = activeJourneys[0], opportunity = opportunityMap.get(row.opportunityId);
+      const progress = journeyProgress(row);
+      nextAction = {
+        title: `Continue: ${JOURNEY_LABELS[row.status] || row.status}`,
+        detail: opportunity ? `${opportunity.title} · ${progress.completed}/${progress.total} tasks complete` : 'Continue your active application journey.',
+        route: `journey/${encodeURIComponent(row.opportunityId)}`,
+        button: 'Open Journey'
+      };
+    } else if (completeness >= 70 && ranked[0]) {
+      nextAction = {
+        title: 'Review your strongest current match',
+        detail: `${ranked[0].item.title} · ${ranked[0].match.score}% structured match`,
+        route: `opportunity/${encodeURIComponent(ranked[0].item.id)}`,
+        button: 'Review Match'
+      };
+    }
+
+    const goal = passport.studyGoal || (passport.mainField ? `${passport.targetEducationLevel || 'Study'} opportunity in ${passport.mainField}` : 'Set your education goal');
+    const firstName = String(state.profile?.fullName || 'Student').trim().split(/\s+/)[0] || 'Student';
+    const successes = state.posts.filter(post => post.postType === 'success_story').slice(0,2);
+
+    const matchCard = ({item,match}) => `<button class="v2-opportunity-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
+      <div class="v2-opportunity-meta"><span class="opportunity-chip">${escapeHTML(item.fundingType)}</span><span class="opportunity-chip">${escapeHTML(item.country)}</span></div>
+      <h3>${escapeHTML(item.title)}</h3>
+      <p>${escapeHTML(item.provider)}${item.university ? ` · ${escapeHTML(item.university)}` : ''}</p>
+      <div class="v2-opportunity-foot"><span class="v2-match">${match.score}% match</span><span style="color:var(--v2-muted);font-size:.8rem">${escapeHTML(opportunityDateLabel(item.deadline))}</span></div>
+    </button>`;
+
+    const content = `${demoBanner()}<div class="v2-home">
+      <section class="v2-dashboard-hero">
+        <div>
+          <span class="opportunity-kicker">YOUR STUDENT JOURNEY</span>
+          <h1>Welcome, ${escapeHTML(firstName)}.<br>Make the next step clear.</h1>
+          <p>Tefsen brings your education goal, matched opportunities, deadlines and application progress into one place.</p>
+          <div class="v2-dashboard-actions">
+            <button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button>
+            <button class="btn btn-secondary" type="button" data-route="journeys">View your journey</button>
+          </div>
+        </div>
+        <div class="v2-goal-card">
+          <small>Current goal</small>
+          <strong>${escapeHTML(goal)}</strong>
+          <div class="v2-progress-track"><i style="width:${completeness}%"></i></div>
+          <small>Student Passport · ${completeness}% complete</small>
+          <button class="btn btn-ghost" type="button" data-route="passport">Update Passport</button>
+        </div>
+      </section>
+
+      <section class="v2-next-action">
+        <div class="v2-next-icon">${icon('check',20)}</div>
+        <div><b>${escapeHTML(nextAction.title)}</b><small>${escapeHTML(nextAction.detail)}</small></div>
+        <button class="btn btn-primary" type="button" data-route="${escapeHTML(nextAction.route)}">${escapeHTML(nextAction.button)}</button>
+      </section>
+
+      <section class="v2-kpi-grid" aria-label="Journey summary">
+        <article class="v2-kpi"><span>Student Passport</span><strong>${completeness}%</strong><small>Profile readiness</small></article>
+        <article class="v2-kpi"><span>Saved opportunities</span><strong>${savedCount}</strong><small>Worth tracking</small></article>
+        <article class="v2-kpi"><span>Active journeys</span><strong>${activeJourneys.length}</strong><small>Applications in progress</small></article>
+        <article class="v2-kpi"><span>Nearest deadline</span><strong>${nearest ? nearest.info.daysRemaining : '—'}</strong><small>${nearest ? (nearest.info.daysRemaining === 0 ? 'Today' : 'days remaining') : 'No dated deadline'}</small></article>
+      </section>
+
+      <section class="v2-section">
+        <div class="v2-section-head"><div><h2>Matched for you</h2><p>Structured matches based on your Student Passport — not admission guarantees.</p></div><button class="btn btn-ghost" type="button" data-route="opportunities">View all</button></div>
+        <div class="v2-opportunity-row">${ranked.length ? ranked.slice(0,3).map(matchCard).join('') : '<div class="panel opportunity-empty">Complete your Student Passport and add opportunities to start personalized matching.</div>'}</div>
+      </section>
+
+      <section class="v2-section">
+        <div class="v2-section-head"><div><h2>Deadlines & progress</h2><p>Your official deadlines stay separate from personal preparation targets.</p></div><button class="btn btn-ghost" type="button" data-route="journeys">Open Journey</button></div>
+        ${nearest ? `<div class="v2-next-action"><div class="v2-next-icon">${icon('check',20)}</div><div><b>${escapeHTML(nearest.opportunity?.title || 'Saved opportunity')}</b><small>${escapeHTML(nearest.info.label)} · ${escapeHTML(JOURNEY_LABELS[nearest.row.status] || nearest.row.status)}</small></div><button class="btn btn-secondary" type="button" data-route="journey/${encodeURIComponent(nearest.row.opportunityId)}">Prepare</button></div>` : '<div class="panel opportunity-empty">Save an opportunity to start tracking deadlines and preparation.</div>'}
+      </section>
+
+      <section class="v2-section">
+        <div class="v2-section-head"><div><h2>Student outcomes</h2><p>Real student experiences support your decisions; official sources still verify requirements.</p></div><button class="btn btn-ghost" type="button" data-route="explore">Community</button></div>
+        <div class="v2-outcome-grid">${successes.length ? successes.map(post => `<button class="v2-outcome-card" type="button" style="text-align:left;color:inherit;cursor:pointer" data-route="post/${encodeURIComponent(post.id)}"><span class="story-type success">✓ Success story</span><h3>${escapeHTML(post.title || 'Student success')}</h3><p>${escapeHTML((post.content || '').slice(0,180))}</p></button>`).join('') : '<div class="panel opportunity-empty">Student success stories will appear here as the community shares outcomes.</div>'}</div>
+      </section>
+    </div>`;
+
+    renderShell(content, { wide:true, right:false });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Dashboard unavailable','Please try again.')}`, { wide:true, right:false });
+  }
+}
+
+function renderSavedCommunity() {
+  const posts = getFilteredPosts('saved');
+  const content = `${demoBanner()}<header class="page-head"><div><h1>Saved community posts</h1><p>Your saved discussions and student stories.</p></div><button class="btn btn-secondary" type="button" data-route="explore">Community</button></header><div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('bookmark','No saved community posts','Save useful discussions or student stories and they will appear here.')}</div>`;
   renderShell(content);
 }
 
@@ -1117,11 +1235,11 @@ async function renderProfile(userId = '') {
     <div class="profile-cover"></div>
     <div class="profile-main">
       <div class="profile-topline"><div>${avatar(profile,'lg')}</div><div>${actions}</div></div>
-      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Learning, sharing and growing with the Tefsen community.')}</p>${rolePill(profile?.role || 'Student')}
+      <div class="profile-info"><h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1><span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span><p>${escapeHTML(profile?.bio || 'Building my education journey with Tefsen.')}</p>${rolePill(profile?.role || 'Student')}
       <div class="profile-stats"><span><b>${formatCount(posts.length)}</b>Posts</span><span><b>${formatCount(follow.followersCount)}</b>Followers</span><span><b>${formatCount(follow.followingCount)}</b>Following</span><span><b>${formatCount(profile?.points || 0)}</b>Points</span></div></div>
     </div></section>
     <div class="profile-tabs"><button class="feed-tab active">Posts</button></div>
-    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Ask your first question or share something useful.':'This member has not published yet.')}</div>`;
+    <div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('comment','No posts yet',own?'Share a useful community post or student outcome.':'This member has not published yet.')}</div>`;
   renderShell(content);
 }
 
@@ -1338,7 +1456,7 @@ function renderRoute() {
     case 'subject': renderSubjectCommunity(param || 'General'); break;
     case 'university': renderUniversityCommunity(param || ''); break;
     case 'intake': renderIntakeCommunity(param || '', param2 || ''); break;
-    case 'saved': renderHome('saved'); break;
+    case 'saved': renderSavedCommunity(); break;
     case 'notifications': renderNotifications(); break;
     case 'messages': renderMessages(param || ''); break;
     case 'leaderboard': renderLeaderboard(); break;
