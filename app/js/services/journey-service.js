@@ -101,6 +101,7 @@ export function normalizeJourney(raw = {}, opportunityId = '', userId = '') {
     userId: userId || raw.userId || '',
     opportunityId: opportunityId || raw.opportunityId || '',
     saved: raw.saved !== false,
+    started: Boolean(raw.started),
     status: safeStatus(raw.status),
     personalTargetDate: clean(raw.personalTargetDate, 20),
     notes: clean(raw.notes, 3000),
@@ -199,6 +200,7 @@ export async function setOpportunitySaved(mode, userId, opportunity, saved) {
     userId,
     opportunityId,
     saved: true,
+    started: false,
     status: 'interested',
     personalTargetDate: '',
     notes: '',
@@ -206,7 +208,6 @@ export async function setOpportunitySaved(mode, userId, opportunity, saved) {
     history: []
   };
   next.saved = Boolean(saved);
-  if (saved && !next.history.length) next.history = [{ status: next.status, atMillis: Date.now() }];
 
   return persistJourney(mode, userId, opportunityId, next);
 }
@@ -225,6 +226,7 @@ export async function startJourney(mode, userId, opportunity) {
   return persistJourney(mode, userId, opportunityId, {
     ...existing,
     saved: true,
+    started: true,
     status,
     checklist,
     history,
@@ -245,6 +247,7 @@ export async function updateJourneyStage(mode, userId, opportunityId, nextStatus
 
   journey.status = next;
   journey.saved = true;
+  journey.started = true;
   journey.history = [...(journey.history || []), { status: next, atMillis: Date.now() }].slice(-30);
   return persistJourney(mode, userId, opportunityId, journey);
 }
