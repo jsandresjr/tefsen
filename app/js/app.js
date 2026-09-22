@@ -4,7 +4,7 @@ import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } fr
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
-  subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, reportPost,
+  subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
   startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
@@ -1307,7 +1307,16 @@ async function renderProfile(userId = '') {
   const content = `${demoBanner()}<div class="v3-profile-page">
     <section class="v3-profile-shell">
       <div class="v3-profile-identity">
-        <div class="v3-profile-avatar">${avatar(profile,'lg')}</div>
+        <div class="v4-profile-photo-wrap">
+          ${own ? `<button class="v4-profile-photo-button" type="button" data-profile-photo-edit aria-label="${profile?.photoUrl ? 'Change profile photo' : 'Add profile photo'}">
+            <span class="v3-profile-avatar">${avatar(profile,'lg')}</span>
+            <span class="v4-profile-photo-badge" aria-hidden="true">${icon('edit',15)}</span>
+          </button>
+          <div class="v4-profile-photo-actions">
+            <button type="button" data-profile-photo-edit>${profile?.photoUrl ? 'Change photo' : 'Add photo'}</button>
+            ${profile?.photoUrl ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : ''}
+          </div>` : `<span class="v3-profile-avatar">${avatar(profile,'lg')}</span>`}
+        </div>
         <div class="v3-profile-copy">
           <div class="v3-profile-name-row">
             <div>
@@ -1642,7 +1651,46 @@ function openDeletePostModal(postId) {
 
 function openEditProfile() {
   const p = state.profile || {};
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal"><header class="modal-head"><h2>Edit profile</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-profile-form data-profile-modal><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><button class="btn btn-primary" type="submit">Save profile</button></form></div></section></div>`;
+  const hasPhoto = Boolean(safeUrl(p.photoUrl || p.profileImageUrl || p.photoURL || ''));
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <section class="modal v4-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+      <header class="modal-head"><h2 id="edit-profile-title">Edit profile</h2><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
+      <div class="modal-body">
+        <form class="form-grid" data-profile-form data-profile-modal>
+          <section class="v4-photo-editor">
+            <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
+            <div class="v4-photo-editor-copy">
+              <b>Profile photo</b>
+              <p>Use a clear photo that represents you. JPG, PNG or WebP, up to 5 MB.</p>
+              <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
+              <div class="v4-photo-editor-actions">
+                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Change photo' : 'Add photo'}</button>
+                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove photo</button>' : ''}
+              </div>
+            </div>
+          </section>
+          <div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div>
+          <div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div>
+          <div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div>
+          <div class="v4-profile-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div>
+        </form>
+      </div>
+    </section>
+  </div>`;
+}
+
+function openRemoveProfilePhotoModal() {
+  const p = state.profile || {};
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <section class="modal v4-confirm-modal" role="dialog" aria-modal="true">
+      <header class="modal-head"><h2>Remove profile photo?</h2><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
+      <div class="modal-body">
+        <div class="v4-remove-photo-preview">${avatar(p,'lg')}</div>
+        <p>Your current profile photo will be removed from Tefsen Storage and your public profile will return to initials.</p>
+        <div class="v4-profile-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Keep photo</button><button class="btn btn-danger" type="button" data-confirm-remove-profile-photo>Remove photo</button></div>
+      </div>
+    </section>
+  </div>`;
 }
 
 function openDemoInfo() {
@@ -1724,6 +1772,20 @@ async function handleClick(event) {
   if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; syncProfileMenu(); return; }
   if (event.target.closest('[data-profile-menu-dismiss]')) { state.ui.profileMenu = false; syncProfileMenu(); return; }
   if (event.target.closest('[data-logout]')) { await logout(state.mode); return; }
+  const profilePhotoEdit = event.target.closest('[data-profile-photo-edit]');
+  if (profilePhotoEdit) {
+    openEditProfile();
+    requestAnimationFrame(() => document.querySelector('[data-profile-photo-input]')?.click());
+    return;
+  }
+  const profilePhotoChoose = event.target.closest('[data-profile-photo-choose]');
+  if (profilePhotoChoose) {
+    document.querySelector('[data-profile-photo-input]')?.click();
+    return;
+  }
+  if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
+  const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
+  if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
   const followUser = event.target.closest('[data-follow-user]');
   if (followUser) { await handleFollow(followUser); return; }
@@ -2020,8 +2082,51 @@ async function handleMessage(form) {
   catch(e){ input.value=text; toast(humanError(e),'error'); }
 }
 async function handleProfileSave(form) {
-  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]');
-  await withButton(submit,async()=>{ try { const profile=await updateUserProfile(state.mode,state.user.uid,{fullName:String(fd.get('fullName')||'').trim(),username:String(fd.get('username')||'').trim(),bio:String(fd.get('bio')||'').trim()}); state.profile={...state.profile,...profile}; modalRoot.innerHTML=''; toast('Profile updated','success'); renderRoute(); }catch(e){toast(humanError(e),'error');} });
+  const fd = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  const selectedPhoto = fd.get('profileImage');
+  await withButton(submit, async () => {
+    try {
+      const profile = await updateUserProfile(state.mode, state.user.uid, {
+        fullName: String(fd.get('fullName') || '').trim(),
+        username: String(fd.get('username') || '').trim(),
+        bio: String(fd.get('bio') || '').trim(),
+        profileImageFile: selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+      });
+      state.profile = { ...state.profile, ...profile };
+      state.posts = state.posts.map(post => post.authorId === state.user.uid
+        ? { ...post, authorName: profile.fullName, authorPhotoUrl: profile.photoUrl || '' }
+        : post);
+      modalRoot.innerHTML = '';
+      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Profile and photo updated.' : 'Profile updated.', 'success');
+      renderRoute();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleProfilePhotoRemove(button) {
+  await withButton(button, async () => {
+    try {
+      const profile = await removeProfilePhoto(state.mode, state.user.uid);
+      state.profile = {
+        ...state.profile,
+        ...(profile || {}),
+        photoUrl: '',
+        profileImageUrl: '',
+        photoURL: ''
+      };
+      state.posts = state.posts.map(post => post.authorId === state.user.uid
+        ? { ...post, authorPhotoUrl: '' }
+        : post);
+      modalRoot.innerHTML = '';
+      toast('Profile photo removed.', 'success');
+      renderRoute();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
 }
 async function handleStudentPassportSave(form) {
   const fd = new FormData(form);
@@ -2147,6 +2252,33 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
+  if (event.target.matches('[data-profile-photo-input]')) {
+    const input = event.target;
+    const file = input.files?.[0] || null;
+    const preview = input.form?.querySelector('[data-profile-photo-preview]');
+    if (!file) return;
+
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowed.has(String(file.type || '').toLowerCase())) {
+      toast('Profile photo must be JPG, PNG or WebP.', 'error');
+      input.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Profile photo must be 5 MB or smaller.', 'error');
+      input.value = '';
+      return;
+    }
+
+    if (input.dataset.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
+    const url = URL.createObjectURL(file);
+    input.dataset.previewUrl = url;
+    if (preview) {
+      preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
+    }
+    return;
+  }
+
   const fileInput = event.target.matches('[data-compose-form] input[type="file"]') ? event.target : null;
   if (!fileInput) return;
   const preview = fileInput.form.querySelector('[data-image-preview]');
