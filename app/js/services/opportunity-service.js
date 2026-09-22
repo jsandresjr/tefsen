@@ -8,6 +8,21 @@ import {
 
 const C = SCHEMA.collections;
 
+function starterDeadlineOpen(item, now = new Date()) {
+  const raw = String(item?.deadline || '').trim();
+  if (!raw) return true;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return true;
+  const deadline = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+  return deadline >= now.getTime();
+}
+
+function currentStarterOpportunities() {
+  return STARTER_OPPORTUNITIES
+    .filter(item => starterDeadlineOpen(item))
+    .map(item => normalizeOpportunity(item, item.id));
+}
+
 function stringArray(value) {
   if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
   if (!value) return [];
@@ -65,7 +80,7 @@ export async function getOpportunities(mode) {
 
   if (live.length) return live;
 
-  return STARTER_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
+  return currentStarterOpportunities();
 }
 
 export async function getOpportunityById(mode, opportunityId) {
