@@ -47,7 +47,8 @@ function journeyTitle(journey, opportunities) {
 }
 
 function routeForJourney(journey) {
-  return `journey/${encodeURIComponent(String(journey?.opportunityId || ''))}`;
+  const id = encodeURIComponent(String(journey?.opportunityId || ''));
+  return journey?.started ? `journey/${id}` : `opportunity/${id}`;
 }
 
 function nearestDeadlineEntry(journeys, opportunities, now) {
@@ -103,7 +104,7 @@ export function buildHomeDashboardModel({
       title: nearest.days === 0 ? 'A saved opportunity closes today' : `${nearest.days} days until a saved opportunity deadline`,
       detail: journeyTitle(nearest.journey, opportunityById),
       route: routeForJourney(nearest.journey),
-      button: nearest.journey.started ? 'Continue Journey' : 'Prepare now',
+      button: nearest.journey.started ? 'Continue Journey' : 'Review before deadline',
       reason:'Deadlines take priority over profile completion and discovery.'
     };
   } else if (acceptedJourneys.length) {
@@ -155,7 +156,7 @@ export function buildHomeDashboardModel({
       title:'Turn a saved opportunity into a plan',
       detail:`${journeyTitle(row, opportunityById)} is saved but its private Journey has not started.`,
       route:routeForJourney(row),
-      button:'Start preparing',
+      button:'Review saved opportunity',
       reason:'You already showed interest by saving this opportunity.'
     };
   } else if (topMatch) {
