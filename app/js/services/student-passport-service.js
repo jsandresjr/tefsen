@@ -16,10 +16,11 @@ function cleanList(value, maxItems = 12, maxLength = 80) {
   return [...new Set(source.map(item => clean(item, maxLength)).filter(Boolean))].slice(0, maxItems);
 }
 
-function cleanGpa(value) {
+function cleanGpa(value, scale = 4) {
   if (value === '' || value === null || value === undefined) return null;
   const number = Number(value);
-  return Number.isFinite(number) && number >= 0 && number <= 5 ? number : null;
+  const max = Number(scale) === 5 ? 5 : 4;
+  return Number.isFinite(number) && number >= 0 && number <= max ? number : null;
 }
 
 export function emptyStudentPassport(userId = '') {
@@ -55,6 +56,7 @@ export function emptyStudentPassport(userId = '') {
 export function normalizeStudentPassport(raw = {}, userId = '') {
   const base = emptyStudentPassport(userId || raw.userId || raw.uid || '');
   const docs = raw.documentsReady && typeof raw.documentsReady === 'object' ? raw.documentsReady : {};
+  const gpaScale = Number(raw.gpaScale) === 5 ? 5 : 4;
   return {
     ...base,
     ...raw,
@@ -66,8 +68,8 @@ export function normalizeStudentPassport(raw = {}, userId = '') {
     targetEducationLevel: clean(raw.targetEducationLevel),
     mainField: clean(raw.mainField),
     institution: clean(raw.institution),
-    gpa: cleanGpa(raw.gpa),
-    gpaScale: Number(raw.gpaScale) === 5 ? 5 : 4,
+    gpa: cleanGpa(raw.gpa, gpaScale),
+    gpaScale,
     preferredCountries: cleanList(raw.preferredCountries),
     fundingPreference: clean(raw.fundingPreference),
     englishTestStatus: clean(raw.englishTestStatus),
@@ -115,26 +117,118 @@ export function shouldShowPassportOnboarding(passport = {}) {
   return progress.completed < 3;
 }
 
-export function studentPassportCompleteness(passport = {}) {
+export function validateStudentPassportInput(input = {}) {
+  const errors = [];
+  const warnings = [];
+  const gpaScale = Number(input.gpaScale) === 5 ? 5 : 4;
+  const hasGpa = input.gpa !== '' && input.gpa !== null && input.gpa !== undefined;
+
+  if (hasGpa) {
+    const gpa = Number(input.gpa);
+    if (!Number.isFinite(gpa) || gpa < 0) {
+      errors.push({ field:'gpa', message:'Enter a valid GPA or leave it blank.' });
+    } else if (gpa > gpaScale) {
+      errors.push({ field:'gpa', message:`GPA cannot be higher than the selected ${gpaScale.toFixed(1)} scale.` });
+    }
+  }
+
+  const listRules = [
+    ['preferredCountries', 'Preferred study countries'],
+    ['languages', 'Languages'],
+    ['skills', 'Skills']
+  ];
+  for (const [field, label] of listRules) {
+    const value = Array.isArray(input[field]) ? input[field] : String(input[field] || '').split(',').map(v => v.trim()).filter(Boolean);
+    if (value.length > 12) {
+      errors.push({ field, message:`${label} can contain up to 12 items.` });
+    }
+  }
+
+  const essential = [
+    ['currentCountry','Current country'],
+    ['nationality','Nationality'],
+    ['currentEducationLevel','Current education level'],
+    ['targetEducationLevel','Target education level'],
+    ['mainField','Main field / subject'],
+    ['fundingPreference','Funding preference']
+  ];
+  const missingEssential = essential.filter(([field]) => !String(input[field] || '').trim());
+  if (missingEssential.length) {
+    warnings.push({
+      code:'missing_essential',
+      message:`${missingEssential.length} essential field${missingEssential.length === 1 ? '' : 's'} still incomplete: ${missingEssential.map(([,label]) => label).join(', ')}.`
+    });
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+export function studentPassportCompletionDetails(passport = {}) {
   const p = normalizeStudentPassport(passport, passport.userId || '');
-  const core = [
-    p.currentCountry,
-    p.nationality,
-    p.currentEducationLevel,
-    p.targetEducationLevel,
-    p.mainField,
-    p.fundingPreference,
-    p.studyGoal
+  const essential = [
+    ['currentCountry','Current country',Boolean(p.currentCountry)],
+    ['nationality','Nationality',Boolean(p.nationality)],
+    ['currentEducationLevel','Current education level',Boolean(p.currentEducationLevel)],
+    ['targetEducationLevel','Target education level',Boolean(p.targetEducationLevel)],
+    ['mainField','Main field / subject',Boolean(p.mainField)],
+    ['fundingPreference','Funding preference',Boolean(p.fundingPreference)]
   ];
-  const secondary = [
-    p.preferredCountries.length,
-    p.languages.length,
-    p.skills.length,
-    p.englishTestStatus
+  const academic = [
+    ['institution','Current institution',Boolean(p.institution)],
+    ['gpa','GPA',p.gpa !== null && p.gpa !== undefined],
+    ['englishTestStatus','English-test status',Boolean(p.englishTestStatus)]
   ];
-  const completed = core.filter(Boolean).length * 2 + secondary.filter(Boolean).length;
-  const total = core.length * 2 + secondary.length;
-  return Math.round((completed / total) * 100);
+  const preferences = [
+    ['preferredCountries','Preferred study countries',p.preferredCountries.length > 0],
+    ['studyGoal','Study / career goal',Boolean(p.studyGoal)],
+    ['languages','Languages',p.languages.length > 0],
+    ['skills','Skills',p.skills.length > 0]
+  ];
+  const documentEntries = Object.entries(p.documentsReady || {});
+  const documentsReady = documentEntries.filter(([,ready]) => Boolean(ready)).length;
+
+  const section = (items, weight) => {
+    const complete = items.filter(([, ,ready]) => ready).length;
+    return {
+      complete,
+      total: items.length,
+      percent: items.length ? Math.round((complete / items.length) * 100) : 100,
+      weight,
+      missing: items.filter(([, ,ready]) => !ready).map(([field,label]) => ({ field, label }))
+    };
+  };
+
+  const sections = {
+    essential: section(essential, 50),
+    academic: section(academic, 20),
+    preferences: section(preferences, 20),
+    documents: {
+      complete: documentsReady,
+      total: documentEntries.length,
+      percent: documentEntries.length ? Math.round((documentsReady / documentEntries.length) * 100) : 100,
+      weight: 10,
+      missing: documentEntries.filter(([,ready]) => !ready).map(([field]) => ({ field, label: field }))
+    }
+  };
+
+  const percent = Math.round(
+    sections.essential.percent * .50 +
+    sections.academic.percent * .20 +
+    sections.preferences.percent * .20 +
+    sections.documents.percent * .10
+  );
+
+  const next = [
+    ...sections.essential.missing.map(item => ({ ...item, priority:'essential', section:'essential' })),
+    ...sections.academic.missing.map(item => ({ ...item, priority:'recommended', section:'academic' })),
+    ...sections.preferences.missing.map(item => ({ ...item, priority:'recommended', section:'preferences' }))
+  ].slice(0, 4);
+
+  return { percent, sections, next };
+}
+
+export function studentPassportCompleteness(passport = {}) {
+  return studentPassportCompletionDetails(passport).percent;
 }
 
 function demoKey(userId) {
