@@ -205,4 +205,23 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile saved decision workspace added
 - service-worker cache bumped for the saved workspace
 
-**Next: Step 10 — Journey list experience and deadline priority**
+**Step 10: Journey list experience and deadline priority — complete on branch `tefsen-web-completion-10-journey-priority`**
+- active application Journeys now use deterministic attention priority instead of a flat list
+- priority is based on actionable dates, planning conflicts, checklist state and Journey stage
+- official deadline today / within 3 / 7 / 14 days receives clear pre-submission attention states
+- missed personal targets and personal targets after the official deadline are surfaced separately
+- checklist progress and the next unfinished task are visible directly on active Journey cards
+- ready-to-apply Journeys get a dedicated state when no more urgent deadline condition overrides it
+- applied and interview/review stages no longer treat the old application deadline as a live action alert
+- accepted / rejected / withdrawn records are separated into an outcomes section
+- terminal outcomes never participate in active deadline ordering
+- “Attention first” banner points to the highest-priority active Journey
+- active Journey ordering is deterministic and explainable; no hidden success probability is used
+- official deadline and private personal target remain visibly separate
+- Journey list cards explain that provider sources remain authoritative for official dates
+- deterministic Journey priority regression tests added
+- CI now runs when the Journey priority service changes
+- responsive desktop/tablet/mobile priority and outcome cards added
+- service-worker cache bumped for the Journey priority model
+
+**Next: Step 11 — Journey detail page and preparation workflow polish**
