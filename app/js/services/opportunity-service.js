@@ -1,11 +1,27 @@
 import { db } from '../firebase-client.js';
 import { SCHEMA } from '../config/schema.js';
 import { DEMO_OPPORTUNITIES } from './opportunity-demo-data.js';
+import { STARTER_OPPORTUNITIES } from './opportunity-starter-data.js';
 import {
   collection, doc, getDoc, getDocs, limit, query, where
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
 const C = SCHEMA.collections;
+
+function starterDeadlineOpen(item, now = new Date()) {
+  const raw = String(item?.deadline || '').trim();
+  if (!raw) return true;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return true;
+  const deadline = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+  return deadline >= now.getTime();
+}
+
+function currentStarterOpportunities() {
+  return STARTER_OPPORTUNITIES
+    .filter(item => starterDeadlineOpen(item))
+    .map(item => normalizeOpportunity(item, item.id));
+}
 
 function stringArray(value) {
   if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
@@ -34,9 +50,13 @@ export function normalizeOpportunity(raw = {}, id = '') {
     minGpa: raw.minGpa === '' || raw.minGpa === null || raw.minGpa === undefined ? null : Number(raw.minGpa),
     gpaScale: Number(raw.gpaScale || 4),
     deadline: raw.deadline || raw.applicationDeadline || '',
+    deadlineNote: String(raw.deadlineNote || ''),
     applicationOpen: raw.applicationOpen !== false && raw.status !== 'closed' && raw.status !== 'archived',
     verificationStatus: String(raw.verificationStatus || 'unverified').toLowerCase(),
     lastVerifiedAt: raw.lastVerifiedAt || null,
+    sourceCheckedAt: raw.sourceCheckedAt || raw.lastVerifiedAt || null,
+    catalogSource: String(raw.catalogSource || 'firestore').toLowerCase(),
+    sourceNote: String(raw.sourceNote || ''),
     summary: String(raw.summary || raw.description || ''),
     officialSourceUrl: String(raw.officialSourceUrl || raw.sourceUrl || raw.officialUrl || ''),
     status: String(raw.status || 'published').toLowerCase(),
@@ -54,9 +74,13 @@ export async function getOpportunities(mode) {
     limit(60)
   );
   const snap = await getDocs(q);
-  return snap.docs
+  const live = snap.docs
     .map(row => normalizeOpportunity(row.data(), row.id))
     .filter(item => item.visibility === 'public');
+
+  if (live.length) return live;
+
+  return currentStarterOpportunities();
 }
 
 export async function getOpportunityById(mode, opportunityId) {
@@ -68,8 +92,12 @@ export async function getOpportunityById(mode, opportunityId) {
     return row ? normalizeOpportunity(row, row.id) : null;
   }
 
+  const starter = STARTER_OPPORTUNITIES.find(item => item.id === id);
+  if (starter) return normalizeOpportunity(starter, starter.id);
+
   const snap = await getDoc(doc(db, C.opportunities, id));
   if (!snap.exists()) return null;
+
   const item = normalizeOpportunity(snap.data(), snap.id);
   if (item.status !== 'published' || item.visibility !== 'public') return null;
   return item;
