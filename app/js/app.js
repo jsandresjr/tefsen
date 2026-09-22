@@ -21,6 +21,7 @@ import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
+import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -2402,78 +2403,194 @@ async function renderJourneyDetail(opportunityId) {
     ]);
 
     if (!journey) {
-      renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Journey not started','Open the opportunity and choose Start journey first.')}`, { wide:true });
+      renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Journey not started','Open the opportunity and choose Start Journey first.')}`, { wide:true });
       return;
     }
 
-    const progress = journeyProgress(journey);
+    currentJourneyStates.set(opportunityId, journey);
+
+    const model = buildJourneyDetailModel(journey, opportunity);
+    const nextStatuses = allowedJourneyTransitions(journey.status);
     const official = deadlineInfo(opportunity?.deadline || '');
     const personal = deadlineInfo(journey.personalTargetDate || '');
-    const targetAfterOfficial = Boolean(personal.valid && official.valid && personal.date?.getTime() > official.date?.getTime());
-    const nextStatuses = allowedJourneyTransitions(journey.status);
-    const history = [...(journey.history || [])].reverse();
-    const checklist = journey.checklist || [];
+    const officialSource = safeUrl(opportunity?.officialSourceUrl || '');
+    const trust = opportunity
+      ? opportunityTrustPresentation(opportunity)
+      : { tone:'unverified', label:'Source unavailable', detail:'The public opportunity record is not currently available.' };
+
+    const stageOptions = nextStatuses.map(status => `
+      <option value="${escapeHTML(status)}">${escapeHTML(JOURNEY_LABELS[status])}</option>`
+    ).join('');
+
+    const incompleteTasks = model.tasks.incomplete;
+    const completedTasks = model.tasks.completed;
+    const nextTask = model.tasks.next;
+
+    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask ? 'next' : ''}">
+      <button class="journey-task-check" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : ''}</button>
+      <div><b>${escapeHTML(task.label)}</b><small>${task.source === 'system' ? 'From structured opportunity requirements' : 'Your private custom task'}</small></div>
+      ${task.source === 'custom' ? `<button class="journey-task-remove" type="button" data-journey-task-delete="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}">Remove</button>` : ''}
+    </div>`;
+
+    const deadlinePanel = model.preSubmission
+      ? `<section class="journey-detail-card">
+          <header class="journey-detail-card-head"><div><span>DATES</span><h2>Official deadline & personal target</h2></div></header>
+          <div class="journey-detail-date-grid">
+            <div class="${deadlineUrgencyClass(official)}">
+              <span>OFFICIAL DEADLINE</span>
+              <b>${escapeHTML(official.label)}</b>
+              <small>Stored provider deadline. Confirm exact date/time on the official source.</small>
+            </div>
+            <div class="${model.planning.targetAfterOfficial || (personal.valid && personal.daysRemaining < 0) ? 'warning' : ''}">
+              <span>PERSONAL TARGET</span>
+              <b>${personal.valid ? escapeHTML(personal.label) : 'Not set'}</b>
+              <small>${model.planning.targetAfterOfficial ? 'This must be moved on or before the official deadline.' : 'Private preparation target. It never changes the provider deadline.'}</small>
+            </div>
+          </div>
+        </section>`
+      : `<section class="journey-detail-card">
+          <header class="journey-detail-card-head"><div><span>APPLICATION TIMING</span><h2>Submission stage context</h2></div></header>
+          <div class="journey-postsubmit-note">
+            ${icon('check',17)}
+            <div><b>${journey.status === 'interview' ? 'Provider review is in progress' : model.terminal ? 'Application outcome recorded' : 'Application marked submitted'}</b>
+            <p>The original application deadline is kept as historical context and is not treated as a live action alert at this stage.</p></div>
+          </div>
+          ${opportunity?.deadline ? `<div class="journey-historical-date"><span>Stored original deadline</span><b>${escapeHTML(String(opportunity.deadline))}</b></div>` : ''}
+        </section>`;
+
+    const stagePanel = `<section class="journey-detail-card journey-stage-control">
+      <header class="journey-detail-card-head">
+        <div><span>CURRENT STAGE</span><h2>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</h2></div>
+        <span class="journey-stage-status ${escapeHTML(model.guidance.tone)}">${escapeHTML(model.guidance.kicker)}</span>
+      </header>
+      ${journeyStageLine(journey)}
+      ${nextStatuses.length ? `<form class="journey-stage-update" data-journey-stage-form="${escapeHTML(opportunityId)}">
+        <div>
+          <label for="journey-stage-${escapeHTML(opportunityId)}">Update only after this happened in your real application</label>
+          <select class="select" id="journey-stage-${escapeHTML(opportunityId)}" name="status" required>
+            <option value="">Choose the next real stage</option>
+            ${stageOptions}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Update stage</button>
+      </form>`
+      : `<div class="journey-final-stage-note">${icon('info',16)}<span>This Journey is in a final outcome stage. Its history remains private and available for reference.</span></div>`}
+    </section>`;
 
     const content = `${demoBanner()}
-      <button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back to Journey</button>
-      <div class="journey-layout" style="margin-top:14px">
-        <main style="display:grid;gap:16px">
-          <section class="journey-panel">
-            <span class="opportunity-kicker">APPLICATION JOURNEY</span>
-            <h1>${escapeHTML(opportunity?.title || 'Saved opportunity')}</h1>
-            <p style="color:var(--muted)">${escapeHTML(opportunity?.provider || 'Opportunity details are not currently public.')}</p>
-            ${journeyStageLine(journey)}
-            <div class="opportunity-section">
-              <h2>Current stage</h2>
-              <p><b>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>
-              ${nextStatuses.length ? `<form class="journey-actions" data-journey-stage-form="${escapeHTML(opportunityId)}"><select class="select" name="status" required><option value="">Choose next stage</option>${nextStatuses.map(status => `<option value="${escapeHTML(status)}">${escapeHTML(JOURNEY_LABELS[status])}</option>`).join('')}</select><button class="btn btn-primary" type="submit">Update stage</button></form>` : '<p style="color:var(--muted)">This journey is currently in a final stage.</p>'}
+      <div class="journey-detail-page">
+        <div class="journey-detail-topbar">
+          <button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back to Journey</button>
+          ${opportunity ? `<button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(opportunityId)}">Opportunity details</button>` : ''}
+        </div>
+
+        <section class="journey-detail-hero ${escapeHTML(model.guidance.tone)}">
+          <div class="journey-detail-hero-copy">
+            <span class="opportunity-kicker">${escapeHTML(model.guidance.kicker)}</span>
+            <h1>${escapeHTML(model.title)}</h1>
+            <p class="journey-detail-provider">${escapeHTML(model.provider || 'Opportunity provider unavailable')}</p>
+            <div class="journey-detail-guidance">
+              <span>WHAT TO FOCUS ON NOW</span>
+              <h2>${escapeHTML(model.guidance.title)}</h2>
+              <p>${escapeHTML(model.guidance.detail)}</p>
             </div>
-          </section>
+          </div>
+          <aside class="journey-detail-summary">
+            <div><span>Stage</span><strong>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</strong></div>
+            <div><span>Checklist</span><strong>${model.progress.completed}/${model.progress.total}</strong><small>${model.progress.percent}% complete</small></div>
+            <div><span>Next task</span><strong>${nextTask ? escapeHTML(nextTask.label) : model.terminal ? 'Outcome recorded' : 'No open task'}</strong></div>
+          </aside>
+        </section>
 
-          <section class="journey-panel">
-            <div class="panel-title"><div><h2>Preparation checklist</h2><small>${progress.completed} of ${progress.total} complete</small></div><strong>${progress.percent}%</strong></div>
-            <div class="journey-progress-bar"><i style="width:${progress.percent}%"></i></div>
-            <div style="margin-top:14px">
-              ${checklist.length ? checklist.map(task => `<div class="journey-task ${task.completed ? 'done' : ''}">
-                <button class="btn btn-ghost" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : '○'}</button>
-                <span>${escapeHTML(task.label)}<br><small>${task.source === 'system' ? 'From opportunity requirements' : 'Your custom task'}</small></span>
-                ${task.source === 'custom' ? `<button class="btn btn-ghost" type="button" data-journey-task-delete="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}">Remove</button>` : ''}
-              </div>`).join('') : '<p style="color:var(--muted)">No structured required-document tasks were available. Add your own preparation task below.</p>'}
-            </div>
-            <form class="journey-actions" style="margin-top:14px" data-journey-task-form="${escapeHTML(opportunityId)}"><input class="input" name="label" maxlength="240" required placeholder="Add a personal preparation task"><button class="btn btn-secondary" type="submit">Add task</button></form>
-          </section>
-        </main>
+        <div class="journey-detail-layout">
+          <main class="journey-detail-main">
+            ${stagePanel}
 
-        <aside style="display:grid;gap:16px;align-content:start">
-          <section class="journey-panel">
-            <h2>Deadlines</h2>
-            <p><b>Official deadline</b><br><span class="journey-deadline ${deadlineUrgencyClass(official)}">${escapeHTML(official.label)}</span></p>
-            <p><b>Personal target</b><br><span class="journey-deadline ${deadlineUrgencyClass(personal)}">${personal.valid ? escapeHTML(personal.label) : 'Not set'}</span></p>
-            <p style="color:var(--muted);font-size:.86rem">Your personal target never changes the official provider deadline.</p>
-            ${targetAfterOfficial ? '<div class="opportunity-source-note">Your personal target is after the official deadline. Move your preparation target earlier.</div>' : ''}
-          </section>
+            <section class="journey-detail-card">
+              <header class="journey-detail-card-head checklist">
+                <div>
+                  <span>PREPARATION CHECKLIST</span>
+                  <h2>${model.progress.remaining ? `${model.progress.remaining} task${model.progress.remaining === 1 ? '' : 's'} remaining` : 'No unfinished tasks'}</h2>
+                  <p>System tasks come from structured opportunity requirements. Custom tasks are private to you.</p>
+                </div>
+                <strong>${model.progress.percent}%</strong>
+              </header>
+              <div class="journey-progress-bar journey-detail-progress"><i style="width:${model.progress.percent}%"></i></div>
 
-          <section class="journey-panel">
-            <h2>Planning</h2>
-            <form class="form-grid" data-journey-planning-form="${escapeHTML(opportunityId)}">
-              <div class="field"><label>Personal preparation target</label><input class="input" type="date" name="personalTargetDate" value="${escapeHTML(journey.personalTargetDate || '')}"></div>
-              <div class="field"><label>Private notes</label><textarea class="textarea" name="notes" maxlength="3000" placeholder="Questions, reminders, preparation notes…">${escapeHTML(journey.notes || '')}</textarea></div>
-              <button class="btn btn-primary" type="submit">Save planning</button>
-            </form>
-          </section>
+              ${nextTask ? `<section class="journey-next-task">
+                <span>NEXT UNFINISHED TASK</span>
+                <h3>${escapeHTML(nextTask.label)}</h3>
+                <p>${nextTask.source === 'system' ? 'This task came from the structured opportunity requirements.' : 'This is a private task you added to your Journey.'}</p>
+              </section>` : ''}
 
-          <section class="journey-panel">
-            <h2>History</h2>
-            <div class="journey-history">${history.length ? history.map(item => `<div class="journey-history-item"><span class="journey-history-dot"></span><div><b>${escapeHTML(JOURNEY_LABELS[item.status] || item.status)}</b><br><small>${escapeHTML(formatHistoryTime(item.atMillis))}</small></div></div>`).join('') : '<p style="color:var(--muted)">No history recorded yet.</p>'}</div>
-          </section>
+              <div class="journey-detail-task-list">
+                ${incompleteTasks.length
+                  ? incompleteTasks.map(taskMarkup).join('')
+                  : `<div class="journey-checklist-empty">${icon('check',20)}<div><b>No unfinished checklist tasks.</b><p>${model.terminal ? 'This Journey outcome is already recorded.' : 'Confirm the official source before considering preparation complete.'}</p></div></div>`}
+              </div>
 
-          ${opportunity ? `<button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(opportunityId)}">View opportunity details</button>` : ''}
-        </aside>
+              ${!model.terminal ? `<form class="journey-add-task" data-journey-task-form="${escapeHTML(opportunityId)}">
+                <input class="input" name="label" maxlength="240" required placeholder="${journey.status === 'interview' ? 'Add interview or review preparation task' : journey.status === 'applied' ? 'Add follow-up or requested document task' : 'Add a private preparation task'}">
+                <button class="btn btn-secondary" type="submit">Add task</button>
+              </form>` : ''}
+
+              ${completedTasks.length ? `<details class="journey-completed-tasks">
+                <summary><span>Completed tasks</span><b>${completedTasks.length}</b></summary>
+                <div>${completedTasks.map(taskMarkup).join('')}</div>
+              </details>` : ''}
+            </section>
+
+            <section class="journey-detail-card">
+              <header class="journey-detail-card-head">
+                <div><span>PRIVATE PLANNING</span><h2>Notes ${model.preSubmission ? '& preparation target' : '& follow-up context'}</h2><p>Planning information stays private to your account.</p></div>
+              </header>
+              <form class="journey-detail-planning-form" data-journey-planning-form="${escapeHTML(opportunityId)}" data-journey-status="${escapeHTML(journey.status)}" data-official-deadline="${escapeHTML(opportunity?.deadline || '')}">
+                ${model.preSubmission
+                  ? `<div class="field"><label>Personal preparation target <small>Optional</small></label><input class="input" type="date" name="personalTargetDate" value="${escapeHTML(journey.personalTargetDate || '')}"><small>Must be on or before the stored official deadline when one is available.</small><span class="field-error" data-journey-planning-error="personalTargetDate" hidden></span></div>`
+                  : `<input type="hidden" name="personalTargetDate" value="${escapeHTML(journey.personalTargetDate || '')}">
+                     ${journey.personalTargetDate ? `<div class="journey-historical-target"><span>Historical preparation target</span><b>${escapeHTML(journey.personalTargetDate)}</b><small>Kept for context; it is no longer an active preparation deadline.</small></div>` : ''}`}
+                <div class="field"><label>Private notes</label><textarea class="textarea" name="notes" maxlength="3000" data-journey-notes placeholder="${journey.status === 'applied' ? 'Submission confirmation, reference number, expected response…' : journey.status === 'interview' ? 'Interview topics, requested documents, follow-up reminders…' : journey.status === 'accepted' ? 'Offer acceptance, official next steps, questions to verify…' : 'Questions, reminders, preparation notes…'}">${escapeHTML(journey.notes || '')}</textarea><div class="journey-notes-meta"><small>Private to your account</small><small><span data-journey-notes-count>${String(journey.notes || '').length}</span>/3000</small></div><span class="field-error" data-journey-planning-error="notes" hidden></span></div>
+                <div class="journey-planning-summary" data-journey-planning-summary hidden></div>
+                <button class="btn btn-primary" type="submit">Save private planning</button>
+              </form>
+            </section>
+          </main>
+
+          <aside class="journey-detail-aside">
+            ${deadlinePanel}
+
+            <section class="journey-detail-card">
+              <header class="journey-detail-card-head"><div><span>OFFICIAL SOURCE</span><h2>Verify before acting</h2></div></header>
+              <div class="journey-source-status ${escapeHTML(trust.tone)}">
+                <span>${icon('check',16)}</span>
+                <div><b>${escapeHTML(trust.label)}</b><p>${escapeHTML(trust.detail)}</p></div>
+              </div>
+              ${officialSource
+                ? `<a class="btn btn-secondary journey-source-link" href="${officialSource}" target="_blank" rel="noopener noreferrer">Open official provider source ↗</a>`
+                : '<p class="journey-source-missing">No official source link is available in this stored opportunity record. Do not rely on Tefsen alone for submission requirements.</p>'}
+            </section>
+
+            <section class="journey-detail-card">
+              <header class="journey-detail-card-head"><div><span>STAGE HISTORY</span><h2>Your Journey timeline</h2></div></header>
+              <div class="journey-detail-history">
+                ${model.history.length
+                  ? model.history.map((item,index) => `<div class="journey-detail-history-item ${index === 0 ? 'latest' : ''}"><span></span><div><b>${escapeHTML(JOURNEY_LABELS[item.status] || item.status)}</b><small>${escapeHTML(formatHistoryTime(item.atMillis))}</small></div></div>`).join('')
+                  : '<p>No stage history recorded yet.</p>'}
+              </div>
+            </section>
+
+            <section class="journey-detail-privacy">
+              ${icon('info',16)}
+              <div><b>Private Journey</b><p>Your stage, checklist, targets and notes are not automatically published to your community profile.</p></div>
+            </section>
+          </aside>
+        </div>
       </div>`;
+
     renderShell(content, { wide:true });
   } catch (error) {
     console.error(error);
-    renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Could not load journey','Please try again.')}`, { wide:true });
+    renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Could not load Journey','Please try again.')}`, { wide:true });
   }
 }
 
@@ -3450,14 +3567,51 @@ async function handleJourneyStageSave(form) {
 async function handleJourneyPlanningSave(form) {
   const opportunityId = form.dataset.journeyPlanningForm || '';
   const fd = new FormData(form);
+  const draft = {
+    status:String(form.dataset.journeyStatus || 'interested'),
+    personalTargetDate:String(fd.get('personalTargetDate') || ''),
+    officialDeadline:String(form.dataset.officialDeadline || ''),
+    notes:String(fd.get('notes') || '')
+  };
+  const validation = validateJourneyPlanningDraft(draft);
+
+  form.querySelectorAll('[data-journey-planning-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  if (!validation.valid) {
+    for (const error of validation.errors) {
+      const field = form.elements.namedItem(error.field);
+      if (field instanceof HTMLElement) {
+        field.classList.add('field-error-state');
+        field.focus();
+      }
+      const errorEl = form.querySelector(`[data-journey-planning-error="${error.field}"]`);
+      if (errorEl) {
+        errorEl.hidden = false;
+        errorEl.textContent = error.message;
+      }
+    }
+    const summary = form.querySelector('[data-journey-planning-summary]');
+    if (summary) {
+      summary.hidden = false;
+      summary.classList.add('has-error');
+      summary.textContent = validation.errors.map(item => item.message).join(' ');
+    }
+    toast('Check the highlighted Journey planning field before saving.', 'error');
+    return;
+  }
+
   const submit = form.querySelector('button[type="submit"]');
   await withButton(submit, async () => {
     try {
       await updateJourneyPlanning(state.mode, state.user.uid, opportunityId, {
-        personalTargetDate: String(fd.get('personalTargetDate') || ''),
-        notes: String(fd.get('notes') || '')
+        personalTargetDate: draft.personalTargetDate,
+        notes: draft.notes
       });
-      toast('Journey planning saved.', 'success');
+      toast('Private Journey planning saved.', 'success');
       await renderJourneyDetail(opportunityId);
     } catch (error) {
       toast(humanError(error), 'error');
@@ -3841,7 +3995,15 @@ document.addEventListener('input', event => {
     return;
   }
   const passportForm = event.target.closest?.('[data-student-passport-form]');
-  if (passportForm) updateStudentPassportFormQuality(passportForm);
+  if (passportForm) {
+    updateStudentPassportFormQuality(passportForm);
+    return;
+  }
+  if (event.target.matches?.('[data-journey-notes]')) {
+    const form = event.target.closest('[data-journey-planning-form]');
+    const count = form?.querySelector('[data-journey-notes-count]');
+    if (count) count.textContent = String(event.target.value.length);
+  }
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
