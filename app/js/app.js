@@ -3301,8 +3301,14 @@ async function handleOpportunitySave(button) {
       const opportunity = await getOpportunityById(state.mode, opportunityId);
       if (!opportunity) throw new Error('Opportunity is not available.');
       const isSaved = button.dataset.opportunitySaved === 'true';
-      const journey = await setOpportunitySaved(state.mode, state.user.uid, opportunity, !isSaved);
-      if (journey) currentJourneyStates.set(opportunityId, journey);
+      if (isSaved) {
+        const journey = await removeSavedOpportunity(state.mode, state.user.uid, opportunityId);
+        if (journey) currentJourneyStates.set(opportunityId, journey);
+        else currentJourneyStates.delete(opportunityId);
+      } else {
+        const journey = await setOpportunitySaved(state.mode, state.user.uid, opportunity, true);
+        if (journey) currentJourneyStates.set(opportunityId, journey);
+      }
       toast(isSaved ? 'Removed from saved opportunities.' : 'Opportunity saved.', 'success');
       renderRoute();
     } catch (error) {
