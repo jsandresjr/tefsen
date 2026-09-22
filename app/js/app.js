@@ -2440,7 +2440,7 @@ async function handleClick(event) {
   }
   const onboardingSkip = event.target.closest('[data-passport-onboarding-skip]');
   if (onboardingSkip) {
-    await handlePassportOnboardingSkip(onboardingSkip);
+    await handlePassportOnboardingSkip(onboardingSkip, onboardingForm);
     return;
   }
   if (event.target.closest('[data-passport-onboarding-finish]')) {
@@ -2931,16 +2931,33 @@ async function handlePassportOnboardingSave(form) {
   });
 }
 
-async function handlePassportOnboardingSkip(button) {
+async function handlePassportOnboardingSkip(button, form = null) {
   const current = currentStudentPassport || emptyStudentPassport(state.user.uid);
+  const fd = form ? new FormData(form) : null;
+  const preferredCountries = fd
+    ? String(fd.get('preferredCountries') || '').split(',').map(value => value.trim()).filter(Boolean)
+    : current.preferredCountries;
+
+  const partial = fd ? {
+    currentCountry: String(fd.get('currentCountry') || current.currentCountry || '').trim(),
+    nationality: String(fd.get('nationality') || current.nationality || '').trim(),
+    currentEducationLevel: String(fd.get('currentEducationLevel') || current.currentEducationLevel || '').trim(),
+    targetEducationLevel: String(fd.get('targetEducationLevel') || current.targetEducationLevel || '').trim(),
+    mainField: String(fd.get('mainField') || current.mainField || '').trim(),
+    studyGoal: String(fd.get('studyGoal') || current.studyGoal || '').trim(),
+    fundingPreference: String(fd.get('fundingPreference') || current.fundingPreference || '').trim(),
+    preferredCountries
+  } : {};
+
   await withButton(button, async () => {
     try {
       currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, {
         ...current,
+        ...partial,
         onboardingStatus: 'skipped'
       });
       passportOnboardingJustCompleted = false;
-      toast('You can finish Student Passport anytime.', 'success');
+      toast('Your progress is saved. You can finish Student Passport anytime.', 'success');
       go('opportunities');
     } catch (error) {
       toast(humanError(error), 'error');
