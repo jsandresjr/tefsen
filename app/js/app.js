@@ -812,46 +812,160 @@ function applyOpportunityDiscoveryFilters() {
 
 const applyOpportunitySearchDebounced = debounce(() => applyOpportunityDiscoveryFilters(), 120);
 
-function opportunityCard(item, match = null, journey = null) {
+function opportunityDeadlinePresentation(item = {}) {
+  const info = deadlineInfo(item.deadline || '');
+  if (!info.valid) {
+    return {
+      tone: 'unknown',
+      label: item.deadlineNote || 'Deadline varies',
+      detail: item.deadlineNote ? 'Check the official source for the exact date.' : 'No structured deadline is stored.'
+    };
+  }
+
+  if (info.daysRemaining === 0) return { tone:'urgent', label:'Deadline today', detail:'Review the official source now.' };
+  if (info.daysRemaining > 0 && info.daysRemaining <= 6) return { tone:'urgent', label:`${info.daysRemaining} days left`, detail:opportunityDateLabel(item.deadline) };
+  if (info.daysRemaining <= 14) return { tone:'soon', label:`${info.daysRemaining} days left`, detail:opportunityDateLabel(item.deadline) };
+  if (info.daysRemaining <= 30) return { tone:'watch', label:`${info.daysRemaining} days left`, detail:opportunityDateLabel(item.deadline) };
+  if (info.daysRemaining < 0) return { tone:'expired', label:'Expired', detail:opportunityDateLabel(item.deadline) };
+  return { tone:'normal', label:opportunityDateLabel(item.deadline).replace(/^Deadline\s+/,'').trim(), detail:`${info.daysRemaining} days remaining` };
+}
+
+function opportunityTrustPresentation(item = {}) {
   const preview = item.verificationStatus === 'preview';
   const starter = item.catalogSource === 'starter';
-  const chips = [
-    item.opportunityType,
-    item.fundingType,
-    item.country
-  ].filter(Boolean).slice(0, 3);
+
+  if (preview) {
+    return { tone:'preview', label:'Preview data', detail:'Development-only listing' };
+  }
+
+  if (starter) {
+    return {
+      tone:'starter',
+      label:'Official source checked',
+      detail:opportunitySourceCheckedLabel(item)
+    };
+  }
+
+  const freshness = opportunityFreshness(item);
+  if (item.verificationStatus === 'verified' && freshness.state === 'fresh') {
+    return { tone:'verified', label:'Verified source', detail:freshness.label };
+  }
+  if (item.verificationStatus === 'verified' && freshness.state === 'aging') {
+    return { tone:'aging', label:'Verified · review soon', detail:freshness.label };
+  }
+  if (item.verificationStatus === 'verified' && freshness.state === 'stale') {
+    return { tone:'stale', label:'Source needs re-check', detail:freshness.label };
+  }
+  return { tone:'unverified', label:'Source not verified', detail:'Use the provider page before acting.' };
+}
+
+function opportunityMatchPresentation(match = null) {
+  const reasons = (match?.reasons || []).filter(reason => reason !== 'verified source');
+  if (!reasons.length) {
+    return {
+      personalized:false,
+      score:null,
+      label:'Build your match',
+      detail:'Complete Student Passport for a profile-based comparison.'
+    };
+  }
+
+  const reasonLabels = {
+    'field of study':'field',
+    'study level':'study level',
+    'preferred country':'country',
+    'funding preference':'funding',
+    'nationality':'nationality'
+  };
+  const readable = reasons.map(reason => reasonLabels[reason] || reason);
+  return {
+    personalized:true,
+    score:Number(match?.score || 0),
+    label:`${Number(match?.score || 0)}% profile match`,
+    detail:`Matches ${readable.slice(0,3).join(' · ')}${readable.length > 3 ? ` +${readable.length - 3}` : ''}`
+  };
+}
+
+function opportunityCard(item, match = null, journey = null) {
+  const deadline = opportunityDeadlinePresentation(item);
+  const trust = opportunityTrustPresentation(item);
+  const matchView = opportunityMatchPresentation(match);
   const deadlineDays = opportunityDeadlineDays(item);
   const searchText = opportunitySearchText(item);
-  return `<article class="opportunity-card" data-opportunity-card
+  const subjects = (item.subjects || []).filter(Boolean);
+  const studyLevels = (item.studyLevels || []).filter(Boolean);
+  const saved = Boolean(journey?.saved);
+  const inJourney = Boolean(journey?.started);
+  const source = safeUrl(item.officialSourceUrl || '');
+
+  const subjectMarkup = subjects.slice(0,2).map(value => `<span class="opportunity-subject-tag">${escapeHTML(value)}</span>`).join('');
+  const extraSubjects = subjects.length > 2 ? `<span class="opportunity-subject-more">+${subjects.length - 2}</span>` : '';
+  const levelText = studyLevels.slice(0,2).join(' · ') || 'Study level varies';
+
+  return `<article class="opportunity-card opportunity-card-v3" data-opportunity-card
     data-search="${escapeHTML(searchText)}"
     data-country="${escapeHTML(String(item.country || '').toLowerCase())}"
-    data-levels="${escapeHTML((item.studyLevels || []).map(value => String(value).toLowerCase()).join('|'))}"
+    data-levels="${escapeHTML(studyLevels.map(value => String(value).toLowerCase()).join('|'))}"
     data-funding="${escapeHTML(String(item.fundingType || '').toLowerCase())}"
     data-type="${escapeHTML(String(item.opportunityType || '').toLowerCase())}"
     data-deadline-days="${deadlineDays}"
-    data-saved="${journey?.saved ? 'true' : 'false'}"
+    data-saved="${saved ? 'true' : 'false'}"
     data-match="${Number(match?.score || 0)}"
     data-title="${escapeHTML(String(item.title || '').toLowerCase())}">
-    <div class="opportunity-card-top">
-      <div>
-        <div class="opportunity-meta">${chips.map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}</div>
-        <h3 style="margin-top:12px">${escapeHTML(item.title)}</h3>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-        ${match && match.score > 0 ? `<span class="opportunity-chip match-badge">${match.score}% match</span>` : ''}
-        <span class="opportunity-chip ${preview ? 'preview' : starter ? 'starter' : ''}">${preview ? 'Preview' : starter ? 'Official source' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
+
+    <div class="opportunity-card-eyebrow">
+      <span class="opportunity-type-mark">${icon('compass',15)} ${escapeHTML(item.opportunityType || 'Opportunity')}</span>
+      <div class="opportunity-card-state">
+        ${inJourney ? '<span class="opportunity-journey-state">In Journey</span>' : saved ? '<span class="opportunity-saved-state">Saved</span>' : ''}
       </div>
     </div>
-    <p>${escapeHTML(item.summary || 'Open this opportunity to review the available details and requirements.')}</p>
-    <div class="opportunity-meta">
-      ${(item.subjects || []).slice(0, 3).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
+
+    <div class="opportunity-card-heading">
+      <h3>${escapeHTML(item.title)}</h3>
+      <p class="opportunity-provider">${escapeHTML(item.provider || item.university || 'Opportunity provider')}</p>
     </div>
-    <div class="opportunity-card-footer">
-      <span class="opportunity-deadline">${escapeHTML(opportunityDeadlineLabel(item))}</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-        <button class="btn btn-ghost" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save'}</button>
-        <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View details</button>
+
+    <div class="opportunity-card-primary-meta">
+      <span class="opportunity-funding-badge">${escapeHTML(item.fundingType || 'Funding not specified')}</span>
+      <span class="opportunity-location-badge">${escapeHTML(item.country || 'Global')}</span>
+      <span class="opportunity-level-text">${escapeHTML(levelText)}</span>
+    </div>
+
+    <p class="opportunity-card-summary">${escapeHTML(item.summary || 'Review the opportunity details, requirements and official provider source.')}</p>
+
+    ${subjects.length ? `<div class="opportunity-subject-row">${subjectMarkup}${extraSubjects}</div>` : ''}
+
+    <div class="opportunity-card-signals">
+      <div class="opportunity-signal match ${matchView.personalized ? 'personalized' : 'incomplete'}">
+        <span class="opportunity-signal-icon">${icon('user',16)}</span>
+        <div>
+          <b>${escapeHTML(matchView.label)}</b>
+          <small>${escapeHTML(matchView.detail)}</small>
+        </div>
       </div>
+
+      <div class="opportunity-signal deadline ${deadline.tone}">
+        <span class="opportunity-signal-icon">${icon('info',16)}</span>
+        <div>
+          <b>${escapeHTML(deadline.label)}</b>
+          <small>${escapeHTML(deadline.detail)}</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="opportunity-trust-row">
+      <div class="opportunity-trust ${trust.tone}">
+        <span class="opportunity-trust-icon">${icon('check',15)}</span>
+        <div><b>${escapeHTML(trust.label)}</b><small>${escapeHTML(trust.detail)}</small></div>
+      </div>
+      ${source ? `<a class="opportunity-source-link" href="${source}" target="_blank" rel="noopener noreferrer" aria-label="Open official source for ${escapeHTML(item.title)}">Official source ↗</a>` : ''}
+    </div>
+
+    <div class="opportunity-card-actions">
+      <button class="opportunity-save-button ${saved ? 'saved' : ''}" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${saved ? 'true' : 'false'}" aria-pressed="${saved}">
+        ${icon('bookmark',16)} <span>${saved ? 'Saved' : 'Save'}</span>
+      </button>
+      <button class="btn btn-primary opportunity-view-button" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View opportunity</button>
     </div>
   </article>`;
 }
