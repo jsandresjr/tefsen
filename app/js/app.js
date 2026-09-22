@@ -8,6 +8,7 @@ import {
   startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
+import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
@@ -34,7 +35,8 @@ let likeHydrationRun = 0;
 
 const navItems = [
   ['home', 'Home', 'home'],
-  ['explore', 'Explore', 'compass'],
+  ['opportunities', 'Opportunities', 'compass'],
+  ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
   ['messages', 'Messages', 'message'],
   ['leaderboard', 'Leaderboard', 'trophy'],
@@ -256,7 +258,7 @@ function renderShell(content, options = {}) {
 
       <nav class="mobile-bottom" aria-label="Mobile navigation">
         ${mobileNavButton('home','home',route,'Home')}
-        ${mobileNavButton('explore','compass',route,'Explore')}
+        ${mobileNavButton('opportunities','compass',route,'Opportunities')}
         <button class="create-mobile" type="button" data-action="compose" aria-label="Ask a question">${icon('plus',24)}</button>
         ${mobileNavButton('notifications','bell',route,'Notifications')}
         ${mobileNavButton('profile','user',route,'Profile')}
@@ -399,6 +401,142 @@ function renderExplore() {
     </section>
     <div class="feed-list">${[...state.posts].sort((a,b)=>scorePost(b)-scorePost(a)).map(postCard).join('') || emptyState('compass','No posts yet','Explore will come alive as the community publishes.')}</div>`;
   renderShell(content);
+}
+
+
+function opportunityDateLabel(value) {
+  if (!value) return 'Deadline not listed';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return `Deadline ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
+}
+
+function opportunityCard(item) {
+  const preview = item.verificationStatus === 'preview';
+  const chips = [
+    item.opportunityType,
+    item.fundingType,
+    item.country
+  ].filter(Boolean).slice(0, 3);
+  return `<article class="opportunity-card">
+    <div class="opportunity-card-top">
+      <div>
+        <div class="opportunity-meta">${chips.map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}</div>
+        <h3 style="margin-top:12px">${escapeHTML(item.title)}</h3>
+      </div>
+      <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
+    </div>
+    <p>${escapeHTML(item.summary || 'Open this opportunity to review the available details and requirements.')}</p>
+    <div class="opportunity-meta">
+      ${(item.subjects || []).slice(0, 3).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
+    </div>
+    <div class="opportunity-card-footer">
+      <span class="opportunity-deadline">${escapeHTML(opportunityDateLabel(item.deadline))}</span>
+      <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View details</button>
+    </div>
+  </article>`;
+}
+
+async function renderOpportunities() {
+  renderShell(`<header class="page-head"><div><h1>Opportunities</h1><p>Finding opportunities that fit your education journey…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  try {
+    const items = await getOpportunities(state.mode);
+    const fundedCount = items.filter(item => /funded/i.test(item.fundingType || '')).length;
+    const content = `${demoBanner()}
+      <section class="opportunity-hero">
+        <div class="opportunity-hero-card">
+          <span class="opportunity-kicker">YOUR PATH TO OPPORTUNITY</span>
+          <h1>Find the next step in your education journey.</h1>
+          <p>Discover scholarships, research programs, exchanges and other student opportunities. Tefsen will keep official-source verification separate from community information.</p>
+        </div>
+        <div class="opportunity-stat-card">
+          <span>Available now</span>
+          <strong>${items.length}</strong>
+          <span>${fundedCount} funded opportunities in this view</span>
+        </div>
+      </section>
+      <header class="page-head"><div><h2 style="margin:0">Discover opportunities</h2><p>Open a listing to review funding, subjects, requirements and source status.</p></div></header>
+      <div class="opportunity-grid">${items.length ? items.map(opportunityCard).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}<header class="page-head"><div><h1>Opportunities</h1><p>We could not load the opportunity catalogue.</p></div></header>${emptyState('info','Opportunities unavailable','Please try again after the opportunity collection and Firestore access are configured.')}`, { wide:true });
+  }
+}
+
+async function renderOpportunityDetail(opportunityId) {
+  renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button><div class="loading-card" style="margin-top:14px"></div>`, { wide:true });
+  try {
+    const item = await getOpportunityById(state.mode, opportunityId);
+    if (!item) {
+      renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Opportunity not found','This listing may be unavailable, private, expired, or not yet published.')}`, { wide:true });
+      return;
+    }
+
+    const source = safeUrl(item.officialSourceUrl || '');
+    const preview = item.verificationStatus === 'preview';
+    const list = (values, fallback) => values?.length
+      ? `<ul class="opportunity-list">${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul>`
+      : `<p style="color:var(--muted)">${escapeHTML(fallback)}</p>`;
+
+    const content = `${demoBanner()}
+      <button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button>
+      <div class="opportunity-detail-layout" style="margin-top:14px">
+        <article class="opportunity-detail-card">
+          <span class="opportunity-kicker">${escapeHTML(item.opportunityType)} · ${escapeHTML(item.country)}</span>
+          <h1>${escapeHTML(item.title)}</h1>
+          <p style="color:var(--muted);line-height:1.65">${escapeHTML(item.summary || 'Opportunity details')}</p>
+          <div class="opportunity-meta">
+            <span class="opportunity-chip">${escapeHTML(item.fundingType)}</span>
+            ${(item.studyLevels || []).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
+            <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview data' : escapeHTML(item.verificationStatus)}</span>
+          </div>
+
+          <section class="opportunity-section">
+            <h2>Fields of study</h2>
+            ${list(item.subjects, 'Subject information has not been added yet.')}
+          </section>
+          <section class="opportunity-section">
+            <h2>What it may cover</h2>
+            ${list(item.benefits, 'Funding-benefit details have not been added yet.')}
+          </section>
+          <section class="opportunity-section">
+            <h2>Eligibility & requirements</h2>
+            ${list(item.requirements, 'Structured eligibility requirements have not been added yet.')}
+          </section>
+          <section class="opportunity-section">
+            <h2>Required documents</h2>
+            ${list(item.requiredDocuments, 'Required-document information has not been added yet.')}
+          </section>
+        </article>
+
+        <aside class="opportunity-detail-card">
+          <div class="opportunity-section" style="margin-top:0;padding-top:0;border-top:0">
+            <h2>Provider</h2>
+            <p><b>${escapeHTML(item.provider)}</b>${item.university ? `<br><span style="color:var(--muted)">${escapeHTML(item.university)}</span>` : ''}</p>
+          </div>
+          <div class="opportunity-section">
+            <h2>Deadline</h2>
+            <p>${escapeHTML(opportunityDateLabel(item.deadline))}</p>
+          </div>
+          <div class="opportunity-section">
+            <h2>Source status</h2>
+            <div class="opportunity-source-note">${preview
+              ? 'This is clearly marked preview data for development. It is not a real scholarship listing.'
+              : 'Tefsen summarizes opportunity data for discovery. Always confirm final requirements on the official provider source before applying.'}</div>
+            ${source ? `<a class="btn btn-primary btn-block" style="margin-top:12px" href="${source}" target="_blank" rel="noopener noreferrer">Open official source</a>` : ''}
+          </div>
+          <div class="opportunity-section">
+            <h2>Coming next</h2>
+            <p style="color:var(--muted);line-height:1.55">Student Passport matching, “Can I Apply?” eligibility checks, saving, deadlines and application journeys will connect to this opportunity model in the next milestones.</p>
+          </div>
+        </aside>
+      </div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Could not load opportunity','Please try again.')}`, { wide:true });
+  }
 }
 
 function emptyState(ic, title, text) {
@@ -647,6 +785,8 @@ function renderRoute() {
   if (stopMessages && route !== 'messages') { stopMessages(); stopMessages = null; }
   switch (route || 'home') {
     case 'home': renderHome(); break;
+    case 'opportunities': renderOpportunities(); break;
+    case 'opportunity': renderOpportunityDetail(param || ''); break;
     case 'explore': renderExplore(); break;
     case 'saved': renderHome('saved'); break;
     case 'notifications': renderNotifications(); break;
