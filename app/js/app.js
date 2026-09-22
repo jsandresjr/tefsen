@@ -18,6 +18,7 @@ import {
   allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
+import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -460,7 +461,7 @@ function postCard(post) {
 }
 
 async function renderHome() {
-  renderShell(`<div class="v2-home"><section class="v2-dashboard-hero"><div><span class="opportunity-kicker">YOUR STUDENT JOURNEY</span><h1>Building your next step…</h1><p>Loading your Student Passport, opportunities and application progress.</p></div></section></div>`, { wide:true, right:false });
+  renderShell(`<div class="home-v3"><section class="home-v3-hero loading"><div><span class="opportunity-kicker">YOUR STUDENT JOURNEY</span><h1>Preparing your next step…</h1><p>Loading Student Passport, opportunities and private Journey progress.</p></div></section></div>`, { wide:true, right:false });
 
   try {
     const [passport, opportunities, journeys] = await Promise.all([
@@ -472,110 +473,195 @@ async function renderHome() {
     currentStudentPassport = passport;
     currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
 
-    const completeness = studentPassportCompleteness(passport);
+    const passportDetails = studentPassportCompletionDetails(passport);
     const ranked = opportunities
-      .map(item => ({ item, match: scoreOpportunityMatch(passport, item) }))
-      .sort((a,b) => b.match.score - a.match.score);
+      .map(item => {
+        const match = scoreOpportunityMatch(passport, item);
+        const matchView = opportunityMatchPresentation(match);
+        return {
+          item,
+          match,
+          matchView,
+          profileScore:matchView.score,
+          personalized:matchView.personalized
+        };
+      })
+      .sort((a,b) => (b.profileScore - a.profileScore) || (b.match.score - a.match.score));
 
-    const visibleJourneys = journeys.filter(row => row.saved || row.started);
-    const activeJourneys = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
-    const savedCount = visibleJourneys.filter(row => row.saved).length;
-    const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
+    const dashboard = buildHomeDashboardModel({
+      passport,
+      passportDetails,
+      rankedOpportunities:ranked,
+      journeys
+    });
 
-    const dated = visibleJourneys
-      .map(row => ({ row, opportunity: opportunityMap.get(row.opportunityId), info: deadlineInfo(opportunityMap.get(row.opportunityId)?.deadline || '') }))
-      .filter(entry => entry.info.valid && entry.info.daysRemaining >= 0)
-      .sort((a,b) => a.info.daysRemaining - b.info.daysRemaining);
-    const nearest = dated[0] || null;
-
-    let nextAction = {
-      title: 'Complete your Student Passport',
-      detail: 'Add your education direction so Tefsen can make opportunity matching more useful.',
-      route: 'passport',
-      button: 'Open Passport'
-    };
-    if (completeness >= 70 && nearest && nearest.info.daysRemaining <= 14) {
-      nextAction = {
-        title: nearest.info.daysRemaining === 0 ? 'A deadline is today' : `Deadline in ${nearest.info.daysRemaining} days`,
-        detail: nearest.opportunity?.title || 'Continue preparing your saved opportunity.',
-        route: `journey/${encodeURIComponent(nearest.row.opportunityId)}`,
-        button: 'Continue Journey'
-      };
-    } else if (completeness >= 70 && activeJourneys.length) {
-      const row = activeJourneys[0], opportunity = opportunityMap.get(row.opportunityId);
-      const progress = journeyProgress(row);
-      nextAction = {
-        title: `Continue: ${JOURNEY_LABELS[row.status] || row.status}`,
-        detail: opportunity ? `${opportunity.title} · ${progress.completed}/${progress.total} tasks complete` : 'Continue your active application journey.',
-        route: `journey/${encodeURIComponent(row.opportunityId)}`,
-        button: 'Open Journey'
-      };
-    } else if (completeness >= 70 && ranked[0]) {
-      nextAction = {
-        title: 'Review your strongest current match',
-        detail: `${ranked[0].item.title} · ${ranked[0].match.score}% structured match`,
-        route: `opportunity/${encodeURIComponent(ranked[0].item.id)}`,
-        button: 'Review Match'
-      };
-    }
-
-    const goal = passport.studyGoal || (passport.mainField ? `${passport.targetEducationLevel || 'Study'} opportunity in ${passport.mainField}` : 'Set your education goal');
     const firstName = String(state.profile?.fullName || 'Student').trim().split(/\s+/)[0] || 'Student';
     const successes = state.posts.filter(post => post.postType === 'success_story').slice(0,2);
+    const stateCopy = {
+      deadline:{ label:'DEADLINE FOCUS', title:'Protect the opportunity already on your path.' },
+      accepted:{ label:'ACCEPTED · NEXT STAGE', title:'Turn an acceptance into a prepared next chapter.' },
+      journey:{ label:'APPLICATION IN PROGRESS', title:'Keep your active application moving.' },
+      getting_started:{ label:'GETTING STARTED', title:'Build enough context for Tefsen to guide you.' },
+      saved:{ label:'SAVED OPPORTUNITY', title:'Turn interest into a preparation plan.' },
+      match:{ label:'PROFILE MATCH', title:'Review the strongest opportunity signal on your path.' },
+      discovery:{ label:'DISCOVERY', title:'Find a useful next opportunity.' }
+    };
+    const homeState = stateCopy[dashboard.state] || stateCopy.discovery;
 
-    const matchCard = ({item,match}) => `<button class="v2-opportunity-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
-      <div class="v2-opportunity-meta"><span class="opportunity-chip">${escapeHTML(item.fundingType)}</span><span class="opportunity-chip">${escapeHTML(item.country)}</span></div>
-      <h3>${escapeHTML(item.title)}</h3>
-      <p>${escapeHTML(item.provider)}${item.university ? ` · ${escapeHTML(item.university)}` : ''}</p>
-      <div class="v2-opportunity-foot"><span class="v2-match">${match.score}% match</span><span style="color:var(--v2-muted);font-size:.8rem">${escapeHTML(opportunityDateLabel(item.deadline))}</span></div>
-    </button>`;
+    const homeMatchCard = ({item,matchView}) => {
+      const deadline = opportunityDeadlinePresentation(item);
+      const matchLabel = matchView.personalized
+        ? `${matchView.score}% profile match`
+        : 'Complete Passport to personalize';
+      return `<button class="home-v3-match-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
+        <div class="home-v3-match-meta">
+          <span class="opportunity-funding-badge">${escapeHTML(item.fundingType || 'Funding varies')}</span>
+          <span class="opportunity-location-badge">${escapeHTML(item.country || 'Multiple / global')}</span>
+        </div>
+        <h3>${escapeHTML(item.title)}</h3>
+        <p>${escapeHTML(item.provider || item.university || 'Opportunity provider')}</p>
+        <div class="home-v3-match-foot">
+          <span class="${matchView.personalized ? 'personalized' : ''}">${escapeHTML(matchLabel)}</span>
+          <small class="${escapeHTML(deadline.tone)}">${escapeHTML(deadline.label)}</small>
+        </div>
+      </button>`;
+    };
 
-    const content = `${demoBanner()}<div class="v2-home">
-      <section class="v2-dashboard-hero">
-        <div>
-          <span class="opportunity-kicker">YOUR STUDENT JOURNEY</span>
-          <h1>Welcome, ${escapeHTML(firstName)}.<br>Make the next step clear.</h1>
-          <p>Tefsen brings your education goal, matched opportunities, deadlines and application progress into one place.</p>
-          <div class="v2-dashboard-actions">
-            <button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button>
-            <button class="btn btn-secondary" type="button" data-route="journeys">View your journey</button>
+    const nearestMarkup = dashboard.nearestDeadline
+      ? `<section class="home-v3-focus-card">
+          <div class="home-v3-focus-icon">${icon('info',19)}</div>
+          <div>
+            <span>NEAREST SAVED DEADLINE</span>
+            <h3>${escapeHTML(dashboard.nearestDeadline.title)}</h3>
+            <p>${dashboard.nearestDeadline.days === 0 ? 'Deadline today' : `${dashboard.nearestDeadline.days} days remaining`}. Confirm the exact deadline on the official provider source.</p>
+          </div>
+          <button class="btn btn-secondary" type="button" data-route="${escapeHTML(dashboard.nearestDeadline.route)}">Open</button>
+        </section>`
+      : '';
+
+    const journeyFocus = dashboard.acceptedJourney
+      ? `<section class="home-v3-journey-empty accepted">
+          <span class="home-v3-mini-kicker">ACCEPTED OUTCOME</span>
+          <h3>Continue planning after acceptance.</h3>
+          <p>Your accepted Journey stays private. Use it to organize the next stage instead of treating acceptance as the end of the process.</p>
+          <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(dashboard.acceptedJourney.opportunityId)}">Open accepted Journey</button>
+        </section>`
+      : dashboard.activeJourney
+        ? (() => {
+            const row = dashboard.activeJourney;
+            const opportunity = opportunities.find(item => item.id === row.opportunityId);
+            const progress = journeyProgress(row);
+            return `<section class="home-v3-journey-empty active">
+              <span class="home-v3-mini-kicker">ACTIVE APPLICATION</span>
+              <h3>${escapeHTML(opportunity?.title || 'Application Journey')}</h3>
+              <p>${escapeHTML(JOURNEY_LABELS[row.status] || row.status)} · ${progress.completed}/${progress.total} preparation tasks complete.</p>
+              <div class="home-v3-inline-progress"><i style="width:${progress.percent}%"></i></div>
+              <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(row.opportunityId)}">Continue Journey</button>
+            </section>`;
+          })()
+        : dashboard.savedCount
+          ? `<section class="home-v3-journey-empty saved">
+              <span class="home-v3-mini-kicker">SAVED FOR LATER</span>
+              <h3>${dashboard.savedCount} saved opportunit${dashboard.savedCount === 1 ? 'y' : 'ies'} waiting for a decision.</h3>
+              <p>Review requirements and start a private Journey only for opportunities you seriously want to prepare.</p>
+              <button class="btn btn-secondary" type="button" data-route="journeys">Review saved opportunities</button>
+            </section>`
+          : `<section class="home-v3-journey-empty">
+              <span class="home-v3-mini-kicker">NO APPLICATION JOURNEY YET</span>
+              <h3>Save an opportunity when it is worth tracking.</h3>
+              <p>Your Journey becomes the private place for stages, tasks, notes and deadlines. You do not need to start one just to browse.</p>
+              <button class="btn btn-secondary" type="button" data-route="opportunities">Find an opportunity</button>
+            </section>`;
+
+    const gettingStarted = dashboard.newUser
+      ? `<section class="home-v3-starter">
+          <div class="home-v3-section-title">
+            <div><span class="opportunity-kicker">START WITH THREE SMALL STEPS</span><h2>Make Tefsen useful without filling everything at once.</h2></div>
+          </div>
+          <div class="home-v3-starter-grid">
+            <button type="button" data-route="passport"><span>01</span><div><b>Set your direction</b><small>Add essential Student Passport fields.</small></div></button>
+            <button type="button" data-route="opportunities"><span>02</span><div><b>Explore globally</b><small>Browse opportunities from different countries and providers.</small></div></button>
+            <button type="button" data-route="opportunities"><span>03</span><div><b>Save selectively</b><small>Start a Journey only when an opportunity is worth preparing.</small></div></button>
+          </div>
+        </section>`
+      : '';
+
+    const content = `${demoBanner()}<div class="home-v3 home-state-${escapeHTML(dashboard.state)}">
+      <section class="home-v3-hero">
+        <div class="home-v3-hero-copy">
+          <span class="opportunity-kicker">${escapeHTML(homeState.label)}</span>
+          <h1>Welcome, ${escapeHTML(firstName)}.<br>${escapeHTML(homeState.title)}</h1>
+          <p>Tefsen brings your private Student Passport, global opportunity discovery, deadlines and application Journey into one place without turning profile completion into an acceptance score.</p>
+          <div class="home-v3-hero-actions">
+            <button class="btn btn-primary" type="button" data-route="${escapeHTML(dashboard.action.route)}">${escapeHTML(dashboard.action.button)}</button>
+            <button class="btn btn-secondary" type="button" data-route="opportunities">Explore opportunities</button>
           </div>
         </div>
-        <div class="v2-goal-card">
-          <small>Current goal</small>
-          <strong>${escapeHTML(goal)}</strong>
-          <div class="v2-progress-track"><i style="width:${completeness}%"></i></div>
-          <small>Student Passport · ${completeness}% complete</small>
-          <button class="btn btn-ghost" type="button" data-route="passport">Update Passport</button>
+
+        <aside class="home-v3-goal">
+          <span>CURRENT DIRECTION</span>
+          <strong>${escapeHTML(dashboard.goal)}</strong>
+          <div class="home-v3-passport-progress"><i style="width:${dashboard.passportPercent}%"></i></div>
+          <div class="home-v3-goal-foot">
+            <small>Student Passport · ${dashboard.passportPercent}% complete</small>
+            <button type="button" data-route="passport">Edit Passport</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="home-v3-next ${escapeHTML(dashboard.action.tone)}">
+        <div class="home-v3-next-icon">${dashboard.action.tone === 'urgent' ? '!' : icon('check',20)}</div>
+        <div class="home-v3-next-copy">
+          <span>RECOMMENDED NEXT ACTION</span>
+          <h2>${escapeHTML(dashboard.action.title)}</h2>
+          <p>${escapeHTML(dashboard.action.detail)}</p>
+          <small>${escapeHTML(dashboard.action.reason)}</small>
+        </div>
+        <button class="btn btn-primary" type="button" data-route="${escapeHTML(dashboard.action.route)}">${escapeHTML(dashboard.action.button)}</button>
+      </section>
+
+      ${gettingStarted}
+
+      <section class="home-v3-stats" aria-label="Student journey summary">
+        <article><span>Passport</span><strong>${dashboard.passportPercent}%</strong><small>Profile completeness</small></article>
+        <article><span>Saved</span><strong>${dashboard.savedCount || '—'}</strong><small>${dashboard.savedCount ? 'opportunities being tracked' : 'Nothing saved yet'}</small></article>
+        <article><span>Active</span><strong>${dashboard.activeCount || '—'}</strong><small>${dashboard.activeCount ? 'application Journeys' : 'No active application'}</small></article>
+        <article><span>Nearest deadline</span><strong>${dashboard.nearestDeadline ? (dashboard.nearestDeadline.days === 0 ? 'Today' : dashboard.nearestDeadline.days) : '—'}</strong><small>${dashboard.nearestDeadline ? (dashboard.nearestDeadline.days === 0 ? 'Act today' : 'days remaining') : 'No dated saved deadline'}</small></article>
+      </section>
+
+      ${nearestMarkup}
+
+      <section class="home-v3-section">
+        <div class="home-v3-section-title">
+          <div><span class="opportunity-kicker">DISCOVER</span><h2>${dashboard.essentialReady ? 'Recommended from your current profile' : 'Explore opportunities while you build your Passport'}</h2><p>${dashboard.essentialReady ? 'Profile match is based on structured Student Passport factors, not source verification and not an admission prediction.' : 'You can explore the global catalogue now. Tefsen will personalize ranking more as your essential Passport fields become complete.'}</p></div>
+          <button class="btn btn-ghost" type="button" data-route="opportunities">View all</button>
+        </div>
+        <div class="home-v3-match-grid">
+          ${ranked.length ? ranked.slice(0,3).map(homeMatchCard).join('') : `<section class="home-v3-empty">
+            <div>${icon('compass',22)}</div><h3>No opportunities are loaded yet.</h3><p>Open Opportunities to review the catalogue state and official-source listings.</p><button class="btn btn-secondary" type="button" data-route="opportunities">Open Opportunities</button>
+          </section>`}
         </div>
       </section>
 
-      <section class="v2-next-action">
-        <div class="v2-next-icon">${icon('check',20)}</div>
-        <div><b>${escapeHTML(nextAction.title)}</b><small>${escapeHTML(nextAction.detail)}</small></div>
-        <button class="btn btn-primary" type="button" data-route="${escapeHTML(nextAction.route)}">${escapeHTML(nextAction.button)}</button>
-      </section>
+      <section class="home-v3-section home-v3-two-col">
+        <div>
+          <div class="home-v3-section-title compact">
+            <div><span class="opportunity-kicker">YOUR JOURNEY</span><h2>Applications & preparation</h2><p>Private stages, tasks and deadlines for opportunities you choose to pursue.</p></div>
+            <button class="btn btn-ghost" type="button" data-route="journeys">Open Journey</button>
+          </div>
+          ${journeyFocus}
+        </div>
 
-      <section class="v2-kpi-grid" aria-label="Journey summary">
-        <article class="v2-kpi"><span>Student Passport</span><strong>${completeness}%</strong><small>Profile readiness</small></article>
-        <article class="v2-kpi"><span>Saved opportunities</span><strong>${savedCount}</strong><small>Worth tracking</small></article>
-        <article class="v2-kpi"><span>Active journeys</span><strong>${activeJourneys.length}</strong><small>Applications in progress</small></article>
-        <article class="v2-kpi"><span>Nearest deadline</span><strong>${nearest ? nearest.info.daysRemaining : '—'}</strong><small>${nearest ? (nearest.info.daysRemaining === 0 ? 'Today' : 'days remaining') : 'No dated deadline'}</small></article>
-      </section>
-
-      <section class="v2-section">
-        <div class="v2-section-head"><div><h2>Matched for you</h2><p>Structured matches based on your Student Passport — not admission guarantees.</p></div><button class="btn btn-ghost" type="button" data-route="opportunities">View all</button></div>
-        <div class="v2-opportunity-row">${ranked.length ? ranked.slice(0,3).map(matchCard).join('') : '<div class="panel opportunity-empty">Complete your Student Passport and add opportunities to start personalized matching.</div>'}</div>
-      </section>
-
-      <section class="v2-section">
-        <div class="v2-section-head"><div><h2>Deadlines & progress</h2><p>Your official deadlines stay separate from personal preparation targets.</p></div><button class="btn btn-ghost" type="button" data-route="journeys">Open Journey</button></div>
-        ${nearest ? `<div class="v2-next-action"><div class="v2-next-icon">${icon('check',20)}</div><div><b>${escapeHTML(nearest.opportunity?.title || 'Saved opportunity')}</b><small>${escapeHTML(nearest.info.label)} · ${escapeHTML(JOURNEY_LABELS[nearest.row.status] || nearest.row.status)}</small></div><button class="btn btn-secondary" type="button" data-route="journey/${encodeURIComponent(nearest.row.opportunityId)}">Prepare</button></div>` : '<div class="panel opportunity-empty">Save an opportunity to start tracking deadlines and preparation.</div>'}
-      </section>
-
-      <section class="v2-section">
-        <div class="v2-section-head"><div><h2>Student outcomes</h2><p>Real student experiences support your decisions; official sources still verify requirements.</p></div><button class="btn btn-ghost" type="button" data-route="explore">Community</button></div>
-        <div class="v2-outcome-grid">${successes.length ? successes.map(post => `<button class="v2-outcome-card" type="button" style="text-align:left;color:inherit;cursor:pointer" data-route="post/${encodeURIComponent(post.id)}"><span class="story-type success">✓ Success story</span><h3>${escapeHTML(post.title || 'Student success')}</h3><p>${escapeHTML((post.content || '').slice(0,180))}</p></button>`).join('') : '<div class="panel opportunity-empty">Student success stories will appear here as the community shares outcomes.</div>'}</div>
+        <div>
+          <div class="home-v3-section-title compact">
+            <div><span class="opportunity-kicker">COMMUNITY OUTCOMES</span><h2>Learn from student experiences</h2><p>Community stories can add context, but official sources still control requirements.</p></div>
+            <button class="btn btn-ghost" type="button" data-route="explore">Community</button>
+          </div>
+          <div class="home-v3-outcomes">${successes.length
+            ? successes.map(post => `<button class="home-v3-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}"><span>SUCCESS STORY</span><h3>${escapeHTML(post.title || 'Student success')}</h3><p>${escapeHTML((post.content || '').slice(0,150))}</p></button>`).join('')
+            : `<section class="home-v3-journey-empty"><span class="home-v3-mini-kicker">COMMUNITY IS GROWING</span><h3>No public success stories yet.</h3><p>Student outcomes will appear here only when students choose to share them publicly.</p><button class="btn btn-secondary" type="button" data-route="explore">Open Community</button></section>`}
+          </div>
+        </div>
       </section>
     </div>`;
 
