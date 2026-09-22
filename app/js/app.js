@@ -19,6 +19,10 @@ import {
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
 import {
+  buildSubjectCommunities, buildUniversityCommunities,
+  subjectCommunityData, universityCommunityData, intakeCommunityData
+} from './services/community-service.js';
+import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
 } from './utils.js';
@@ -304,6 +308,7 @@ function renderProfileDropdown() {
       <div class="dropdown-separator"></div>
       <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
       <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
+      <button type="button" data-route="explore" role="menuitem">${icon('compass',17)} <span>Community</span><small>Subjects, universities and outcomes</small></button>
       <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
@@ -362,6 +367,39 @@ function getFilteredPosts(tab = state.activeFeedTab) {
   return posts;
 }
 
+function postTypeBadgeMarkup(post) {
+  if (post.postType === 'success_story') return '<span class="story-type success">✓ Success story</span>';
+  if (post.postType === 'journey_story') return '<span class="story-type journey">Journey story</span>';
+  return '';
+}
+
+function structuredPostMarkup(post) {
+  if (post.postType === 'success_story') {
+    const s = post.successData || {};
+    const facts = [
+      ['University', s.university],
+      ['Opportunity', s.opportunityName],
+      ['Country', s.country],
+      ['Subject', s.subject],
+      ['Study level', s.studyLevel],
+      ['Intake', s.intake],
+      ['Funding', s.fundingType]
+    ].filter(([,value]) => value);
+    return `
+      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
+      ${facts.length ? `<div class="success-facts">${facts.map(([label,value]) => `<div class="success-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
+      <div class="community-banner">This is a student's shared experience, not an official statement of current scholarship or admission requirements.</div>`;
+  }
+  if (post.postType === 'journey_story') {
+    const milestones = post.publicMilestones || [];
+    return `
+      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
+      ${milestones.length ? `<div class="public-milestones">${milestones.map(item => `<div class="public-milestone"><span class="public-milestone-dot"></span><div><b>${escapeHTML(item.stage || 'Milestone')}${item.month ? ` · ${escapeHTML(item.month)}` : ''}</b>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`).join('')}</div>` : ''}
+      <div class="community-banner">Only milestones this student explicitly chose to publish are shown. Private Tefsen Journey data is not displayed here automatically.</div>`;
+  }
+  return '';
+}
+
 function postCard(post) {
   const liked = reactionState.liked.has(post.id);
   const saved = reactionState.saved.has(post.id);
@@ -373,6 +411,7 @@ function postCard(post) {
       <button class="post-menu" type="button" data-post-menu="${escapeHTML(post.id)}" aria-label="Post options">${icon('more',20)}</button>
     </header>
     <div class="post-body" data-route="post/${encodeURIComponent(post.id)}">
+      ${structuredPostMarkup(post)}
       <span class="post-subject">${escapeHTML(post.subject || 'General')}</span>
       <h3>${escapeHTML(displayTitle)}</h3>
       ${post.content && post.content !== post.title ? `<p>${nl2br(post.content.length > 460 ? post.content.slice(0,460) + '…' : post.content)}</p>` : ''}
@@ -404,19 +443,103 @@ function renderHome(forcedTab = null) {
   renderShell(content);
 }
 
-function renderExplore() {
-  const subjects = new Map();
-  state.posts.forEach(p => subjects.set(p.subject || 'General', (subjects.get(p.subject || 'General') || 0) + 1));
-  const topSubjects = [...subjects.entries()].sort((a,b) => b[1]-a[1]).slice(0,8);
-  const content = `${demoBanner()}
-    <header class="page-head"><div><h1>Explore</h1><p>Discover questions, subjects and ideas from across the community.</p></div><button class="btn btn-primary" data-action="compose">${icon('plus',17)} Ask</button></header>
-    <section class="panel section-card" style="margin-bottom:16px">
-      <div class="panel-title"><h2>Subjects</h2><small>${topSubjects.length} active</small></div>
-      <div class="tag-row">${topSubjects.length ? topSubjects.map(([name,count]) => `<button class="btn btn-secondary" style="min-height:38px" data-subject="${escapeHTML(name)}">${escapeHTML(name)} <small>${count}</small></button>`).join('') : '<span style="color:var(--muted)">Subjects appear as posts are published.</span>'}</div>
-    </section>
-    <div class="feed-list">${[...state.posts].sort((a,b)=>scorePost(b)-scorePost(a)).map(postCard).join('') || emptyState('compass','No posts yet','Explore will come alive as the community publishes.')}</div>`;
-  renderShell(content);
+async function renderExplore() {
+  renderShell(`<header class="page-head"><div><h1>Community</h1><p>Loading student communities and shared experiences…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const subjects = buildSubjectCommunities(state.posts, opportunities).filter(row => row.name !== 'General').slice(0, 12);
+    const universities = buildUniversityCommunities(state.posts, opportunities).slice(0, 12);
+    const successes = state.posts.filter(post => post.postType === 'success_story');
+    const journeys = state.posts.filter(post => post.postType === 'journey_story');
+
+    const content = `${demoBanner()}
+      <div class="community-hub">
+        <section class="community-hero">
+          <span class="opportunity-kicker">OUTCOME-FOCUSED COMMUNITY</span>
+          <h1>Learn from students who are moving forward.</h1>
+          <p>Explore subject communities, university and intake spaces, scholarship success stories, and public journey experiences. Community experiences never replace official provider information.</p>
+          <div class="community-action-row">
+            <button class="btn btn-primary" type="button" data-share-success>Share a success</button>
+            <button class="btn btn-secondary" type="button" data-share-journey-story>Share a journey story</button>
+            <button class="btn btn-ghost" type="button" data-action="compose">${icon('plus',16)} General discussion</button>
+          </div>
+        </section>
+
+        <section>
+          <header class="page-head"><div><h2 style="margin:0">Subject communities</h2><p>Opportunities and student conversations grouped by field.</p></div></header>
+          <div class="community-grid">${subjects.length ? subjects.map(row => `<button class="community-card" type="button" data-route="subject/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.opportunityCount} opportunities · ${row.postCount} community posts</p><div class="community-card-meta">${row.successCount ? `<span class="story-type success">${row.successCount} success stor${row.successCount===1?'y':'ies'}</span>` : ''}</div></button>`).join('') : '<div class="panel opportunity-empty">Subject communities will appear as opportunities and posts are added.</div>'}</div>
+        </section>
+
+        <section>
+          <header class="page-head"><div><h2 style="margin:0">University communities</h2><p>Find opportunities, success stories and intake conversations around a university.</p></div></header>
+          <div class="community-grid">${universities.length ? universities.map(row => `<button class="community-card" type="button" data-route="university/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.countries.length ? escapeHTML(row.countries.join(', ')) : 'Community university'}</p><div class="community-card-meta"><span class="opportunity-chip">${row.opportunityCount} opportunities</span><span class="opportunity-chip">${row.postCount} posts</span>${row.intakes.slice(0,2).map(intake => `<span class="opportunity-chip">${escapeHTML(intake)}</span>`).join('')}</div></button>`).join('') : '<div class="panel opportunity-empty">University communities will appear as verified opportunity and student data grows.</div>'}</div>
+        </section>
+
+        <section>
+          <header class="page-head"><div><h2 style="margin:0">Student outcomes</h2><p>Shared voluntarily by students.</p></div><span class="opportunity-chip">${successes.length} success · ${journeys.length} journey</span></header>
+          <div class="feed-list">${[...successes,...journeys].sort((x,y)=>scorePost(y)-scorePost(x)).slice(0,12).map(postCard).join('') || emptyState('compass','No outcome stories yet','Students can choose to share a success or selected public journey milestones.')}</div>
+        </section>
+      </div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Community unavailable','Please try again.')}`, { wide:true });
+  }
 }
+
+function communityOpportunityList(items = []) {
+  return items.length ? `<div class="community-compact-list">${items.slice(0,8).map(item => `<button class="community-compact-item" style="text-align:left;color:inherit;cursor:pointer" type="button" data-route="opportunity/${encodeURIComponent(item.id)}"><h4>${escapeHTML(item.title)}</h4><p>${escapeHTML(item.fundingType)} · ${escapeHTML(item.country)}${item.intake ? ` · ${escapeHTML(item.intake)}` : ''}</p></button>`).join('')}</div>` : '<p style="color:var(--muted)">No linked opportunities yet.</p>';
+}
+
+async function renderSubjectCommunity(subjectName) {
+  const subject = String(subjectName || '').trim();
+  renderShell(`<header class="page-head"><div><h1>${escapeHTML(subject || 'Subject')}</h1><p>Loading subject community…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  const opportunities = await getOpportunities(state.mode).catch(() => []);
+  const data = subjectCommunityData(subject, state.posts, opportunities);
+  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="explore">${icon('back',17)} Community</button>
+    <div class="community-detail-layout" style="margin-top:14px">
+      <main>
+        <section class="community-hero"><span class="opportunity-kicker">SUBJECT COMMUNITY</span><h1>${escapeHTML(data.name)}</h1><p>${data.opportunities.length} linked opportunities and ${data.posts.length} public community posts.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-subject="${escapeHTML(data.name)}">Ask / share in this subject</button><button class="btn btn-secondary" data-share-success data-prefill-subject="${escapeHTML(data.name)}">Share a success</button></div></section>
+        <header class="page-head"><div><h2 style="margin:0">Community posts</h2></div></header>
+        <div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No posts yet','Start a useful discussion for this subject.')}</div>
+      </main>
+      <aside class="community-side"><section class="journey-panel"><h2>Opportunities</h2>${communityOpportunityList(data.opportunities)}</section><div class="community-banner">Community posts reflect student experiences and discussion. Verify scholarship and university requirements on official sources.</div></aside>
+    </div>`;
+  renderShell(content, { wide:true });
+}
+
+async function renderUniversityCommunity(universityName) {
+  const university = String(universityName || '').trim();
+  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university || 'University')}</h1><p>Loading university community…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  const opportunities = await getOpportunities(state.mode).catch(() => []);
+  const data = universityCommunityData(university, state.posts, opportunities);
+  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="explore">${icon('back',17)} Community</button>
+    <div class="community-detail-layout" style="margin-top:14px">
+      <main>
+        <section class="community-hero"><span class="opportunity-kicker">UNIVERSITY COMMUNITY</span><h1>${escapeHTML(data.name)}</h1><p>${data.countries.length ? escapeHTML(data.countries.join(', ')) : 'Student community'} · ${data.opportunities.length} linked opportunities · ${data.posts.length} public posts.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(data.name)}">Ask this community</button><button class="btn btn-secondary" data-share-success data-prefill-university="${escapeHTML(data.name)}">Share a success</button></div></section>
+        <header class="page-head"><div><h2 style="margin:0">Student posts</h2></div></header>
+        <div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No university posts yet','Start a useful university discussion or share an outcome.')}</div>
+      </main>
+      <aside class="community-side">
+        <section class="journey-panel"><h2>Linked opportunities</h2>${communityOpportunityList(data.opportunities)}</section>
+        <section class="journey-panel"><h2>Intakes</h2><div class="community-compact-list">${data.intakes.length ? data.intakes.map(intake => `<button class="community-compact-item" type="button" style="text-align:left;color:inherit;cursor:pointer" data-route="intake/${encodeURIComponent(data.name)}/${encodeURIComponent(intake)}"><h4>${escapeHTML(intake)}</h4><p>Open intake community</p></button>`).join('') : '<p style="color:var(--muted)">No intake groups yet.</p>'}</div></section>
+        <div class="community-banner">Official university/provider pages remain authoritative for admissions, fees, visas and scholarship requirements.</div>
+      </aside>
+    </div>`;
+  renderShell(content, { wide:true });
+}
+
+async function renderIntakeCommunity(universityName, intakeName) {
+  const university=String(universityName||'').trim(), intake=String(intakeName||'').trim();
+  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university)}</h1><p>Loading ${escapeHTML(intake)} intake community…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  const opportunities = await getOpportunities(state.mode).catch(() => []);
+  const data = intakeCommunityData(university,intake,state.posts,opportunities);
+  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="university/${encodeURIComponent(university)}">${icon('back',17)} ${escapeHTML(university)}</button>
+    <div class="community-detail-layout" style="margin-top:14px"><main><section class="community-hero"><span class="opportunity-kicker">INTAKE COMMUNITY</span><h1>${escapeHTML(intake)}</h1><p>${escapeHTML(university)} · connect around preparation, orientation and student questions without exposing private application or travel data.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(university)}" data-community-intake="${escapeHTML(intake)}">Ask / share in this intake</button></div></section><header class="page-head"><div><h2 style="margin:0">Intake posts</h2></div></header><div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No intake posts yet','Start the first useful discussion for this intake.')}</div></main><aside class="community-side"><section class="journey-panel"><h2>Relevant opportunities</h2>${communityOpportunityList(data.opportunities)}</section><div class="community-banner">Do not post passport numbers, application IDs, booking references, exact addresses or other sensitive personal information.</div></aside></div>`;
+  renderShell(content,{wide:true});
+}
+
+
 
 
 function opportunityDateLabel(value) {
@@ -883,7 +1006,7 @@ async function renderPostDetail(postId) {
     const content = `<button class="btn btn-ghost" style="margin-bottom:14px" data-back>${icon('back',17)} Back</button>
       <article class="panel detail-card">
         <header class="post-head"><button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button><div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
-        <div class="post-body"><span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
+        <div class="post-body">${structuredPostMarkup(post)}<span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
         <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button><button class="action-btn" aria-label="Comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(currentComments.length || post.commentCount)}</span></button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
       </article>
       <section class="panel answer-form"><div class="panel-title"><h3>Add an answer</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Publish answer</button></div></form></section>
@@ -1103,7 +1226,7 @@ async function renderSearch(term = '') {
 
 function renderRoute() {
   if (!state.user) return;
-  const [route, param] = routeParts();
+  const [route, param, param2] = routeParts();
   state.ui.profileMenu = false;
   document.documentElement.classList.remove('profile-menu-open');
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
@@ -1117,6 +1240,9 @@ function renderRoute() {
     case 'journey': renderJourneyDetail(param || ''); break;
     case 'opportunity': renderOpportunityDetail(param || ''); break;
     case 'explore': renderExplore(); break;
+    case 'subject': renderSubjectCommunity(param || 'General'); break;
+    case 'university': renderUniversityCommunity(param || ''); break;
+    case 'intake': renderIntakeCommunity(param || '', param2 || ''); break;
     case 'saved': renderHome('saved'); break;
     case 'notifications': renderNotifications(); break;
     case 'messages': renderMessages(param || ''); break;
@@ -1128,6 +1254,43 @@ function renderRoute() {
     case 'search': renderSearch(param || new URLSearchParams(location.hash.split('?')[1] || '').get('q') || ''); break;
     default: renderHome();
   }
+}
+
+
+function openSuccessStoryModal(prefill = {}) {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share a student success</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <div class="community-banner" style="margin-bottom:14px">Publish only information you choose to make public. Do not include application IDs, passport/visa numbers, addresses, financial account details or private documents.</div>
+    <form class="form-grid" data-success-story-form>
+      <div class="story-form-grid">
+        <div class="field"><label>University</label><input class="input" name="university" maxlength="180" required value="${escapeHTML(prefill.university||'')}"></div>
+        <div class="field"><label>Scholarship / program / offer</label><input class="input" name="opportunityName" maxlength="180" required></div>
+        <div class="field"><label>Country</label><input class="input" name="country" maxlength="120"></div>
+        <div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}"></div>
+        <div class="field"><label>Study level</label><input class="input" name="studyLevel" maxlength="100" placeholder="Undergraduate, Master…"></div>
+        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="Fall 2027"></div>
+        <div class="field"><label>Funding</label><select class="select" name="fundingType"><option value="">Not specified</option><option>Fully funded</option><option>Partial funding</option><option>Self funded / offer only</option><option>Other</option></select></div>
+        <div class="field story-form-wide"><label>Headline</label><input class="input" name="title" maxlength="180" placeholder="I received a scholarship offer"></div>
+        <div class="field story-form-wide"><label>Your message</label><textarea class="textarea" name="content" maxlength="3000" required placeholder="Share what happened and what might help the next student."></textarea></div>
+      </div>
+      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish success story</button>
+    </form>
+  </div></section></div>`;
+}
+
+function openJourneyStoryModal(prefill = {}) {
+  const rows=[1,2,3,4].map(i=>`<div class="milestone-form-row"><input class="input" name="stage${i}" maxlength="80" placeholder="Milestone, e.g. Applied"><input class="input" name="month${i}" type="month"><input class="input" name="note${i}" maxlength="300" placeholder="What you choose to share"></div>`).join('');
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share selected journey milestones</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <div class="community-banner" style="margin-bottom:14px">This does not publish your private Tefsen Journey. Only the fields you enter below become public.</div>
+    <form class="form-grid" data-journey-story-form>
+      <div class="story-form-grid"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" value="${escapeHTML(prefill.subject||'')}"></div><div class="field"><label>University (optional)</label><input class="input" name="university" maxlength="180" value="${escapeHTML(prefill.university||'')}"></div><div class="field"><label>Intake (optional)</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}"></div><div class="field"><label>Story title</label><input class="input" name="title" maxlength="180" required placeholder="My scholarship application journey"></div><div class="field story-form-wide"><label>Introduction</label><textarea class="textarea" name="content" maxlength="3000" required></textarea></div></div>
+      <h3>Public milestones</h3>${rows}
+      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish journey story</button>
+    </form>
+  </div></section></div>`;
+}
+
+function openCommunityComposer(context = {}) {
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Community discussion</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-community-post-form data-community-subject="${escapeHTML(context.subject||'')}" data-community-university="${escapeHTML(context.university||'')}" data-community-intake="${escapeHTML(context.intake||'')}"><div class="community-banner">Keep private application, visa, address, booking and identity details out of public community posts.</div><div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required></div><div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="4000" required></textarea></div><button class="btn btn-primary" type="submit">Publish discussion</button></form></div></section></div>`;
 }
 
 function openComposer() {
@@ -1202,6 +1365,12 @@ async function handleClick(event) {
   if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
   if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
   if (event.target.closest('[data-action="compose"]')) { openComposer(); return; }
+  const shareSuccess = event.target.closest('[data-share-success]');
+  if (shareSuccess) { openSuccessStoryModal({ subject:shareSuccess.dataset.prefillSubject||'', university:shareSuccess.dataset.prefillUniversity||'', intake:shareSuccess.dataset.prefillIntake||'' }); return; }
+  const shareJourneyStory = event.target.closest('[data-share-journey-story]');
+  if (shareJourneyStory) { openJourneyStoryModal({ subject:shareJourneyStory.dataset.prefillSubject||'', university:shareJourneyStory.dataset.prefillUniversity||'', intake:shareJourneyStory.dataset.prefillIntake||'' }); return; }
+  const communityDiscussion = event.target.closest('[data-community-discussion]');
+  if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
   if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
   if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
   const tab = event.target.closest('[data-feed-tab]');
@@ -1255,6 +1424,9 @@ async function handleSubmit(event) {
   if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
+  if (form.matches('[data-success-story-form]')) { event.preventDefault(); await handleSuccessStorySubmit(form); return; }
+  if (form.matches('[data-journey-story-form]')) { event.preventDefault(); await handleJourneyStorySubmit(form); return; }
+  if (form.matches('[data-community-post-form]')) { event.preventDefault(); await handleCommunityPostSubmit(form); return; }
   if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
@@ -1569,6 +1741,48 @@ async function handleStudentPassportSave(form) {
       toast(humanError(error), 'error');
     }
   });
+}
+
+
+async function handleSuccessStorySubmit(form) {
+  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
+  const opportunityName=String(fd.get('opportunityName')||'').trim();
+  const subject=String(fd.get('subject')||'').trim();
+  const university=String(fd.get('university')||'').trim();
+  const payload={
+    title:String(fd.get('title')||'').trim() || `I received ${opportunityName}`,
+    content:String(fd.get('content')||'').trim(),
+    subject:subject || 'Student Success',
+    tags:['student-success', subject].filter(Boolean),
+    postType:'success_story',
+    successData:{
+      university, opportunityName, country:String(fd.get('country')||'').trim(),
+      subject, studyLevel:String(fd.get('studyLevel')||'').trim(),
+      intake:String(fd.get('intake')||'').trim(), fundingType:String(fd.get('fundingType')||'').trim()
+    },
+    communityUniversity:university,
+    communityIntake:String(fd.get('intake')||'').trim(),
+    communitySubject:subject,
+    imageFiles:[]
+  };
+  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Success story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+}
+
+async function handleJourneyStorySubmit(form) {
+  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
+  const milestones=[];
+  for(let i=1;i<=4;i++){const stage=String(fd.get(`stage${i}`)||'').trim(),month=String(fd.get(`month${i}`)||'').trim(),note=String(fd.get(`note${i}`)||'').trim();if(stage||note)milestones.push({stage,month,note});}
+  if(!milestones.length){errorEl.textContent='Add at least one public milestone.';return;}
+  const subject=String(fd.get('subject')||'').trim(), university=String(fd.get('university')||'').trim(), intake=String(fd.get('intake')||'').trim();
+  const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'Student Journey',tags:['student-journey',subject].filter(Boolean),postType:'journey_story',publicMilestones:milestones,communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
+  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Journey story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+}
+
+async function handleCommunityPostSubmit(form) {
+  const fd=new FormData(form),submit=form.querySelector('button[type="submit"]');
+  const subject=form.dataset.communitySubject||'', university=form.dataset.communityUniversity||'', intake=form.dataset.communityIntake||'';
+  const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'General',tags:[subject,university,intake].filter(Boolean).slice(0,6),postType:'discussion',communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
+  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
 }
 
 async function handleReport(form) {

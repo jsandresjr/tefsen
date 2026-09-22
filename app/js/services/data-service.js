@@ -161,6 +161,49 @@ export function normalizeUser(raw = {}, id = '') {
   };
 }
 
+function cleanPublicText(value, max = 180) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, max);
+}
+
+function normalizePublicPostMetadata(raw = {}) {
+  const allowedTypes = new Set(['discussion', 'success_story', 'journey_story']);
+  const postType = allowedTypes.has(raw.postType) ? raw.postType : 'discussion';
+  const successRaw = raw.successData && typeof raw.successData === 'object' ? raw.successData : {};
+  const successData = postType === 'success_story' ? {
+    university: cleanPublicText(successRaw.university, 180),
+    opportunityName: cleanPublicText(successRaw.opportunityName, 180),
+    country: cleanPublicText(successRaw.country, 120),
+    subject: cleanPublicText(successRaw.subject, 120),
+    studyLevel: cleanPublicText(successRaw.studyLevel, 100),
+    intake: cleanPublicText(successRaw.intake, 80),
+    fundingType: cleanPublicText(successRaw.fundingType, 100)
+  } : {};
+
+  const milestoneSource = Array.isArray(raw.publicMilestones) ? raw.publicMilestones : [];
+  const publicMilestones = postType === 'journey_story'
+    ? milestoneSource.slice(0, 8).map(item => ({
+        stage: cleanPublicText(item?.stage, 80),
+        month: cleanPublicText(item?.month, 20),
+        note: cleanPublicText(item?.note, 300)
+      })).filter(item => item.stage || item.note)
+    : [];
+
+  const communityUniversity = cleanPublicText(
+    raw.communityUniversity || successData.university,
+    180
+  );
+  const communityIntake = cleanPublicText(
+    raw.communityIntake || successData.intake,
+    80
+  );
+  const communitySubject = cleanPublicText(
+    raw.communitySubject || successData.subject || raw.subject,
+    120
+  );
+
+  return { postType, successData, publicMilestones, communityUniversity, communityIntake, communitySubject };
+}
+
 export function normalizePost(raw = {}, id = '') {
   const likesValue = pick(raw, FIELD_ALIASES.likeCount, 0);
   const commentsValue = pick(raw, FIELD_ALIASES.commentCount, 0);
@@ -168,6 +211,7 @@ export function normalizePost(raw = {}, id = '') {
   const rawImages = pick(raw, FIELD_ALIASES.postImages, []);
   const imageUrls = Array.isArray(rawImages) ? rawImages.filter(Boolean).slice(0, 2) : [];
   if (!imageUrls.length && primaryImage) imageUrls.push(primaryImage);
+  const publicMetadata = normalizePublicPostMetadata(raw);
 
   return {
     ...raw,
@@ -185,6 +229,7 @@ export function normalizePost(raw = {}, id = '') {
     saveCount: Number(pick(raw, FIELD_ALIASES.saveCount, 0) || 0),
     subject: raw.subject || raw.category || raw.topic || 'General',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
+    ...publicMetadata,
     role: normalizeRoleValue(raw.authorRole || raw.role || raw.userRole || 'student'),
     verified: toBoolean(raw.authorVerified)
       || toBoolean(raw.verified)
@@ -327,6 +372,7 @@ export async function getDailyPostUsage(mode, userId) {
 
 export async function createPost(mode, user, profile, payload) {
   const policy = getWebPostingPolicy(profile);
+  const publicMetadata = normalizePublicPostMetadata(payload);
   const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
     .filter(file => file && file.size);
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -366,6 +412,7 @@ export async function createPost(mode, user, profile, payload) {
       content: payload.content,
       subject: payload.subject || 'General',
       tags: payload.tags || [],
+      ...publicMetadata,
       imageUrl: imageUrls[0] || '',
       imageUrls,
       status: 'published',
@@ -400,6 +447,7 @@ export async function createPost(mode, user, profile, payload) {
     description: payload.content,
     subject: payload.subject || 'General',
     tags: payload.tags || [],
+    ...publicMetadata,
     imageUrl: imageUrls[0] || '',
     imageUrls,
     imageCount: imageUrls.length,

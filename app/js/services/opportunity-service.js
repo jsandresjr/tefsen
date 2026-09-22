@@ -21,6 +21,7 @@ export function normalizeOpportunity(raw = {}, id = '') {
     provider: String(raw.provider || raw.organization || raw.university || 'Opportunity provider'),
     university: String(raw.university || raw.institution || ''),
     country: String(raw.country || raw.destinationCountry || 'Global'),
+    intake: String(raw.intake || raw.intakeTerm || raw.intakeYear || ''),
     opportunityType: String(raw.opportunityType || raw.type || 'Scholarship'),
     fundingType: String(raw.fundingType || raw.funding || 'Funding not specified'),
     studyLevels: stringArray(raw.studyLevels || raw.educationLevels || raw.studyLevel),
