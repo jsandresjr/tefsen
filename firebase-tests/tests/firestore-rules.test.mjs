@@ -81,6 +81,8 @@ test('Application Journey is owner-only', async () => {
   await assertSucceeds(getDoc(ref));
   await assertFails(getDoc(doc(other, 'journeys', 'user-a', 'opportunities', 'opp-1')));
   await assertFails(setDoc(doc(other, 'journeys', 'user-a', 'opportunities', 'opp-1'), { status: 'accepted' }));
+  await assertFails(deleteDoc(doc(other, 'journeys', 'user-a', 'opportunities', 'opp-1')));
+  await assertSucceeds(deleteDoc(ref));
 });
 
 test('Ordinary users can read only published public opportunities', async () => {
