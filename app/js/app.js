@@ -1265,10 +1265,10 @@ async function renderProfile(userId = '') {
 
   const stats = own
     ? `<div class="v3-profile-metrics">
-        <div><strong>${completeness}%</strong><span>Passport ready</span></div>
-        <div><strong>${savedOpportunities}</strong><span>Saved opportunities</span></div>
-        <div><strong>${activeJourneys.length}</strong><span>Active journeys</span></div>
-        <div><strong>${posts.length}</strong><span>Community posts</span></div>
+        <div><strong>${completeness ? `${completeness}%` : 'Start'}</strong><span>Student Passport</span></div>
+        <div><strong>${savedOpportunities || '—'}</strong><span>Saved opportunities</span></div>
+        <div><strong>${activeJourneys.length || '—'}</strong><span>Active journeys</span></div>
+        <div><strong>${posts.length || '—'}</strong><span>Community posts</span></div>
       </div>`
     : `<div class="v3-profile-metrics compact">
         <div><strong>${formatCount(posts.length)}</strong><span>Posts</span></div>
@@ -1775,7 +1775,7 @@ async function handleClick(event) {
   const profilePhotoEdit = event.target.closest('[data-profile-photo-edit]');
   if (profilePhotoEdit) {
     openEditProfile();
-    requestAnimationFrame(() => document.querySelector('[data-profile-photo-input]')?.click());
+    document.querySelector('[data-profile-photo-input]')?.click();
     return;
   }
   const profilePhotoChoose = event.target.closest('[data-profile-photo-choose]');
