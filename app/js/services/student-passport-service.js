@@ -40,6 +40,7 @@ export function emptyStudentPassport(userId = '') {
     languages: [],
     skills: [],
     studyGoal: '',
+    onboardingStatus: 'not_started',
     documentsReady: {
       passport: false,
       transcript: false,
@@ -73,6 +74,9 @@ export function normalizeStudentPassport(raw = {}, userId = '') {
     languages: cleanList(raw.languages),
     skills: cleanList(raw.skills),
     studyGoal: clean(raw.studyGoal, 300),
+    onboardingStatus: ['not_started','completed','skipped'].includes(String(raw.onboardingStatus || ''))
+      ? String(raw.onboardingStatus)
+      : 'not_started',
     documentsReady: {
       passport: Boolean(docs.passport),
       transcript: Boolean(docs.transcript),
@@ -82,6 +86,33 @@ export function normalizeStudentPassport(raw = {}, userId = '') {
       personalStatement: Boolean(docs.personalStatement)
     }
   };
+}
+
+export function studentPassportOnboardingProgress(passport = {}) {
+  const p = normalizeStudentPassport(passport, passport.userId || '');
+  const fields = [
+    ['currentCountry', Boolean(p.currentCountry)],
+    ['nationality', Boolean(p.nationality)],
+    ['currentEducationLevel', Boolean(p.currentEducationLevel)],
+    ['targetEducationLevel', Boolean(p.targetEducationLevel)],
+    ['mainField', Boolean(p.mainField)],
+    ['fundingPreference', Boolean(p.fundingPreference)]
+  ];
+  const completed = fields.filter(([,ready]) => ready).length;
+  return {
+    completed,
+    total: fields.length,
+    percent: Math.round((completed / fields.length) * 100),
+    ready: completed === fields.length,
+    missing: fields.filter(([,ready]) => !ready).map(([name]) => name)
+  };
+}
+
+export function shouldShowPassportOnboarding(passport = {}) {
+  const p = normalizeStudentPassport(passport, passport.userId || '');
+  if (p.onboardingStatus === 'completed' || p.onboardingStatus === 'skipped') return false;
+  const progress = studentPassportOnboardingProgress(p);
+  return progress.completed < 3;
 }
 
 export function studentPassportCompleteness(passport = {}) {

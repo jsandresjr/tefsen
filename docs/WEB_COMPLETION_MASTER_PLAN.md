@@ -129,4 +129,22 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now runs when the eligibility engine changes
 - service-worker cache bumped for the new eligibility experience
 
-**Next: Step 6 — Student Passport onboarding and first-run guidance**
+**Step 6: Student Passport onboarding and first-run guidance — complete on branch `tefsen-web-completion-06-passport-onboarding`**
+- brand-new students are guided into Student Passport on first sign-in when no route is already selected
+- existing useful Passport data is not forced back into onboarding
+- completed and skipped onboarding states are persisted
+- guided onboarding uses intro + three short data steps + completion state
+- essential first-run fields: current country, nationality, current education level, target education level, main field and funding preference
+- preferred destination countries and study goal remain optional during onboarding
+- GPA, language tests, skills and document readiness are deferred to the full editor
+- global-first copy explicitly says Tefsen does not assume a default country
+- Student Passport privacy is explained before data entry
+- Skip for now is supported and preserves partially entered data
+- completion screen ends with “Your Tefsen journey is ready”
+- completion CTAs lead to global opportunity discovery or the full Passport editor
+- first-run detection regression tests added
+- onboarding state resets safely on account change/logout
+- responsive desktop/tablet/mobile onboarding design added
+- service-worker cache bumped for the onboarding experience
+
+**Next: Step 7 — Student Passport form quality, validation and completion guidance**
