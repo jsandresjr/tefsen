@@ -75,7 +75,7 @@ test('accepted Journey outranks ordinary active work', () => {
   const model = buildHomeDashboardModel({
     passport:passport(),
     passportDetails:passportDetails(),
-    rankedOpportunities:[ranked('accepted'), ranked('active')],
+    rankedOpportunities:[ranked('accepted',80,{ deadline:'2026-09-24' }), ranked('active')],
     journeys:[
       journey('active',{ status:'preparing', updatedAtMillis:200 }),
       journey('accepted',{ status:'accepted', updatedAtMillis:100 })
