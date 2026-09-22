@@ -113,4 +113,20 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 
 **Global product rule:** Tefsen is for students in every country. Nationality/current country are user profile data, never a platform default.
 
-**Next: Step 5 — eligibility experience and explainable match results**
+**Step 5: Eligibility experience and explainable match results — complete on branch `tefsen-web-completion-05-eligibility`**
+- eligibility results use four explicit states: Meets / Action needed / Structured mismatch / Unknown
+- overall outcome is descriptive, not a prediction of admission or scholarship success
+- comparison coverage shows how much Tefsen can safely compare
+- known-criteria match rate is explicitly labelled as not an acceptance probability
+- Student Passport completeness remains separate from eligibility
+- requirement rows include evidence/basis via “Why Tefsen says this”
+- unknown and mismatch criteria identify when official-source verification is required
+- next actions direct students to Student Passport or the official provider source
+- document readiness is treated as preparation guidance, not an automatic eligibility blocker
+- GPA scale mismatches remain unknown; Tefsen does not auto-convert grades
+- nationality logic remains global and uses stored opportunity rules + Student Passport data only
+- deterministic eligibility-engine tests added
+- CI now runs when the eligibility engine changes
+- service-worker cache bumped for the new eligibility experience
+
+**Next: Step 6 — Student Passport onboarding and first-run guidance**
