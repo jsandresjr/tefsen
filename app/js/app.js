@@ -273,7 +273,7 @@ function renderShell(content, options = {}) {
         ${mobileNavButton('home','home',route,'Home')}
         ${mobileNavButton('opportunities','compass',route,'Opportunities')}
         <button class="create-mobile" type="button" data-action="compose" aria-label="Ask a question">${icon('plus',24)}</button>
-        ${mobileNavButton('notifications','bell',route,'Notifications')}
+        ${mobileNavButton('journeys','check',route,'Journey')}
         ${mobileNavButton('profile','user',route,'Profile')}
       </nav>
     </div>
@@ -305,6 +305,8 @@ function renderProfileDropdown() {
       <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
       <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
       <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
+      <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
       <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
       <div class="dropdown-separator"></div>
       <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
@@ -742,6 +744,13 @@ async function renderJourneys() {
     currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
     const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
     const visibleJourneys = journeys.filter(row => row.saved || row.started);
+    visibleJourneys.sort((a, b) => {
+      const aInfo = deadlineInfo(opportunityMap.get(a.opportunityId)?.deadline || '');
+      const bInfo = deadlineInfo(opportunityMap.get(b.opportunityId)?.deadline || '');
+      const aDays = aInfo.valid && aInfo.daysRemaining >= 0 ? aInfo.daysRemaining : Number.POSITIVE_INFINITY;
+      const bDays = bInfo.valid && bInfo.daysRemaining >= 0 ? bInfo.daysRemaining : Number.POSITIVE_INFINITY;
+      return aDays - bDays;
+    });
     const active = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
     const saved = visibleJourneys.filter(row => row.saved).length;
     const withDeadline = visibleJourneys
@@ -788,6 +797,7 @@ async function renderJourneyDetail(opportunityId) {
     const progress = journeyProgress(journey);
     const official = deadlineInfo(opportunity?.deadline || '');
     const personal = deadlineInfo(journey.personalTargetDate || '');
+    const targetAfterOfficial = Boolean(personal.valid && official.valid && personal.date?.getTime() > official.date?.getTime());
     const nextStatuses = allowedJourneyTransitions(journey.status);
     const history = [...(journey.history || [])].reverse();
     const checklist = journey.checklist || [];
@@ -828,6 +838,7 @@ async function renderJourneyDetail(opportunityId) {
             <p><b>Official deadline</b><br><span class="journey-deadline ${deadlineUrgencyClass(official)}">${escapeHTML(official.label)}</span></p>
             <p><b>Personal target</b><br><span class="journey-deadline ${deadlineUrgencyClass(personal)}">${personal.valid ? escapeHTML(personal.label) : 'Not set'}</span></p>
             <p style="color:var(--muted);font-size:.86rem">Your personal target never changes the official provider deadline.</p>
+            ${targetAfterOfficial ? '<div class="opportunity-source-note">Your personal target is after the official deadline. Move your preparation target earlier.</div>' : ''}
           </section>
 
           <section class="journey-panel">
