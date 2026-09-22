@@ -1182,21 +1182,87 @@ async function renderStudentPassport() {
   }
 }
 
-function eligibilityCheckMarkup(result) {
+function eligibilityCheckMarkup(result, sourceUrl = '') {
+  const source = safeUrl(sourceUrl || '');
   const marks = { met:'✓', action:'!', not_met:'×', unknown:'?' };
-  return `<div class="eligibility-compare-block">
-    <div class="eligibility-compare-summary">
-      <div>
-        <b>${escapeHTML(result.summary)}</b>
-        <p>${escapeHTML(result.disclaimer)}</p>
+  const labels = {
+    met:'Meets',
+    action:'Action needed',
+    not_met:'Structured mismatch',
+    unknown:'Unknown'
+  };
+  const order = { not_met:0, action:1, unknown:2, met:3 };
+  const checks = [...(result.checks || [])].sort((a,b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+  const actions = (result.nextActions || []).map(action => {
+    if (action.type === 'passport') {
+      return `<article class="eligibility-next-action passport">
+        <span class="eligibility-next-icon">${icon('user',17)}</span>
+        <div><b>${escapeHTML(action.label)}</b><p>${escapeHTML(action.detail)}</p></div>
+        <button class="btn btn-secondary" type="button" data-route="passport">Open Passport</button>
+      </article>`;
+    }
+
+    if (action.type === 'official_source') {
+      return `<article class="eligibility-next-action source">
+        <span class="eligibility-next-icon">${icon('check',17)}</span>
+        <div><b>${escapeHTML(action.label)}</b><p>${escapeHTML(action.detail)}</p></div>
+        ${source
+          ? `<a class="btn btn-secondary" href="${source}" target="_blank" rel="noopener noreferrer">Official source ↗</a>`
+          : '<span class="eligibility-action-unavailable">Source URL unavailable</span>'}
+      </article>`;
+    }
+
+    return '';
+  }).join('');
+
+  return `<div class="eligibility-experience">
+    <section class="eligibility-outcome ${escapeHTML(result.outcome?.tone || 'unknown')}">
+      <div class="eligibility-outcome-icon">
+        ${result.outcome?.tone === 'met' ? icon('check',22) : result.outcome?.tone === 'mismatch' ? '×' : result.outcome?.tone === 'action' ? '!' : '?'}
       </div>
-      <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
+      <div>
+        <span>TEFSEN STRUCTURED COMPARISON</span>
+        <h3>${escapeHTML(result.outcome?.title || result.summary || 'Eligibility comparison')}</h3>
+        <p>${escapeHTML(result.outcome?.description || '')}</p>
+      </div>
+    </section>
+
+    <div class="eligibility-status-strip" aria-label="Eligibility comparison status counts">
+      <div class="met"><strong>${Number(result.counts?.met || 0)}</strong><span>Meets</span></div>
+      <div class="action"><strong>${Number(result.counts?.action || 0)}</strong><span>Action needed</span></div>
+      <div class="not-met"><strong>${Number(result.counts?.not_met || 0)}</strong><span>Mismatch</span></div>
+      <div class="unknown"><strong>${Number(result.counts?.unknown || 0)}</strong><span>Unknown</span></div>
     </div>
-    <div class="eligibility-checks">
-      ${result.checks.map(item => `<div class="eligibility-check ${item.status}">
-        <span class="eligibility-mark">${marks[item.status] || '?'}</span>
-        <div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div>
-      </div>`).join('')}
+
+    ${actions ? `<section class="eligibility-next-actions">
+      <div class="eligibility-subhead"><h3>What to do next</h3><p>Actions are based on missing profile data, stored mismatches and requirements Tefsen cannot safely decide.</p></div>
+      <div class="eligibility-next-action-list">${actions}</div>
+    </section>` : ''}
+
+    <section class="eligibility-criteria">
+      <div class="eligibility-subhead"><h3>Requirement-by-requirement explanation</h3><p>A stored mismatch is not the same as a final rejection. Provider rules can change, so verify important decisions at the source.</p></div>
+      <div class="eligibility-checks">
+        ${checks.map(item => `<article class="eligibility-check ${item.status}">
+          <span class="eligibility-mark">${marks[item.status] || '?'}</span>
+          <div class="eligibility-check-copy">
+            <div class="eligibility-check-title">
+              <div><b>${escapeHTML(item.label)}</b><span class="eligibility-status-label">${escapeHTML(labels[item.status] || item.status)}</span></div>
+              <span class="eligibility-category">${item.category === 'preparation' ? 'Preparation' : 'Eligibility'}</span>
+            </div>
+            <p>${escapeHTML(item.message)}</p>
+            ${item.basis ? `<details class="eligibility-basis"><summary>Why Tefsen says this</summary><p>${escapeHTML(item.basis)}</p></details>` : ''}
+            ${item.requiresOfficialSource
+              ? `<div class="eligibility-source-needed">${icon('info',14)}<span>Confirm this criterion on the official provider source.</span>${source ? `<a href="${source}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ''}</div>`
+              : ''}
+          </div>
+        </article>`).join('')}
+      </div>
+    </section>
+
+    <div class="eligibility-disclaimer">
+      ${icon('info',16)}
+      <p>${escapeHTML(result.disclaimer)}</p>
     </div>
   </div>`;
 }
@@ -1263,9 +1329,9 @@ async function renderOpportunityDetail(opportunityId) {
     const subjects = (item.subjects || []).filter(Boolean);
     const sourceChecked = opportunitySourceCheckedLabel(item);
 
-    const compatibility = eligibility.compatibility === null ? '—' : `${eligibility.compatibility}%`;
-    const knownChecks = eligibility.counts.met + eligibility.counts.not_met;
-    const unknownChecks = eligibility.counts.unknown + eligibility.counts.action;
+    const knownMatchRate = eligibility.compatibility === null ? '—' : `${eligibility.compatibility}%`;
+    const coverage = `${Number(eligibility.coverage || 0)}%`;
+    const comparedCriteria = Number(eligibility.comparedCriteria || 0);
 
     const content = `${demoBanner()}
       <div class="opportunity-detail-page">
@@ -1350,12 +1416,12 @@ async function renderOpportunityDetail(opportunityId) {
 
             <section class="opportunity-detail-section opportunity-eligibility-section">
               <header><span>05</span><div><h2>Structured eligibility comparison</h2><p>Tefsen compares only requirements that are structured and available. It does not make an admission decision.</p></div></header>
-              <div class="opportunity-eligibility-overview">
-                <div><span>Known criteria matched</span><strong>${compatibility}</strong><small>${knownChecks} comparable criteria</small></div>
-                <div><span>Action / unknown</span><strong>${unknownChecks}</strong><small>Needs profile data or official-source review</small></div>
-                <div><span>Student Passport</span><strong>${completeness}%</strong><small>Profile completeness</small></div>
+              <div class="opportunity-eligibility-overview v2">
+                <div><span>Comparison coverage</span><strong>${coverage}</strong><small>${comparedCriteria} of ${Number(eligibility.totalCriteria || 0)} criteria safely comparable</small></div>
+                <div><span>Known-criteria match rate</span><strong>${knownMatchRate}</strong><small>Not a probability of acceptance</small></div>
+                <div><span>Student Passport</span><strong>${completeness}%</strong><small>Profile completeness affects how much Tefsen can compare</small></div>
               </div>
-              ${eligibilityCheckMarkup(eligibility)}
+              ${eligibilityCheckMarkup(eligibility, source)}
             </section>
           </main>
 
