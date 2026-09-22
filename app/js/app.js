@@ -9,7 +9,7 @@ import {
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
 import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
-import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
+import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
   listJourneyStates, getJourneyState, setOpportunitySaved, startJourney,
@@ -1285,6 +1285,117 @@ function validatePassportOnboardingStep(form, step) {
   return true;
 }
 
+function studentPassportDraftFromForm(form) {
+  const fd = new FormData(form);
+  const csv = name => String(fd.get(name) || '').split(',').map(item => item.trim()).filter(Boolean);
+  return {
+    currentCountry: String(fd.get('currentCountry') || '').trim(),
+    nationality: String(fd.get('nationality') || '').trim(),
+    currentEducationLevel: String(fd.get('currentEducationLevel') || '').trim(),
+    targetEducationLevel: String(fd.get('targetEducationLevel') || '').trim(),
+    mainField: String(fd.get('mainField') || '').trim(),
+    institution: String(fd.get('institution') || '').trim(),
+    gpa: fd.get('gpa') === '' ? null : Number(fd.get('gpa')),
+    gpaScale: Number(fd.get('gpaScale') || 4),
+    preferredCountries: csv('preferredCountries'),
+    fundingPreference: String(fd.get('fundingPreference') || '').trim(),
+    englishTestStatus: String(fd.get('englishTestStatus') || '').trim(),
+    languages: csv('languages'),
+    skills: csv('skills'),
+    studyGoal: String(fd.get('studyGoal') || '').trim(),
+    onboardingStatus: currentStudentPassport?.onboardingStatus === 'skipped' ? 'skipped' : 'completed',
+    documentsReady: {
+      passport: fd.get('docPassport') === 'on',
+      transcript: fd.get('docTranscript') === 'on',
+      englishCertificate: fd.get('docEnglish') === 'on',
+      recommendationLetter: fd.get('docRecommendation') === 'on',
+      cv: fd.get('docCv') === 'on',
+      personalStatement: fd.get('docStatement') === 'on'
+    }
+  };
+}
+
+function passportSectionGuideMarkup(details) {
+  const labels = {
+    essential:'Essentials',
+    academic:'Academic profile',
+    preferences:'Preferences',
+    documents:'Document readiness'
+  };
+  return Object.entries(details.sections).map(([key,section]) => `
+    <button class="passport-quality-section" type="button" data-passport-jump="passport-${key}">
+      <div><b>${labels[key]}</b><span>${section.complete}/${section.total}</span></div>
+      <div class="passport-quality-bar"><i style="width:${section.percent}%"></i></div>
+    </button>`).join('');
+}
+
+function passportNextMarkup(details) {
+  if (!details.next.length) {
+    return `<div class="passport-quality-done">${icon('check',16)}<span>Your main Passport profile fields are filled. Keep document readiness current as you prepare applications.</span></div>`;
+  }
+  return details.next.map(item => `<button type="button" data-passport-jump="passport-${item.section}" class="passport-next-item ${item.priority}">
+    <span>${item.priority === 'essential' ? 'Essential' : 'Recommended'}</span>
+    <b>${escapeHTML(item.label)}</b>
+  </button>`).join('');
+}
+
+function updateStudentPassportFormQuality(form, { dirty = true } = {}) {
+  const draft = studentPassportDraftFromForm(form);
+  const details = studentPassportCompletionDetails(draft);
+  const validation = validateStudentPassportInput(draft);
+
+  const score = document.querySelector('[data-passport-quality-score]');
+  if (score) score.textContent = `${details.percent}%`;
+  const guide = document.querySelector('[data-passport-quality-sections]');
+  if (guide) guide.innerHTML = passportSectionGuideMarkup(details);
+  const next = document.querySelector('[data-passport-quality-next]');
+  if (next) next.innerHTML = passportNextMarkup(details);
+
+  form.querySelectorAll('[data-passport-field-error]').forEach(el => {
+    el.textContent = '';
+    el.hidden = true;
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    const fieldEl = field instanceof RadioNodeList ? field[0] : field;
+    if (fieldEl instanceof HTMLElement) {
+      fieldEl.classList.add('field-error-state');
+      const wrap = fieldEl.closest('.field');
+      const errorEl = wrap?.querySelector('[data-passport-field-error]');
+      if (errorEl) {
+        errorEl.textContent = error.message;
+        errorEl.hidden = false;
+      }
+    }
+  }
+
+  const summary = form.querySelector('[data-passport-validation-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.innerHTML = messages.length
+      ? `${icon(validation.errors.length ? 'info' : 'check',16)}<div><b>${validation.errors.length ? 'Check before saving' : 'Passport can be saved now'}</b><p>${escapeHTML(messages.join(' '))}</p></div>`
+      : '';
+  }
+
+  const gpa = form.elements.namedItem('gpa');
+  const scale = Number(form.elements.namedItem('gpaScale')?.value || 4);
+  if (gpa instanceof HTMLInputElement) gpa.max = String(scale);
+
+  const saveState = document.querySelector('[data-passport-save-state]');
+  if (saveState && dirty) {
+    saveState.textContent = 'Unsaved changes';
+    saveState.classList.add('dirty');
+  }
+  return { draft, details, validation };
+}
+
 async function renderStudentPassport() {
   renderShell(`<header class="page-head"><div><h1>Student Passport</h1><p>Preparing your private opportunity profile…</p></div></header><div class="loading-card"></div>`, { wide:true });
   try {
@@ -1301,67 +1412,126 @@ async function renderStudentPassport() {
     }
 
     const completeness = studentPassportCompleteness(passport);
+    const details = studentPassportCompletionDetails(passport);
     const levels = ['Secondary school','Diploma','Undergraduate','Master','Doctorate','Other'];
     const funding = ['Fully funded only','Fully or partially funded','Any funding','Undecided'];
     const english = ['Not started','Planning a test','Test booked','Test completed','Waiver / other evidence','Not sure'];
     const docs = passport.documentsReady || {};
 
     const content = `${demoBanner()}
-      <div class="passport-page">
-        <section class="passport-hero">
+      <div class="passport-page passport-quality-page">
+        <section class="passport-hero passport-quality-hero">
           <div>
             <span class="opportunity-kicker">PRIVATE OPPORTUNITY PROFILE</span>
-            <h1>Build your Student Passport.</h1>
-            <p>Tefsen uses this information to compare structured scholarship and program requirements. It is separate from your public community profile and is private by design.</p>
+            <h1>Keep your Student Passport useful.</h1>
+            <p>Tefsen uses structured profile data to improve opportunity ranking and explain eligibility comparisons. Completion improves context; it does not guarantee eligibility or selection.</p>
           </div>
-          <div class="passport-progress"><div><strong>${completeness}%</strong><br><span>profile complete</span></div></div>
+          <div class="passport-progress">
+            <div><strong data-passport-quality-score>${completeness}%</strong><br><span>Passport complete</span></div>
+            <small data-passport-save-state>Saved</small>
+          </div>
         </section>
 
         <div class="passport-private-note">
           <span>${icon('info',18)}</span>
-          <div><b>Private by default.</b><br>Your nationality, GPA, preparation status and goals should not appear on your public Tefsen profile unless you explicitly choose to share something in a future feature.</div>
+          <div><b>Private by default.</b><br>Your nationality, GPA, preparation status and goals stay separate from your public community profile. Tefsen never assumes a country or nationality for you.</div>
         </div>
 
-        <form class="panel passport-form-section" data-student-passport-form>
-          <h2>Academic direction</h2>
-          <p>Use the information you know now. You can update it later.</p>
-          <div class="passport-form-grid">
-            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="Enter your current country"></div>
-            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="Enter your nationality"></div>
-            <div class="field"><label>Current education level</label><select class="select" name="currentEducationLevel">${passportSelectOptions(levels, passport.currentEducationLevel)}</select></div>
-            <div class="field"><label>Target education level</label><select class="select" name="targetEducationLevel">${passportSelectOptions(levels, passport.targetEducationLevel)}</select></div>
-            <div class="field"><label>Main field / subject</label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science"></div>
-            <div class="field"><label>Current institution</label><input class="input" name="institution" value="${escapeHTML(passport.institution)}" maxlength="160" placeholder="University or school"></div>
-            <div class="field"><label>GPA (optional)</label><input class="input" name="gpa" type="number" min="0" max="5" step="0.01" value="${passport.gpa ?? ''}" placeholder="e.g. 3.67"></div>
-            <div class="field"><label>GPA scale</label><select class="select" name="gpaScale"><option value="4" ${Number(passport.gpaScale) === 4 ? 'selected' : ''}>4.0</option><option value="5" ${Number(passport.gpaScale) === 5 ? 'selected' : ''}>5.0</option></select></div>
-            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, Canada"></div>
-            <div class="field"><label>Funding preference</label><select class="select" name="fundingPreference">${passportSelectOptions(funding, passport.fundingPreference)}</select></div>
-            <div class="field"><label>English-test status</label><select class="select" name="englishTestStatus">${passportSelectOptions(english, passport.englishTestStatus)}</select></div>
-            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="English, Spanish, Arabic"></div>
-            <div class="field passport-field-wide"><label>Skills</label><input class="input" name="skills" value="${escapeHTML((passport.skills || []).join(', '))}" maxlength="600" placeholder="Python, UI design, research"></div>
-            <div class="field passport-field-wide"><label>Study / career goal</label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What opportunity are you trying to reach?">${escapeHTML(passport.studyGoal)}</textarea></div>
-          </div>
+        <div class="passport-quality-layout">
+          <form class="passport-quality-form" data-student-passport-form novalidate>
+            <div class="passport-validation-summary" data-passport-validation-summary hidden></div>
 
-          <div class="opportunity-section">
-            <h2>Document readiness</h2>
-            <p style="color:var(--muted)">Tefsen stores readiness status only here. Do not upload sensitive documents in this milestone.</p>
-            <div class="passport-doc-grid">
-              <label class="passport-doc"><input type="checkbox" name="docPassport" ${checked(docs.passport)}> Passport ready</label>
-              <label class="passport-doc"><input type="checkbox" name="docTranscript" ${checked(docs.transcript)}> Academic transcript ready</label>
-              <label class="passport-doc"><input type="checkbox" name="docEnglish" ${checked(docs.englishCertificate)}> English certificate ready</label>
-              <label class="passport-doc"><input type="checkbox" name="docRecommendation" ${checked(docs.recommendationLetter)}> Recommendation letter ready</label>
-              <label class="passport-doc"><input type="checkbox" name="docCv" ${checked(docs.cv)}> CV / resume ready</label>
-              <label class="passport-doc"><input type="checkbox" name="docStatement" ${checked(docs.personalStatement)}> Personal statement ready</label>
-            </div>
-          </div>
+            <section class="passport-edit-section" id="passport-essential">
+              <header>
+                <div><span>01 · ESSENTIAL</span><h2>Your education direction</h2><p>These fields have the strongest impact on basic opportunity matching.</p></div>
+                <span class="passport-section-badge essential">Important</span>
+              </header>
+              <div class="passport-form-grid">
+                <div class="field"><label>Current country <em>Essential</em></label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="Enter your current country" autocomplete="country-name"><small>Where you currently live or study. This is not inferred from your device.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>Nationality <em>Essential</em></label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="Enter your nationality"><small>Used only when an opportunity has nationality rules.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>Current education level <em>Essential</em></label><select class="select" name="currentEducationLevel">${passportSelectOptions(levels, passport.currentEducationLevel)}</select><small>Your current stage of study.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>Target education level <em>Essential</em></label><select class="select" name="targetEducationLevel">${passportSelectOptions(levels, passport.targetEducationLevel)}</select><small>The level you want to pursue next.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>Main field / subject <em>Essential</em></label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science"><small>Use the subject name you would search for in opportunities.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>Funding preference <em>Essential</em></label><select class="select" name="fundingPreference">${passportSelectOptions(funding, passport.fundingPreference)}</select><small>Helps rank funding options, but does not hide other opportunities.</small><span class="field-error" data-passport-field-error hidden></span></div>
+              </div>
+            </section>
 
-          <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px">
-            <button class="btn btn-secondary" type="button" data-route="opportunities">View opportunities</button>
-            <button class="btn btn-primary" type="submit">Save Student Passport</button>
-          </div>
-        </form>
+            <section class="passport-edit-section" id="passport-academic">
+              <header>
+                <div><span>02 · ACADEMIC PROFILE</span><h2>Add context for requirement comparisons</h2><p>These fields help when an opportunity stores academic or language requirements.</p></div>
+                <span class="passport-section-badge">Recommended</span>
+              </header>
+              <div class="passport-form-grid">
+                <div class="field passport-field-wide"><label>Current institution <small>Optional</small></label><input class="input" name="institution" value="${escapeHTML(passport.institution)}" maxlength="160" placeholder="University, school or institution"><small>Your institution is private Passport data.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>GPA <small>Optional</small></label><input class="input" name="gpa" type="number" min="0" max="${Number(passport.gpaScale) === 5 ? 5 : 4}" step="0.01" value="${passport.gpa ?? ''}" placeholder="e.g. 3.67"><small>Leave blank if your system does not use a comparable GPA.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field"><label>GPA scale</label><select class="select" name="gpaScale"><option value="4" ${Number(passport.gpaScale) === 4 ? 'selected' : ''}>4.0 scale</option><option value="5" ${Number(passport.gpaScale) === 5 ? 'selected' : ''}>5.0 scale</option></select><small>Tefsen does not automatically convert between grading scales.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field passport-field-wide"><label>English-test status <small>Recommended</small></label><select class="select" name="englishTestStatus">${passportSelectOptions(english, passport.englishTestStatus)}</select><small>This is preparation context, not proof that you meet a provider's exact score.</small><span class="field-error" data-passport-field-error hidden></span></div>
+              </div>
+            </section>
+
+            <section class="passport-edit-section" id="passport-preferences">
+              <header>
+                <div><span>03 · PREFERENCES</span><h2>Shape what Tefsen prioritizes</h2><p>These preferences improve ranking without locking you into one country or path.</p></div>
+                <span class="passport-section-badge">Recommended</span>
+              </header>
+              <div class="passport-form-grid">
+                <div class="field passport-field-wide"><label>Preferred study countries <small>Optional</small></label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="e.g. Germany, Japan, Canada"><small>Comma-separated, up to 12. Leave blank if you are open globally.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field passport-field-wide"><label>Languages <small>Optional</small></label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="e.g. English, Spanish, Arabic"><small>Languages you can study, communicate or work in.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field passport-field-wide"><label>Skills <small>Optional</small></label><input class="input" name="skills" value="${escapeHTML((passport.skills || []).join(', '))}" maxlength="600" placeholder="e.g. Python, research, graphic design"><small>Use specific skills rather than broad labels.</small><span class="field-error" data-passport-field-error hidden></span></div>
+                <div class="field passport-field-wide"><label>Study / career goal <small>Recommended</small></label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What opportunity, degree or future direction are you working toward?">${escapeHTML(passport.studyGoal)}</textarea><small>This helps future next-action guidance. It is not shared publicly.</small><span class="field-error" data-passport-field-error hidden></span></div>
+              </div>
+            </section>
+
+            <section class="passport-edit-section" id="passport-documents">
+              <header>
+                <div><span>04 · PREPARATION</span><h2>Document readiness</h2><p>Track readiness only. Do not upload sensitive documents here.</p></div>
+                <span class="passport-section-badge private">Private status</span>
+              </header>
+              <div class="passport-doc-grid">
+                <label class="passport-doc"><input type="checkbox" name="docPassport" ${checked(docs.passport)}><span><b>Passport</b><small>Ready for applications</small></span></label>
+                <label class="passport-doc"><input type="checkbox" name="docTranscript" ${checked(docs.transcript)}><span><b>Academic transcript</b><small>Ready for applications</small></span></label>
+                <label class="passport-doc"><input type="checkbox" name="docEnglish" ${checked(docs.englishCertificate)}><span><b>English certificate</b><small>Ready if required</small></span></label>
+                <label class="passport-doc"><input type="checkbox" name="docRecommendation" ${checked(docs.recommendationLetter)}><span><b>Recommendation letter</b><small>At least one ready</small></span></label>
+                <label class="passport-doc"><input type="checkbox" name="docCv" ${checked(docs.cv)}><span><b>CV / resume</b><small>Current version ready</small></span></label>
+                <label class="passport-doc"><input type="checkbox" name="docStatement" ${checked(docs.personalStatement)}><span><b>Personal statement</b><small>Draft or final version ready</small></span></label>
+              </div>
+            </section>
+
+            <footer class="passport-form-actions">
+              <span>Saving updates your private Passport only.</span>
+              <div><button class="btn btn-secondary" type="button" data-route="opportunities">View opportunities</button><button class="btn btn-primary" type="submit">Save Student Passport</button></div>
+            </footer>
+          </form>
+
+          <aside class="passport-quality-aside">
+            <section class="passport-quality-card">
+              <span class="passport-quality-kicker">COMPLETION GUIDE</span>
+              <div class="passport-quality-score"><strong data-passport-quality-score>${details.percent}%</strong><span>Passport complete</span></div>
+              <p>This measures profile completeness, not eligibility or acceptance probability.</p>
+              <div data-passport-quality-sections>${passportSectionGuideMarkup(details)}</div>
+            </section>
+
+            <section class="passport-quality-card">
+              <span class="passport-quality-kicker">IMPROVE NEXT</span>
+              <div class="passport-next-list" data-passport-quality-next>${passportNextMarkup(details)}</div>
+            </section>
+
+            <section class="passport-quality-card passport-quality-trust">
+              <span class="passport-quality-kicker">HOW TEFSEN USES THIS</span>
+              <ul>
+                <li>Rank opportunities using structured profile signals.</li>
+                <li>Explain which stored eligibility criteria match or need review.</li>
+                <li>Keep Passport data private from your public profile by default.</li>
+                <li>Never treat completion as a guarantee of admission or funding.</li>
+              </ul>
+            </section>
+          </aside>
+        </div>
       </div>`;
+
     renderShell(content, { wide:true });
+    const form = document.querySelector('[data-student-passport-form]');
+    if (form) updateStudentPassportFormQuality(form, { dirty:false });
   } catch (error) {
     console.error(error);
     renderShell(`${demoBanner()}${emptyState('info','Student Passport unavailable','Secure Student Passport access is not configured yet. Review Firestore rules before production use.')}`, { wide:true });
@@ -2428,6 +2598,16 @@ async function handleClick(event) {
     renderSettings();
     return;
   }
+  const passportJump = event.target.closest('[data-passport-jump]');
+  if (passportJump) {
+    const target = document.getElementById(passportJump.dataset.passportJump || '');
+    if (target) {
+      target.scrollIntoView({ behavior:'smooth', block:'start' });
+      target.querySelector('input, select, textarea')?.focus({ preventScroll:true });
+    }
+    return;
+  }
+
   const onboardingForm = event.target.closest('[data-passport-onboarding-form]');
   if (event.target.closest('[data-passport-onboarding-next]') && onboardingForm) {
     const step = Number(onboardingForm.dataset.currentStep || 0);
@@ -2966,37 +3146,21 @@ async function handlePassportOnboardingSkip(button, form = null) {
 }
 
 async function handleStudentPassportSave(form) {
-  const fd = new FormData(form);
   const submit = form.querySelector('button[type="submit"]');
-  const csv = name => String(fd.get(name) || '').split(',').map(item => item.trim()).filter(Boolean);
-  const input = {
-    currentCountry: String(fd.get('currentCountry') || '').trim(),
-    nationality: String(fd.get('nationality') || '').trim(),
-    currentEducationLevel: String(fd.get('currentEducationLevel') || '').trim(),
-    targetEducationLevel: String(fd.get('targetEducationLevel') || '').trim(),
-    mainField: String(fd.get('mainField') || '').trim(),
-    institution: String(fd.get('institution') || '').trim(),
-    gpa: fd.get('gpa') === '' ? null : Number(fd.get('gpa')),
-    gpaScale: Number(fd.get('gpaScale') || 4),
-    preferredCountries: csv('preferredCountries'),
-    fundingPreference: String(fd.get('fundingPreference') || '').trim(),
-    englishTestStatus: String(fd.get('englishTestStatus') || '').trim(),
-    languages: csv('languages'),
-    skills: csv('skills'),
-    studyGoal: String(fd.get('studyGoal') || '').trim(),
-    onboardingStatus: currentStudentPassport?.onboardingStatus === 'skipped' ? 'skipped' : 'completed',
-    documentsReady: {
-      passport: fd.get('docPassport') === 'on',
-      transcript: fd.get('docTranscript') === 'on',
-      englishCertificate: fd.get('docEnglish') === 'on',
-      recommendationLetter: fd.get('docRecommendation') === 'on',
-      cv: fd.get('docCv') === 'on',
-      personalStatement: fd.get('docStatement') === 'on'
-    }
-  };
+  const { draft, validation } = updateStudentPassportFormQuality(form, { dirty:false });
+
+  if (!validation.valid) {
+    const firstError = validation.errors[0];
+    const field = form.elements.namedItem(firstError.field);
+    const fieldEl = field instanceof RadioNodeList ? field[0] : field;
+    fieldEl?.focus?.();
+    toast('Check the highlighted Student Passport field before saving.', 'error');
+    return;
+  }
+
   await withButton(submit, async () => {
     try {
-      currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, input);
+      currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, draft);
       toast('Student Passport saved.', 'success');
       await renderStudentPassport();
     } catch (error) {
@@ -3090,6 +3254,12 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
+  const passportForm = event.target.closest?.('[data-student-passport-form]');
+  if (passportForm) {
+    updateStudentPassportFormQuality(passportForm);
+    return;
+  }
+
   if (event.target.matches('[data-opportunity-filter]')) {
     const key = event.target.dataset.opportunityFilter;
     if (key && key in opportunityDiscoveryFilters) {
@@ -3179,9 +3349,13 @@ document.addEventListener('click', handleClick);
 document.addEventListener('submit', handleSubmit);
 document.addEventListener('change', handleInput);
 document.addEventListener('input', event => {
-  if (!event.target.matches('[data-opportunity-search]')) return;
-  opportunityDiscoveryFilters.query = String(event.target.value || '').trim();
-  applyOpportunitySearchDebounced();
+  if (event.target.matches('[data-opportunity-search]')) {
+    opportunityDiscoveryFilters.query = String(event.target.value || '').trim();
+    applyOpportunitySearchDebounced();
+    return;
+  }
+  const passportForm = event.target.closest?.('[data-student-passport-form]');
+  if (passportForm) updateStudentPassportFormQuality(passportForm);
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
