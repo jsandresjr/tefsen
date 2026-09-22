@@ -23,6 +23,11 @@ import {
   subjectCommunityData, universityCommunityData, intakeCommunityData
 } from './services/community-service.js';
 import {
+  getAdminCapability, opportunityFreshness, parseOpportunityImport,
+  markImportDuplicates, listAdminOpportunities, reviewOpportunity,
+  importOpportunityRecords
+} from './services/opportunity-admin-service.js';
+import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
 } from './utils.js';
@@ -40,6 +45,11 @@ const likeRequests = new Set();
 let currentProfileView = null;
 let currentStudentPassport = null;
 let currentJourneyStates = new Map();
+let adminCapability = false;
+let currentAdminOpportunities = [];
+let adminPreviewRows = [];
+let adminImportSource = '';
+let adminTab = 'review';
 let settingsTab = 'profile';
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
@@ -126,6 +136,10 @@ async function handleAuthChange(user) {
   stopComments?.(); stopComments = null;
   stopMessages?.(); stopMessages = null;
   reactionState = { saved: new Set(), liked: new Set() };
+  adminCapability = false;
+  currentAdminOpportunities = [];
+  adminPreviewRows = [];
+  adminImportSource = '';
   setState({ user, profile: null, posts: [], notifications: [], conversations: [], messages: [], unreadCount: 0 });
 
   if (!user) {
@@ -148,6 +162,7 @@ async function handleAuthChange(user) {
       conversations,
       unreadCount: notifications.filter(n => !n.read).length
     });
+    adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
     stopPosts = subscribePosts(state.mode, posts => {
       setState({ posts });
       renderRoute();
@@ -261,7 +276,7 @@ function renderShell(content, options = {}) {
         <div class="nav-divider"></div>
         <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-action="compose">${icon('plus',18)} Ask a question</button></div>
         <nav class="nav-list">
-          ${navItems.slice(6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
+          ${navItems.slice(6).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
           ${avatar(p,'sm')}
@@ -313,6 +328,7 @@ function renderProfileDropdown() {
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
       <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
+      ${adminCapability ? `<button type="button" data-route="admin" role="menuitem">${icon('check',17)} <span>Admin review</span><small>Verify and manage opportunities</small></button>` : ''}
       <div class="dropdown-separator"></div>
       <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
     </section>`;
@@ -1214,6 +1230,83 @@ function renderSettings() {
   renderShell(content,{wide:true});
 }
 
+
+function adminStatusMarkup(opportunity) {
+  const fresh = opportunityFreshness(opportunity);
+  return `<span class="admin-status ${escapeHTML(fresh.state)}">${escapeHTML(fresh.label)}</span>`;
+}
+
+function adminPreviewTable(rows = []) {
+  if (!rows.length) return '<p style="color:var(--muted)">Paste data and choose Preview import.</p>';
+  return `<div class="admin-preview panel"><table><thead><tr><th>#</th><th>Title</th><th>Provider</th><th>Source</th><th>Validation</th></tr></thead><tbody>${rows.map(row => {
+    const problems = [...(row.errors||[]), ...(row.warnings||[])];
+    const duplicate = row.duplicateExisting ? 'Duplicate existing URL' : row.duplicateBatch ? 'Duplicate in batch' : '';
+    return `<tr><td>${row.index+1}</td><td>${escapeHTML(row.record?.title||'—')}</td><td>${escapeHTML(row.record?.provider||row.record?.university||'—')}</td><td>${row.record?.officialSourceUrl ? `<a href="${safeUrl(row.record.officialSourceUrl)}" target="_blank" rel="noopener noreferrer">Open</a>` : '—'}</td><td class="${row.valid && !duplicate ? '' : 'admin-error'}">${escapeHTML(duplicate || problems.join(' · ') || 'Ready')}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+async function renderAdmin() {
+  if (!adminCapability) {
+    renderShell(`${emptyState('info','Admin authorization required','This area requires a Firebase Auth admin custom claim. A profile label alone is not enough.')}`, { wide:true, right:false });
+    return;
+  }
+
+  renderShell(`<header class="page-head"><div><h1>Opportunity Admin</h1><p>Loading verification and freshness data…</p></div></header><div class="loading-card"></div>`, { wide:true, right:false });
+  try {
+    currentAdminOpportunities = await listAdminOpportunities(state.mode, state.user, state.profile);
+    const withFreshness = currentAdminOpportunities.map(item => ({ item, freshness: opportunityFreshness(item) }));
+    const pending = withFreshness.filter(x => ['pending','unverified'].includes(x.freshness.state)).length;
+    const needsReview = withFreshness.filter(x => x.freshness.needsReview).length;
+    const verified = currentAdminOpportunities.filter(x => x.verificationStatus === 'verified').length;
+    const reviewRows = withFreshness
+      .filter(x => x.freshness.needsReview || x.item.verificationStatus !== 'verified')
+      .sort((x,y) => Number(y.freshness.needsReview) - Number(x.freshness.needsReview));
+
+    const reviewPanel = `<section class="admin-list">${reviewRows.length ? reviewRows.map(({item,freshness}) => `<article class="admin-row">
+      <div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${adminStatusMarkup(item)}<span class="opportunity-chip">${escapeHTML(item.verificationStatus||'unverified')}</span><span class="opportunity-chip">${escapeHTML(item.status||'draft')}</span></div>
+        <h3>${escapeHTML(item.title)}</h3>
+        <p>${escapeHTML(item.provider)} · ${escapeHTML(item.country)}${item.deadline ? ` · deadline ${escapeHTML(item.deadline)}` : ''}</p>
+        <p style="margin-top:7px">${item.officialSourceUrl ? `<a href="${safeUrl(item.officialSourceUrl)}" target="_blank" rel="noopener noreferrer">Open official/source URL</a>` : '<span class="admin-warning">Official source missing</span>'}</p>
+      </div>
+      <div class="admin-row-actions">
+        <button class="btn btn-primary" type="button" data-admin-review-action="verify" data-admin-opportunity-id="${escapeHTML(item.id)}" ${item.officialSourceUrl ? '' : 'disabled'}>Verify & publish</button>
+        <button class="btn btn-secondary" type="button" data-admin-review-action="mark_review" data-admin-opportunity-id="${escapeHTML(item.id)}">Needs review</button>
+        <button class="btn btn-ghost" type="button" data-admin-review-action="archive" data-admin-opportunity-id="${escapeHTML(item.id)}">Archive</button>
+      </div>
+    </article>`).join('') : '<div class="panel opportunity-empty">No opportunities currently need review.</div>'}</section>`;
+
+    const preview = markImportDuplicates(adminPreviewRows, currentAdminOpportunities);
+    adminPreviewRows = preview;
+    const readyCount = preview.filter(row => row.valid && !row.duplicateExisting && !row.duplicateBatch).length;
+    const importPanel = `<section class="panel section-card">
+      <div class="panel-title"><div><h2>Safe import preview</h2><small>JSON or CSV · max 100 preview / 25 import</small></div></div>
+      <div class="community-banner" style="margin-bottom:14px">Imported records are always saved as <b>draft + private + pending</b>. Import never verifies or publishes an opportunity.</div>
+      <form class="form-grid" data-admin-import-preview-form>
+        <div class="field"><label>JSON or CSV</label><textarea class="textarea admin-import-text" name="source" required placeholder='[{"title":"Scholarship","provider":"University","officialSourceUrl":"https://..."}]'>${escapeHTML(adminImportSource)}</textarea></div>
+        <div><button class="btn btn-secondary" type="submit">Preview import</button></div>
+      </form>
+      <div style="margin-top:16px">${adminPreviewTable(preview)}</div>
+      ${preview.length ? `<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" type="button" data-admin-import-confirm ${readyCount ? '' : 'disabled'}>Import ${readyCount} ready record${readyCount===1?'':'s'} as pending</button></div>` : ''}
+    </section>`;
+
+    const content = `${demoBanner()}<div class="admin-shell">
+      <section class="admin-hero">
+        <div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div>
+        <div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div>
+        <div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div>
+        <div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div>
+      </section>
+      <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Review queue</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Import</button></div>
+      ${adminTab === 'import' ? importPanel : reviewPanel}
+    </div>`;
+    renderShell(content,{wide:true,right:false});
+  } catch (error) {
+    console.error(error);
+    renderShell(`${emptyState('info','Admin tools unavailable',humanError(error))}`,{wide:true,right:false});
+  }
+}
+
 async function renderSearch(term = '') {
   state.searchQuery = term;
   renderShell(`<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header><div class="loading-card"></div>`);
@@ -1249,6 +1342,7 @@ function renderRoute() {
     case 'leaderboard': renderLeaderboard(); break;
     case 'profile': renderProfile(param || ''); break;
     case 'settings': renderSettings(); break;
+    case 'admin': renderAdmin(); break;
     case 'subscription': renderSubscription(); break;
     case 'post': renderPostDetail(param || ''); break;
     case 'search': renderSearch(param || new URLSearchParams(location.hash.split('?')[1] || '').get('q') || ''); break;
@@ -1375,6 +1469,12 @@ async function handleClick(event) {
   if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
   const tab = event.target.closest('[data-feed-tab]');
   if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
+  const adminTabButton = event.target.closest('[data-admin-tab]');
+  if (adminTabButton) { adminTab = adminTabButton.dataset.adminTab === 'import' ? 'import' : 'review'; await renderAdmin(); return; }
+  const adminReview = event.target.closest('[data-admin-review-action]');
+  if (adminReview) { await handleAdminReview(adminReview); return; }
+  const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
+  if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
   const like = event.target.closest('[data-like]');
   if (like) { await handleLike(like.dataset.like); return; }
   const save = event.target.closest('[data-save]');
@@ -1431,6 +1531,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
   if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
+  if (form.matches('[data-admin-import-preview-form]')) { event.preventDefault(); await handleAdminImportPreview(form); return; }
 }
 
 async function handleAuthForm(form) {
@@ -1783,6 +1884,31 @@ async function handleCommunityPostSubmit(form) {
   const subject=form.dataset.communitySubject||'', university=form.dataset.communityUniversity||'', intake=form.dataset.communityIntake||'';
   const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'General',tags:[subject,university,intake].filter(Boolean).slice(0,6),postType:'discussion',communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
   await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
+}
+
+
+async function handleAdminReview(button) {
+  if (!adminCapability) return;
+  const id=button.dataset.adminOpportunityId||'', action=button.dataset.adminReviewAction||'';
+  const opportunity=currentAdminOpportunities.find(item=>item.id===id);
+  if(!opportunity){toast('Opportunity not found.','error');return;}
+  await withButton(button,async()=>{try{await reviewOpportunity(state.mode,state.user,state.profile,opportunity,action);toast(action==='verify'?'Opportunity verified and published.':'Opportunity review state updated.','success');await renderAdmin();}catch(error){toast(humanError(error),'error');}});
+}
+
+async function handleAdminImportPreview(form) {
+  if (!adminCapability) return;
+  const fd=new FormData(form);
+  adminImportSource=String(fd.get('source')||'');
+  const parsed=parseOpportunityImport(adminImportSource,'auto');
+  if(parsed.error){adminPreviewRows=[];toast(parsed.error,'error');}
+  else{adminPreviewRows=markImportDuplicates(parsed.rows,currentAdminOpportunities);toast(`Previewed ${adminPreviewRows.length} record${adminPreviewRows.length===1?'':'s'}.`,'success');}
+  adminTab='import';
+  await renderAdmin();
+}
+
+async function handleAdminImportConfirm(button) {
+  if (!adminCapability) return;
+  await withButton(button,async()=>{try{const result=await importOpportunityRecords(state.mode,state.user,state.profile,adminPreviewRows,currentAdminOpportunities);toast(`${result.imported} opportunit${result.imported===1?'y':'ies'} imported as pending drafts.`,'success');adminPreviewRows=[];adminImportSource='';await renderAdmin();}catch(error){toast(humanError(error),'error');}});
 }
 
 async function handleReport(form) {
