@@ -847,14 +847,14 @@ function opportunityTrustPresentation(item = {}) {
   }
 
   const freshness = opportunityFreshness(item);
-  if (item.verificationStatus === 'verified' && freshness.state === 'fresh') {
-    return { tone:'verified', label:'Verified source', detail:freshness.label };
+  if (item.verificationStatus === 'verified' && freshness.state === 'stale') {
+    return { tone:'stale', label:'Source needs re-check', detail:freshness.label };
   }
   if (item.verificationStatus === 'verified' && freshness.state === 'aging') {
     return { tone:'aging', label:'Verified · review soon', detail:freshness.label };
   }
-  if (item.verificationStatus === 'verified' && freshness.state === 'stale') {
-    return { tone:'stale', label:'Source needs re-check', detail:freshness.label };
+  if (item.verificationStatus === 'verified') {
+    return { tone:'verified', label:'Verified source', detail:opportunitySourceCheckedLabel(item) };
   }
   return { tone:'unverified', label:'Source not verified', detail:'Use the provider page before acting.' };
 }
