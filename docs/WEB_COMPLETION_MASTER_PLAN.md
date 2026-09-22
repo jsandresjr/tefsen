@@ -67,4 +67,16 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - starter detail pages resolve without relying on nonexistent Firestore documents
 - service-worker cache updated for the starter catalogue
 
-**Next: Step 2 — opportunity search, filters, sorting and closing-soon views**
+**Step 2: Opportunity search, filters, sorting and closing-soon views — complete on branch `tefsen-web-completion-02-opportunity-discovery`**
+- live search across title, provider, university, country, subject and study level
+- country, study level, funding and opportunity-type filters
+- All / Closing Soon / Saved quick views
+- Best Match / Deadline Soonest / A–Z sorting
+- active filter chips + per-filter removal
+- clear-all action + meaningful no-results state
+- result counts update immediately
+- filter/sort runs on already-loaded catalogue with no extra Firestore reads
+- responsive mobile discovery controls
+- service-worker cache bumped for the discovery UI
+
+**Next: Step 3 — opportunity card information hierarchy and trust labels**

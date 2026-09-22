@@ -45,6 +45,16 @@ const likeRequests = new Set();
 let currentProfileView = null;
 let currentStudentPassport = null;
 let currentJourneyStates = new Map();
+const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
+  query: '',
+  country: 'all',
+  level: 'all',
+  funding: 'all',
+  type: 'all',
+  view: 'all',
+  sort: 'match'
+});
+let opportunityDiscoveryFilters = { ...DEFAULT_OPPORTUNITY_FILTERS };
 let adminCapability = false;
 let currentAdminOpportunities = [];
 let adminPreviewRows = [];
@@ -695,6 +705,113 @@ function opportunitySourceCheckedLabel(item = {}) {
   return `Source checked ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
 }
 
+function opportunityFilterOptions(values = []) {
+  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b));
+}
+
+function opportunityOptionMarkup(values, current, label = 'All') {
+  return `<option value="all">${escapeHTML(label)}</option>${values.map(value => `<option value="${escapeHTML(value.toLowerCase())}" ${current === value.toLowerCase() ? 'selected' : ''}>${escapeHTML(value)}</option>`).join('')}`;
+}
+
+function opportunityDeadlineDays(item = {}) {
+  const info = deadlineInfo(item.deadline || '');
+  return info.valid && Number.isFinite(info.daysRemaining) ? info.daysRemaining : 99999;
+}
+
+function opportunitySearchText(item = {}) {
+  return [
+    item.title, item.provider, item.university, item.country, item.opportunityType,
+    item.fundingType, ...(item.subjects || []), ...(item.studyLevels || [])
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function opportunityActiveFilterLabel(key, value) {
+  const labels = {
+    query: `Search: ${value}`,
+    country: value,
+    level: value,
+    funding: value,
+    type: value,
+    view: value === 'closing' ? 'Closing soon' : value === 'saved' ? 'Saved' : value
+  };
+  return labels[key] || value;
+}
+
+function syncOpportunityDiscoveryControls() {
+  const filters = opportunityDiscoveryFilters;
+  const search = document.querySelector('[data-opportunity-search]');
+  if (search && search.value !== filters.query) search.value = filters.query;
+
+  document.querySelectorAll('[data-opportunity-filter]').forEach(control => {
+    const key = control.dataset.opportunityFilter;
+    if (key && control.value !== filters[key]) control.value = filters[key];
+  });
+
+  document.querySelectorAll('[data-opportunity-view]').forEach(button => {
+    const active = button.dataset.opportunityView === filters.view;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function applyOpportunityDiscoveryFilters() {
+  const grid = document.querySelector('[data-opportunity-grid]');
+  if (!grid) return;
+
+  syncOpportunityDiscoveryControls();
+  const filters = opportunityDiscoveryFilters;
+  const cards = [...grid.querySelectorAll('[data-opportunity-card]')];
+
+  const visible = cards.filter(card => {
+    const matchesSearch = !filters.query || String(card.dataset.search || '').includes(filters.query.toLowerCase());
+    const matchesCountry = filters.country === 'all' || card.dataset.country === filters.country;
+    const levels = String(card.dataset.levels || '').split('|').filter(Boolean);
+    const matchesLevel = filters.level === 'all' || levels.includes(filters.level);
+    const matchesFunding = filters.funding === 'all' || card.dataset.funding === filters.funding;
+    const matchesType = filters.type === 'all' || card.dataset.type === filters.type;
+    const days = Number(card.dataset.deadlineDays || 99999);
+    const matchesView = filters.view === 'all'
+      || (filters.view === 'closing' && days >= 0 && days <= 30)
+      || (filters.view === 'saved' && card.dataset.saved === 'true');
+
+    const show = matchesSearch && matchesCountry && matchesLevel && matchesFunding && matchesType && matchesView;
+    card.hidden = !show;
+    return show;
+  });
+
+  visible.sort((a,b) => {
+    if (filters.sort === 'deadline') {
+      return Number(a.dataset.deadlineDays || 99999) - Number(b.dataset.deadlineDays || 99999);
+    }
+    if (filters.sort === 'title') {
+      return String(a.dataset.title || '').localeCompare(String(b.dataset.title || ''));
+    }
+    return Number(b.dataset.match || 0) - Number(a.dataset.match || 0);
+  });
+  visible.forEach(card => grid.appendChild(card));
+
+  const count = document.querySelector('[data-opportunity-results-count]');
+  if (count) count.textContent = `${visible.length} opportunit${visible.length === 1 ? 'y' : 'ies'}`;
+
+  const empty = document.querySelector('[data-opportunity-filter-empty]');
+  if (empty) empty.hidden = visible.length > 0;
+
+  const active = document.querySelector('[data-opportunity-active-filters]');
+  if (active) {
+    const chips = [];
+    for (const key of ['query','country','level','funding','type','view']) {
+      const value = filters[key];
+      if (!value || value === 'all') continue;
+      chips.push(`<button type="button" class="opportunity-active-chip" data-opportunity-clear-filter="${key}" aria-label="Remove ${escapeHTML(opportunityActiveFilterLabel(key,value))} filter">${escapeHTML(opportunityActiveFilterLabel(key,value))}<span aria-hidden="true">×</span></button>`);
+    }
+    active.innerHTML = chips.join('');
+    active.hidden = chips.length === 0;
+  }
+}
+
+const applyOpportunitySearchDebounced = debounce(() => applyOpportunityDiscoveryFilters(), 120);
+
 function opportunityCard(item, match = null, journey = null) {
   const preview = item.verificationStatus === 'preview';
   const starter = item.catalogSource === 'starter';
@@ -703,7 +820,18 @@ function opportunityCard(item, match = null, journey = null) {
     item.fundingType,
     item.country
   ].filter(Boolean).slice(0, 3);
-  return `<article class="opportunity-card">
+  const deadlineDays = opportunityDeadlineDays(item);
+  const searchText = opportunitySearchText(item);
+  return `<article class="opportunity-card" data-opportunity-card
+    data-search="${escapeHTML(searchText)}"
+    data-country="${escapeHTML(String(item.country || '').toLowerCase())}"
+    data-levels="${escapeHTML((item.studyLevels || []).map(value => String(value).toLowerCase()).join('|'))}"
+    data-funding="${escapeHTML(String(item.fundingType || '').toLowerCase())}"
+    data-type="${escapeHTML(String(item.opportunityType || '').toLowerCase())}"
+    data-deadline-days="${deadlineDays}"
+    data-saved="${journey?.saved ? 'true' : 'false'}"
+    data-match="${Number(match?.score || 0)}"
+    data-title="${escapeHTML(String(item.title || '').toLowerCase())}">
     <div class="opportunity-card-top">
       <div>
         <div class="opportunity-meta">${chips.map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}</div>
@@ -738,12 +866,25 @@ async function renderOpportunities() {
     ]);
     currentStudentPassport = passport;
     currentJourneyStates = new Map(journeyRows.map(row => [row.opportunityId, row]));
+
     const completeness = studentPassportCompleteness(passport);
-    const items = rawItems
+    const rankedItems = rawItems
       .map(item => ({ item, match: scoreOpportunityMatch(passport, item), journey: currentJourneyStates.get(item.id) || null }))
       .sort((a, b) => b.match.score - a.match.score);
+
     const fundedCount = rawItems.filter(item => /funded|scholarship/i.test(item.fundingType || '')).length;
+    const closingCount = rawItems.filter(item => {
+      const days = opportunityDeadlineDays(item);
+      return days >= 0 && days <= 30;
+    }).length;
+    const savedCount = rankedItems.filter(row => row.journey?.saved).length;
     const starterCatalogue = rawItems.length > 0 && rawItems.every(item => item.catalogSource === 'starter');
+
+    const countries = opportunityFilterOptions(rawItems.map(item => item.country));
+    const levels = opportunityFilterOptions(rawItems.flatMap(item => item.studyLevels || []));
+    const fundingTypes = opportunityFilterOptions(rawItems.map(item => item.fundingType));
+    const types = opportunityFilterOptions(rawItems.map(item => item.opportunityType));
+
     const catalogueNotice = starterCatalogue
       ? `<section class="opportunity-starter-notice">
           <span class="opportunity-starter-icon">${icon('check',18)}</span>
@@ -754,32 +895,77 @@ async function renderOpportunities() {
           ${adminCapability ? '<button class="btn btn-secondary" type="button" data-route="admin">Publish live catalogue</button>' : ''}
         </section>`
       : '';
+
     const content = `${demoBanner()}
       <section class="opportunity-hero">
         <div class="opportunity-hero-card">
           <span class="opportunity-kicker">YOUR PATH TO OPPORTUNITY</span>
           <h1>Find the next step in your education journey.</h1>
-          <p>Discover scholarships, research programs, exchanges and other student opportunities. Tefsen will keep official-source verification separate from community information.</p>
+          <p>Search scholarships, research programmes, exchanges and other student opportunities. Tefsen keeps official-source verification separate from community information.</p>
         </div>
         <div class="opportunity-stat-card">
           <span>${starterCatalogue ? 'Starter catalogue' : 'Available now'}</span>
           <strong>${rawItems.length}</strong>
-          <span>${starterCatalogue ? 'official-source opportunities to explore' : `${fundedCount} funded opportunities in this view`}</span>
+          <span>${starterCatalogue ? 'official-source opportunities to explore' : `${fundedCount} funded opportunities in this catalogue`}</span>
         </div>
       </section>
+
       ${catalogueNotice}
-      <header class="page-head"><div><h2 style="margin:0">Discover opportunities</h2><p>Open a listing to review funding, subjects, requirements and source status.</p></div></header>
-      <div class="passport-private-note" style="margin-bottom:16px">
+
+      <section class="opportunity-discovery-panel" aria-label="Opportunity discovery controls">
+        <div class="opportunity-quick-views" role="group" aria-label="Opportunity views">
+          <button type="button" data-opportunity-view="all" aria-pressed="true">All <span>${rawItems.length}</span></button>
+          <button type="button" data-opportunity-view="closing" aria-pressed="false">Closing soon <span>${closingCount}</span></button>
+          <button type="button" data-opportunity-view="saved" aria-pressed="false">Saved <span>${savedCount}</span></button>
+        </div>
+
+        <div class="opportunity-filter-row">
+          <label class="opportunity-search-box">
+            <span class="sr-only">Search opportunities</span>
+            ${icon('search',18)}
+            <input type="search" data-opportunity-search value="${escapeHTML(opportunityDiscoveryFilters.query)}" placeholder="Search scholarship, provider, country or subject…" autocomplete="off">
+          </label>
+
+          <label><span>Country</span><select data-opportunity-filter="country">${opportunityOptionMarkup(countries, opportunityDiscoveryFilters.country, 'All countries')}</select></label>
+          <label><span>Study level</span><select data-opportunity-filter="level">${opportunityOptionMarkup(levels, opportunityDiscoveryFilters.level, 'All levels')}</select></label>
+          <label><span>Funding</span><select data-opportunity-filter="funding">${opportunityOptionMarkup(fundingTypes, opportunityDiscoveryFilters.funding, 'All funding')}</select></label>
+          <label><span>Type</span><select data-opportunity-filter="type">${opportunityOptionMarkup(types, opportunityDiscoveryFilters.type, 'All types')}</select></label>
+          <label><span>Sort</span><select data-opportunity-filter="sort">
+            <option value="match" ${opportunityDiscoveryFilters.sort === 'match' ? 'selected' : ''}>Best match</option>
+            <option value="deadline" ${opportunityDiscoveryFilters.sort === 'deadline' ? 'selected' : ''}>Deadline soonest</option>
+            <option value="title" ${opportunityDiscoveryFilters.sort === 'title' ? 'selected' : ''}>A–Z</option>
+          </select></label>
+        </div>
+
+        <div class="opportunity-filter-summary">
+          <div><strong data-opportunity-results-count>${rankedItems.length} opportunities</strong><span>Use filters to narrow the catalogue without changing your Student Passport.</span></div>
+          <button class="btn btn-ghost" type="button" data-opportunity-clear-all>Clear filters</button>
+        </div>
+        <div class="opportunity-active-filters" data-opportunity-active-filters hidden></div>
+      </section>
+
+      <div class="passport-private-note opportunity-passport-note">
         <span>${icon('user',18)}</span>
-        <div><b>${completeness ? `Personalized using your Student Passport · ${completeness}% complete` : 'Complete your Student Passport for personalized matching'}</b><br><span>${completeness ? 'Matches are rule-based and explainable; they are not admission guarantees.' : 'Add your study level, field, nationality and funding preference to improve opportunity ranking.'}</span> <button class="btn btn-ghost" style="margin-left:8px;min-height:34px" type="button" data-route="passport">Open Passport</button></div>
+        <div><b>${completeness ? `Personalized using your Student Passport · ${completeness}% complete` : 'Complete your Student Passport for personalized matching'}</b><br><span>${completeness ? 'Best Match uses structured profile fields and is not an admission guarantee.' : 'Add study level, field, nationality and funding preference to improve ranking.'}</span></div>
+        <button class="btn btn-ghost" type="button" data-route="passport">Open Passport</button>
       </div>
-      <div class="opportunity-grid">${items.length ? items.map(({item,match,journey}) => opportunityCard(item, match, journey)).join('') : `<section class="opportunity-empty-state">
-        <div class="empty-icon">${icon('compass',24)}</div>
-        <h3>No opportunities are visible yet.</h3>
-        <p>Complete your Student Passport while Tefsen prepares the catalogue, or open the admin review area if you manage opportunity data.</p>
-        <div class="opportunity-empty-actions"><button class="btn btn-primary" type="button" data-route="passport">Complete Student Passport</button>${adminCapability ? '<button class="btn btn-secondary" type="button" data-route="admin">Open Admin Review</button>' : ''}</div>
-      </section>`}</div>`;
+
+      <header class="page-head opportunity-results-head">
+        <div><h2 style="margin:0">Discover opportunities</h2><p>Review funding, requirements, deadline and source status before deciding what to pursue.</p></div>
+      </header>
+
+      <div class="opportunity-grid" data-opportunity-grid>
+        ${rankedItems.map(({item,match,journey}) => opportunityCard(item, match, journey)).join('')}
+        <section class="opportunity-empty-state" data-opportunity-filter-empty hidden>
+          <div class="empty-icon">${icon('search',24)}</div>
+          <h3>No opportunities match these filters.</h3>
+          <p>Try removing a filter or searching with a broader subject, country or provider name.</p>
+          <div class="opportunity-empty-actions"><button class="btn btn-primary" type="button" data-opportunity-clear-all>Clear filters</button><button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button></div>
+        </section>
+      </div>`;
+
     renderShell(content, { wide:true });
+    requestAnimationFrame(() => applyOpportunityDiscoveryFilters());
   } catch (error) {
     console.error(error);
     renderShell(`${demoBanner()}<header class="page-head"><div><h1>Opportunities</h1><p>We could not load the opportunity catalogue.</p></div></header>${emptyState('info','Opportunities unavailable','Please try again after the opportunity collection and Firestore access are configured.')}`, { wide:true });
@@ -1775,6 +1961,26 @@ async function handleClick(event) {
   if (adminReview) { await handleAdminReview(adminReview); return; }
   const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
   if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
+  const opportunityView = event.target.closest('[data-opportunity-view]');
+  if (opportunityView) {
+    opportunityDiscoveryFilters.view = opportunityView.dataset.opportunityView || 'all';
+    applyOpportunityDiscoveryFilters();
+    return;
+  }
+  const clearOpportunityFilter = event.target.closest('[data-opportunity-clear-filter]');
+  if (clearOpportunityFilter) {
+    const key = clearOpportunityFilter.dataset.opportunityClearFilter;
+    if (key && key in opportunityDiscoveryFilters) {
+      opportunityDiscoveryFilters[key] = key === 'query' ? '' : 'all';
+      applyOpportunityDiscoveryFilters();
+    }
+    return;
+  }
+  if (event.target.closest('[data-opportunity-clear-all]')) {
+    opportunityDiscoveryFilters = { ...DEFAULT_OPPORTUNITY_FILTERS };
+    applyOpportunityDiscoveryFilters();
+    return;
+  }
   const like = event.target.closest('[data-like]');
   if (like) { await handleLike(like.dataset.like); return; }
   const save = event.target.closest('[data-save]');
@@ -2286,6 +2492,15 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
+  if (event.target.matches('[data-opportunity-filter]')) {
+    const key = event.target.dataset.opportunityFilter;
+    if (key && key in opportunityDiscoveryFilters) {
+      opportunityDiscoveryFilters[key] = String(event.target.value || 'all');
+      applyOpportunityDiscoveryFilters();
+    }
+    return;
+  }
+
   if (event.target.matches('[data-profile-photo-input]')) {
     const input = event.target;
     const file = input.files?.[0] || null;
@@ -2365,6 +2580,11 @@ document.addEventListener('dragstart', protectDisplayedAvatarMedia, true);
 document.addEventListener('click', handleClick);
 document.addEventListener('submit', handleSubmit);
 document.addEventListener('change', handleInput);
+document.addEventListener('input', event => {
+  if (!event.target.matches('[data-opportunity-search]')) return;
+  opportunityDiscoveryFilters.query = String(event.target.value || '').trim();
+  applyOpportunitySearchDebounced();
+});
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
   if (event.key==='Escape' && modalRoot.innerHTML) modalRoot.innerHTML='';
