@@ -12,6 +12,13 @@ import { getOpportunities, getOpportunityById } from './services/opportunity-ser
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
+  listJourneyStates, getJourneyState, setOpportunitySaved, startJourney,
+  updateJourneyStage, updateJourneyPlanning, toggleJourneyTask,
+  addCustomJourneyTask, deleteCustomJourneyTask, journeyProgress,
+  allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
+} from './services/journey-service.js';
+import { deadlineInfo } from './services/deadline-engine.js';
+import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
 } from './utils.js';
@@ -28,6 +35,7 @@ let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
 let currentProfileView = null;
 let currentStudentPassport = null;
+let currentJourneyStates = new Map();
 let settingsTab = 'profile';
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
@@ -40,6 +48,7 @@ const navItems = [
   ['home', 'Home', 'home'],
   ['opportunities', 'Opportunities', 'compass'],
   ['passport', 'Student Passport', 'user'],
+  ['journeys', 'Journey', 'check'],
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
   ['messages', 'Messages', 'message'],
@@ -264,7 +273,7 @@ function renderShell(content, options = {}) {
         ${mobileNavButton('home','home',route,'Home')}
         ${mobileNavButton('opportunities','compass',route,'Opportunities')}
         <button class="create-mobile" type="button" data-action="compose" aria-label="Ask a question">${icon('plus',24)}</button>
-        ${mobileNavButton('notifications','bell',route,'Notifications')}
+        ${mobileNavButton('journeys','check',route,'Journey')}
         ${mobileNavButton('profile','user',route,'Profile')}
       </nav>
     </div>
@@ -296,6 +305,8 @@ function renderProfileDropdown() {
       <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
       <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
       <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved</span><small>Your saved knowledge</small></button>
+      <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
+      <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
       <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
       <div class="dropdown-separator"></div>
       <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
@@ -415,7 +426,7 @@ function opportunityDateLabel(value) {
   return `Deadline ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
 }
 
-function opportunityCard(item, match = null) {
+function opportunityCard(item, match = null, journey = null) {
   const preview = item.verificationStatus === 'preview';
   const chips = [
     item.opportunityType,
@@ -439,7 +450,10 @@ function opportunityCard(item, match = null) {
     </div>
     <div class="opportunity-card-footer">
       <span class="opportunity-deadline">${escapeHTML(opportunityDateLabel(item.deadline))}</span>
-      <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View details</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn btn-ghost" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save'}</button>
+        <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View details</button>
+      </div>
     </div>
   </article>`;
 }
@@ -447,14 +461,16 @@ function opportunityCard(item, match = null) {
 async function renderOpportunities() {
   renderShell(`<header class="page-head"><div><h1>Opportunities</h1><p>Finding opportunities that fit your education journey…</p></div></header><div class="loading-card"></div>`, { wide:true });
   try {
-    const [rawItems, passport] = await Promise.all([
+    const [rawItems, passport, journeyRows] = await Promise.all([
       getOpportunities(state.mode),
-      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid))
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
+      listJourneyStates(state.mode, state.user.uid).catch(() => [])
     ]);
     currentStudentPassport = passport;
+    currentJourneyStates = new Map(journeyRows.map(row => [row.opportunityId, row]));
     const completeness = studentPassportCompleteness(passport);
     const items = rawItems
-      .map(item => ({ item, match: scoreOpportunityMatch(passport, item) }))
+      .map(item => ({ item, match: scoreOpportunityMatch(passport, item), journey: currentJourneyStates.get(item.id) || null }))
       .sort((a, b) => b.match.score - a.match.score);
     const fundedCount = rawItems.filter(item => /funded/i.test(item.fundingType || '')).length;
     const content = `${demoBanner()}
@@ -475,7 +491,7 @@ async function renderOpportunities() {
         <span>${icon('user',18)}</span>
         <div><b>${completeness ? `Personalized using your Student Passport · ${completeness}% complete` : 'Complete your Student Passport for personalized matching'}</b><br><span>${completeness ? 'Matches are rule-based and explainable; they are not admission guarantees.' : 'Add your study level, field, nationality and funding preference to improve opportunity ranking.'}</span> <button class="btn btn-ghost" style="margin-left:8px;min-height:34px" type="button" data-route="passport">Open Passport</button></div>
       </div>
-      <div class="opportunity-grid">${items.length ? items.map(({item,match}) => opportunityCard(item, match)).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
+      <div class="opportunity-grid">${items.length ? items.map(({item,match,journey}) => opportunityCard(item, match, journey)).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
     renderShell(content, { wide:true });
   } catch (error) {
     console.error(error);
@@ -585,9 +601,13 @@ function eligibilityCheckMarkup(result) {
 async function renderOpportunityDetail(opportunityId) {
   renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button><div class="loading-card" style="margin-top:14px"></div>`, { wide:true });
   try {
-    const item = await getOpportunityById(state.mode, opportunityId);
-    const passport = await getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid));
+    const [item, passport, journey] = await Promise.all([
+      getOpportunityById(state.mode, opportunityId),
+      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
+      getJourneyState(state.mode, state.user.uid, opportunityId).catch(() => null)
+    ]);
     currentStudentPassport = passport;
+    if (journey) currentJourneyStates.set(opportunityId, journey);
     if (!item) {
       renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Opportunity not found','This listing may be unavailable, private, expired, or not yet published.')}`, { wide:true });
       return;
@@ -649,8 +669,12 @@ async function renderOpportunityDetail(opportunityId) {
             ${source ? `<a class="btn btn-primary btn-block" style="margin-top:12px" href="${source}" target="_blank" rel="noopener noreferrer">Open official source</a>` : ''}
           </div>
           <div class="opportunity-section">
-            <h2>Coming next</h2>
-            <p style="color:var(--muted);line-height:1.55">Student Passport matching, “Can I Apply?” eligibility checks, saving, deadlines and application journeys will connect to this opportunity model in the next milestones.</p>
+            <h2>Your application journey</h2>
+            ${journey?.started ? `<p style="color:var(--muted)">Current stage: <b style="color:var(--text)">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>` : (journey?.saved ? '<p style="color:var(--muted)">Saved. Start a private journey when you are ready to prepare and track progress.</p>' : '<p style="color:var(--muted)">Save this opportunity or start a private journey to track preparation and progress.</p>')}
+            <div class="journey-actions">
+              <button class="btn btn-secondary" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save opportunity'}</button>
+              <button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(item.id)}">${journey?.started ? 'Open journey' : 'Start journey'}</button>
+            </div>
           </div>
         </aside>
       </div>`;
@@ -658,6 +682,186 @@ async function renderOpportunityDetail(opportunityId) {
   } catch (error) {
     console.error(error);
     renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Could not load opportunity','Please try again.')}`, { wide:true });
+  }
+}
+
+
+function deadlineUrgencyClass(info) {
+  if (!info?.valid) return '';
+  if (info.state === 'expired') return 'expired';
+  if (['today','1_6_days','7_14_days'].includes(info.state)) return 'urgent';
+  return '';
+}
+
+function journeyStageLine(journey) {
+  const linear = ['interested','preparing','ready_to_apply','applied','interview','accepted'];
+  const current = journey?.status || 'interested';
+  const currentIndex = linear.indexOf(current);
+  return `<div class="journey-stage-line">${linear.map((status,index) => {
+    const cls = status === current ? 'current' : (currentIndex >= 0 && index < currentIndex ? 'done' : '');
+    return `<span class="journey-stage-pill ${cls}">${escapeHTML(JOURNEY_LABELS[status])}</span>`;
+  }).join('')}${['rejected','withdrawn'].includes(current) ? `<span class="journey-stage-pill current">${escapeHTML(JOURNEY_LABELS[current])}</span>` : ''}</div>`;
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(Number(value || 0));
+  if (Number.isNaN(date.getTime())) return 'Recently';
+  return date.toLocaleString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function journeyCardMarkup(journey, opportunity) {
+  const progress = journeyProgress(journey);
+  const official = deadlineInfo(opportunity?.deadline || '');
+  const title = opportunity?.title || 'Opportunity unavailable';
+  const provider = opportunity?.provider || 'The original opportunity is not currently public.';
+  return `<article class="journey-card">
+    <div>
+      <h3>${escapeHTML(title)}</h3>
+      <p>${escapeHTML(provider)}</p>
+      <div class="journey-card-meta">
+        <span class="opportunity-chip">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</span>
+        <span class="opportunity-chip">${progress.completed}/${progress.total} tasks</span>
+        ${journey.saved ? '<span class="opportunity-chip">Saved</span>' : ''}
+      </div>
+      <div style="margin-top:10px">
+        <span class="journey-deadline ${deadlineUrgencyClass(official)}">${escapeHTML(official.label)}</span>
+        ${journey.personalTargetDate ? `<span style="color:var(--muted)"> · Personal target ${escapeHTML(journey.personalTargetDate)}</span>` : ''}
+      </div>
+    </div>
+    ${journey.started
+      ? `<button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open journey</button>`
+      : `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(journey.opportunityId)}">Start journey</button>`}
+  </article>`;
+}
+
+async function renderJourneys() {
+  renderShell(`<header class="page-head"><div><h1>Your Journey</h1><p>Loading saved opportunities and application progress…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  try {
+    const [journeys, opportunities] = await Promise.all([
+      listJourneyStates(state.mode, state.user.uid),
+      getOpportunities(state.mode).catch(() => [])
+    ]);
+    currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
+    const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
+    const visibleJourneys = journeys.filter(row => row.saved || row.started);
+    visibleJourneys.sort((a, b) => {
+      const aInfo = deadlineInfo(opportunityMap.get(a.opportunityId)?.deadline || '');
+      const bInfo = deadlineInfo(opportunityMap.get(b.opportunityId)?.deadline || '');
+      const aDays = aInfo.valid && aInfo.daysRemaining >= 0 ? aInfo.daysRemaining : Number.POSITIVE_INFINITY;
+      const bDays = bInfo.valid && bInfo.daysRemaining >= 0 ? bInfo.daysRemaining : Number.POSITIVE_INFINITY;
+      return aDays - bDays;
+    });
+    const active = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
+    const saved = visibleJourneys.filter(row => row.saved).length;
+    const withDeadline = visibleJourneys
+      .map(row => ({ row, info: deadlineInfo(opportunityMap.get(row.opportunityId)?.deadline || '') }))
+      .filter(entry => entry.info.valid && entry.info.daysRemaining >= 0)
+      .sort((a,b) => a.info.daysRemaining - b.info.daysRemaining);
+    const nearest = withDeadline[0]?.info;
+
+    const content = `${demoBanner()}
+      <div class="journey-page">
+        <section class="journey-overview">
+          <article>
+            <span class="opportunity-kicker">PRIVATE APPLICATION WORKSPACE</span>
+            <h1>Keep your next step visible.</h1>
+            <p>Save opportunities, prepare required documents, set a personal target, and update your journey manually as your real application progresses.</p>
+          </article>
+          <article class="journey-stat"><strong>${active.length}</strong><span>active journeys</span></article>
+          <article class="journey-stat"><strong>${nearest ? nearest.daysRemaining : '—'}</strong><span>${nearest ? 'days to nearest official deadline' : 'no dated deadline yet'} · ${saved} saved</span></article>
+        </section>
+        <div class="passport-private-note"><span>${icon('info',18)}</span><div><b>Private by default.</b><br>Application stage, notes, targets and checklist status are not published to your Tefsen community profile.</div></div>
+        <header class="page-head"><div><h2 style="margin:0">Saved & active opportunities</h2><p>Official deadlines remain separate from your personal preparation target.</p></div><button class="btn btn-secondary" data-route="opportunities">Find opportunities</button></header>
+        <div class="journey-list">${visibleJourneys.length ? visibleJourneys.map(row => journeyCardMarkup(row, opportunityMap.get(row.opportunityId))).join('') : emptyState('bookmark','No journeys yet','Save an opportunity or start a journey from an opportunity page.')}</div>
+      </div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Journey unavailable','Secure journey access is not configured yet. Review Firestore rules before production use.')}`, { wide:true });
+  }
+}
+
+async function renderJourneyDetail(opportunityId) {
+  renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back to Journey</button><div class="loading-card" style="margin-top:14px"></div>`, { wide:true });
+  try {
+    const [journey, opportunity] = await Promise.all([
+      getJourneyState(state.mode, state.user.uid, opportunityId),
+      getOpportunityById(state.mode, opportunityId).catch(() => null)
+    ]);
+
+    if (!journey) {
+      renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Journey not started','Open the opportunity and choose Start journey first.')}`, { wide:true });
+      return;
+    }
+
+    const progress = journeyProgress(journey);
+    const official = deadlineInfo(opportunity?.deadline || '');
+    const personal = deadlineInfo(journey.personalTargetDate || '');
+    const targetAfterOfficial = Boolean(personal.valid && official.valid && personal.date?.getTime() > official.date?.getTime());
+    const nextStatuses = allowedJourneyTransitions(journey.status);
+    const history = [...(journey.history || [])].reverse();
+    const checklist = journey.checklist || [];
+
+    const content = `${demoBanner()}
+      <button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back to Journey</button>
+      <div class="journey-layout" style="margin-top:14px">
+        <main style="display:grid;gap:16px">
+          <section class="journey-panel">
+            <span class="opportunity-kicker">APPLICATION JOURNEY</span>
+            <h1>${escapeHTML(opportunity?.title || 'Saved opportunity')}</h1>
+            <p style="color:var(--muted)">${escapeHTML(opportunity?.provider || 'Opportunity details are not currently public.')}</p>
+            ${journeyStageLine(journey)}
+            <div class="opportunity-section">
+              <h2>Current stage</h2>
+              <p><b>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>
+              ${nextStatuses.length ? `<form class="journey-actions" data-journey-stage-form="${escapeHTML(opportunityId)}"><select class="select" name="status" required><option value="">Choose next stage</option>${nextStatuses.map(status => `<option value="${escapeHTML(status)}">${escapeHTML(JOURNEY_LABELS[status])}</option>`).join('')}</select><button class="btn btn-primary" type="submit">Update stage</button></form>` : '<p style="color:var(--muted)">This journey is currently in a final stage.</p>'}
+            </div>
+          </section>
+
+          <section class="journey-panel">
+            <div class="panel-title"><div><h2>Preparation checklist</h2><small>${progress.completed} of ${progress.total} complete</small></div><strong>${progress.percent}%</strong></div>
+            <div class="journey-progress-bar"><i style="width:${progress.percent}%"></i></div>
+            <div style="margin-top:14px">
+              ${checklist.length ? checklist.map(task => `<div class="journey-task ${task.completed ? 'done' : ''}">
+                <button class="btn btn-ghost" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : '○'}</button>
+                <span>${escapeHTML(task.label)}<br><small>${task.source === 'system' ? 'From opportunity requirements' : 'Your custom task'}</small></span>
+                ${task.source === 'custom' ? `<button class="btn btn-ghost" type="button" data-journey-task-delete="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}">Remove</button>` : ''}
+              </div>`).join('') : '<p style="color:var(--muted)">No structured required-document tasks were available. Add your own preparation task below.</p>'}
+            </div>
+            <form class="journey-actions" style="margin-top:14px" data-journey-task-form="${escapeHTML(opportunityId)}"><input class="input" name="label" maxlength="240" required placeholder="Add a personal preparation task"><button class="btn btn-secondary" type="submit">Add task</button></form>
+          </section>
+        </main>
+
+        <aside style="display:grid;gap:16px;align-content:start">
+          <section class="journey-panel">
+            <h2>Deadlines</h2>
+            <p><b>Official deadline</b><br><span class="journey-deadline ${deadlineUrgencyClass(official)}">${escapeHTML(official.label)}</span></p>
+            <p><b>Personal target</b><br><span class="journey-deadline ${deadlineUrgencyClass(personal)}">${personal.valid ? escapeHTML(personal.label) : 'Not set'}</span></p>
+            <p style="color:var(--muted);font-size:.86rem">Your personal target never changes the official provider deadline.</p>
+            ${targetAfterOfficial ? '<div class="opportunity-source-note">Your personal target is after the official deadline. Move your preparation target earlier.</div>' : ''}
+          </section>
+
+          <section class="journey-panel">
+            <h2>Planning</h2>
+            <form class="form-grid" data-journey-planning-form="${escapeHTML(opportunityId)}">
+              <div class="field"><label>Personal preparation target</label><input class="input" type="date" name="personalTargetDate" value="${escapeHTML(journey.personalTargetDate || '')}"></div>
+              <div class="field"><label>Private notes</label><textarea class="textarea" name="notes" maxlength="3000" placeholder="Questions, reminders, preparation notes…">${escapeHTML(journey.notes || '')}</textarea></div>
+              <button class="btn btn-primary" type="submit">Save planning</button>
+            </form>
+          </section>
+
+          <section class="journey-panel">
+            <h2>History</h2>
+            <div class="journey-history">${history.length ? history.map(item => `<div class="journey-history-item"><span class="journey-history-dot"></span><div><b>${escapeHTML(JOURNEY_LABELS[item.status] || item.status)}</b><br><small>${escapeHTML(formatHistoryTime(item.atMillis))}</small></div></div>`).join('') : '<p style="color:var(--muted)">No history recorded yet.</p>'}</div>
+          </section>
+
+          ${opportunity ? `<button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(opportunityId)}">View opportunity details</button>` : ''}
+        </aside>
+      </div>`;
+    renderShell(content, { wide:true });
+  } catch (error) {
+    console.error(error);
+    renderShell(`<button class="btn btn-ghost" data-route="journeys">${icon('back',17)} Back</button>${emptyState('info','Could not load journey','Please try again.')}`, { wide:true });
   }
 }
 
@@ -909,6 +1113,8 @@ function renderRoute() {
     case 'home': renderHome(); break;
     case 'opportunities': renderOpportunities(); break;
     case 'passport': renderStudentPassport(); break;
+    case 'journeys': renderJourneys(); break;
+    case 'journey': renderJourneyDetail(param || ''); break;
     case 'opportunity': renderOpportunityDetail(param || ''); break;
     case 'explore': renderExplore(); break;
     case 'saved': renderHome('saved'); break;
@@ -1004,6 +1210,14 @@ async function handleClick(event) {
   if (like) { await handleLike(like.dataset.like); return; }
   const save = event.target.closest('[data-save]');
   if (save) { await handleSave(save.dataset.save); return; }
+  const opportunitySave = event.target.closest('[data-opportunity-save]');
+  if (opportunitySave) { await handleOpportunitySave(opportunitySave); return; }
+  const startJourneyButton = event.target.closest('[data-start-journey]');
+  if (startJourneyButton) { await handleStartJourney(startJourneyButton); return; }
+  const taskToggle = event.target.closest('[data-journey-task-toggle]');
+  if (taskToggle) { await handleJourneyTaskToggle(taskToggle); return; }
+  const taskDelete = event.target.closest('[data-journey-task-delete]');
+  if (taskDelete) { await handleJourneyTaskDelete(taskDelete); return; }
   const share = event.target.closest('[data-share]');
   if (share) { await copyText(`${location.origin}${location.pathname}#/post/${share.dataset.share}`); modalRoot.innerHTML=''; return; }
   const postMenu = event.target.closest('[data-post-menu]');
@@ -1041,6 +1255,9 @@ async function handleSubmit(event) {
   if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
+  if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
+  if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
+  if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
   if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
 }
 
@@ -1164,6 +1381,117 @@ async function handleFollow(button) {
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
   catch(e){ toast(humanError(e),'error'); }
+}
+
+
+async function handleOpportunitySave(button) {
+  const opportunityId = button?.dataset?.opportunitySave || '';
+  if (!opportunityId) return;
+  await withButton(button, async () => {
+    try {
+      const opportunity = await getOpportunityById(state.mode, opportunityId);
+      if (!opportunity) throw new Error('Opportunity is not available.');
+      const isSaved = button.dataset.opportunitySaved === 'true';
+      const journey = await setOpportunitySaved(state.mode, state.user.uid, opportunity, !isSaved);
+      if (journey) currentJourneyStates.set(opportunityId, journey);
+      toast(isSaved ? 'Removed from saved opportunities.' : 'Opportunity saved.', 'success');
+      renderRoute();
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleStartJourney(button) {
+  const opportunityId = button?.dataset?.startJourney || '';
+  if (!opportunityId) return;
+  await withButton(button, async () => {
+    try {
+      const opportunity = await getOpportunityById(state.mode, opportunityId);
+      if (!opportunity) throw new Error('Opportunity is not available.');
+      const journey = await startJourney(state.mode, state.user.uid, opportunity);
+      currentJourneyStates.set(opportunityId, journey);
+      toast('Application journey ready.', 'success');
+      go(`journey/${encodeURIComponent(opportunityId)}`);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleJourneyTaskToggle(button) {
+  const opportunityId = button?.dataset?.opportunityId || '';
+  const taskId = button?.dataset?.journeyTaskToggle || '';
+  if (!opportunityId || !taskId) return;
+  try {
+    await toggleJourneyTask(state.mode, state.user.uid, opportunityId, taskId);
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handleJourneyTaskDelete(button) {
+  const opportunityId = button?.dataset?.opportunityId || '';
+  const taskId = button?.dataset?.journeyTaskDelete || '';
+  if (!opportunityId || !taskId) return;
+  try {
+    await deleteCustomJourneyTask(state.mode, state.user.uid, opportunityId, taskId);
+    toast('Task removed.', 'success');
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handleJourneyStageSave(form) {
+  const opportunityId = form.dataset.journeyStageForm || '';
+  const status = String(new FormData(form).get('status') || '');
+  if (!opportunityId || !status) return;
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await updateJourneyStage(state.mode, state.user.uid, opportunityId, status);
+      toast('Journey stage updated.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleJourneyPlanningSave(form) {
+  const opportunityId = form.dataset.journeyPlanningForm || '';
+  const fd = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await updateJourneyPlanning(state.mode, state.user.uid, opportunityId, {
+        personalTargetDate: String(fd.get('personalTargetDate') || ''),
+        notes: String(fd.get('notes') || '')
+      });
+      toast('Journey planning saved.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handleJourneyTaskAdd(form) {
+  const opportunityId = form.dataset.journeyTaskForm || '';
+  const label = String(new FormData(form).get('label') || '').trim();
+  if (!opportunityId || !label) return;
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await addCustomJourneyTask(state.mode, state.user.uid, opportunityId, label);
+      toast('Task added.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
 }
 
 async function handleDeletePost(postId, button) {

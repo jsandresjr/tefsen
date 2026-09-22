@@ -20,7 +20,8 @@ export const SCHEMA = Object.freeze({
     savedPosts: 'savedPosts',
     messages: 'messages',
     followers: 'followers',
-    following: 'following'
+    following: 'following',
+    opportunityJourneys: 'opportunities'
   }
 });
 
