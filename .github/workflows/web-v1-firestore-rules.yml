@@ -12,6 +12,7 @@ on:
       - 'app/js/services/eligibility-engine.js'
       - 'app/js/services/home-dashboard-service.js'
       - 'app/js/services/saved-opportunity-service.js'
+      - 'app/js/services/journey-priority-service.js'
   workflow_dispatch:
 
 permissions:
