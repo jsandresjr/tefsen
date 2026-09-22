@@ -79,4 +79,20 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive mobile discovery controls
 - service-worker cache bumped for the discovery UI
 
-**Next: Step 3 — opportunity card information hierarchy and trust labels**
+**Step 3: Opportunity card information hierarchy and trust labels — complete on branch `tefsen-web-completion-03-opportunity-cards`**
+- provider and opportunity type promoted into clear card hierarchy
+- funding, destination and study level separated from secondary tags
+- Student Passport match signal separated from source verification
+- profile-match score excludes source-verification bonus
+- match reason text explains which profile factors align
+- deadline urgency states: today / urgent / soon / watch / normal / varies / expired
+- source trust states: official-source starter / verified / review soon / stale / unverified / preview
+- source-check context and direct official-source link
+- Saved / In Journey state visible without opening the detail page
+- subject tags reduced to a scannable maximum with overflow count
+- Save and View Opportunity actions simplified
+- mobile card layout collapses signals cleanly
+- source trust and deadline state remain independent
+- service-worker cache bumped for new card UI
+
+**Next: Step 4 — opportunity detail page completeness and source/freshness UX**
