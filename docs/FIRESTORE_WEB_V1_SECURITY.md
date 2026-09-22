@@ -102,3 +102,56 @@ Use Firebase Emulator Suite to verify:
 9. existing Tefsen posts/profile access remains unchanged
 
 Do not deploy rules from this document directly without merging them into and testing the current production rule set.
+
+
+## Public success and journey stories
+
+Success stories and public journey stories use the existing public `posts/{postId}` collection.
+
+Privacy boundary:
+
+- private `student_passports/{uid}` documents are never copied automatically into a post
+- private `journeys/{uid}/opportunities/{opportunityId}` documents are never copied automatically into a post
+- success posts contain only explicit public fields entered by the student
+- public journey stories contain only milestones explicitly typed into the public story form
+- application IDs, passport/visa numbers, addresses, booking references, financial-account details and private documents should never be accepted as structured public fields
+
+The web client currently whitelists these structured public metadata fields:
+
+- `postType`
+- `successData.university`
+- `successData.opportunityName`
+- `successData.country`
+- `successData.subject`
+- `successData.studyLevel`
+- `successData.intake`
+- `successData.fundingType`
+- `publicMilestones[].stage`
+- `publicMilestones[].month`
+- `publicMilestones[].note`
+- `communitySubject`
+- `communityUniversity`
+- `communityIntake`
+
+Production post-write rules should continue enforcing that an authenticated user can create content only as themselves and cannot forge privileged moderation/admin fields.
+
+## Subject, university and intake communities
+
+Initial community pages are read-only aggregations of already-public opportunities and public posts.
+
+They do not create a separate public copy of Student Passport or private Journey data.
+
+Required behavior:
+
+- subject pages use public post subject/community tags plus published opportunities
+- university pages use public university metadata plus published opportunities
+- intake pages use explicit public intake tags plus published opportunities
+- community discussion creation continues through the existing authenticated public-post path
+- community pages must never query private Student Passport or Journey collections
+
+Additional recommended tests:
+
+1. a success story cannot serialize unexpected nested private fields through the structured metadata helper
+2. a public journey story serializes only explicitly entered public milestones
+3. community aggregation reads only public posts and published/public opportunities
+4. deleting a public post removes it from subject/university/intake aggregation without touching private Journey data
