@@ -683,8 +683,21 @@ function opportunityDateLabel(value) {
   return `Deadline ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
 }
 
+function opportunityDeadlineLabel(item = {}) {
+  if (item.deadline) return opportunityDateLabel(item.deadline);
+  return item.deadlineNote || 'Deadline varies — check official source';
+}
+
+function opportunitySourceCheckedLabel(item = {}) {
+  const raw = item.sourceCheckedAt || item.lastVerifiedAt || '';
+  const date = new Date(raw);
+  if (!raw || Number.isNaN(date.getTime())) return 'Official source linked';
+  return `Source checked ${date.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}`;
+}
+
 function opportunityCard(item, match = null, journey = null) {
   const preview = item.verificationStatus === 'preview';
+  const starter = item.catalogSource === 'starter';
   const chips = [
     item.opportunityType,
     item.fundingType,
@@ -698,7 +711,7 @@ function opportunityCard(item, match = null, journey = null) {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${match && match.score > 0 ? `<span class="opportunity-chip match-badge">${match.score}% match</span>` : ''}
-        <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
+        <span class="opportunity-chip ${preview ? 'preview' : starter ? 'starter' : ''}">${preview ? 'Preview' : starter ? 'Official source' : escapeHTML(item.verificationStatus || 'Unverified')}</span>
       </div>
     </div>
     <p>${escapeHTML(item.summary || 'Open this opportunity to review the available details and requirements.')}</p>
@@ -706,7 +719,7 @@ function opportunityCard(item, match = null, journey = null) {
       ${(item.subjects || []).slice(0, 3).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
     </div>
     <div class="opportunity-card-footer">
-      <span class="opportunity-deadline">${escapeHTML(opportunityDateLabel(item.deadline))}</span>
+      <span class="opportunity-deadline">${escapeHTML(opportunityDeadlineLabel(item))}</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <button class="btn btn-ghost" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save'}</button>
         <button class="btn btn-secondary" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">View details</button>
@@ -729,7 +742,18 @@ async function renderOpportunities() {
     const items = rawItems
       .map(item => ({ item, match: scoreOpportunityMatch(passport, item), journey: currentJourneyStates.get(item.id) || null }))
       .sort((a, b) => b.match.score - a.match.score);
-    const fundedCount = rawItems.filter(item => /funded/i.test(item.fundingType || '')).length;
+    const fundedCount = rawItems.filter(item => /funded|scholarship/i.test(item.fundingType || '')).length;
+    const starterCatalogue = rawItems.length > 0 && rawItems.every(item => item.catalogSource === 'starter');
+    const catalogueNotice = starterCatalogue
+      ? `<section class="opportunity-starter-notice">
+          <span class="opportunity-starter-icon">${icon('check',18)}</span>
+          <div>
+            <b>Official-source starter catalogue</b>
+            <p>Tefsen’s Firestore catalogue does not have published records yet, so these source-checked starter opportunities are shown instead. Always re-check the official provider page before applying.</p>
+          </div>
+          ${adminCapability ? '<button class="btn btn-secondary" type="button" data-route="admin">Publish live catalogue</button>' : ''}
+        </section>`
+      : '';
     const content = `${demoBanner()}
       <section class="opportunity-hero">
         <div class="opportunity-hero-card">
@@ -738,17 +762,23 @@ async function renderOpportunities() {
           <p>Discover scholarships, research programs, exchanges and other student opportunities. Tefsen will keep official-source verification separate from community information.</p>
         </div>
         <div class="opportunity-stat-card">
-          <span>Available now</span>
+          <span>${starterCatalogue ? 'Starter catalogue' : 'Available now'}</span>
           <strong>${rawItems.length}</strong>
-          <span>${fundedCount} funded opportunities in this view</span>
+          <span>${starterCatalogue ? 'official-source opportunities to explore' : `${fundedCount} funded opportunities in this view`}</span>
         </div>
       </section>
+      ${catalogueNotice}
       <header class="page-head"><div><h2 style="margin:0">Discover opportunities</h2><p>Open a listing to review funding, subjects, requirements and source status.</p></div></header>
       <div class="passport-private-note" style="margin-bottom:16px">
         <span>${icon('user',18)}</span>
         <div><b>${completeness ? `Personalized using your Student Passport · ${completeness}% complete` : 'Complete your Student Passport for personalized matching'}</b><br><span>${completeness ? 'Matches are rule-based and explainable; they are not admission guarantees.' : 'Add your study level, field, nationality and funding preference to improve opportunity ranking.'}</span> <button class="btn btn-ghost" style="margin-left:8px;min-height:34px" type="button" data-route="passport">Open Passport</button></div>
       </div>
-      <div class="opportunity-grid">${items.length ? items.map(({item,match,journey}) => opportunityCard(item, match, journey)).join('') : '<div class="opportunity-empty panel">No published opportunities are available yet. Tefsen will show verified listings here as they are added.</div>'}</div>`;
+      <div class="opportunity-grid">${items.length ? items.map(({item,match,journey}) => opportunityCard(item, match, journey)).join('') : `<section class="opportunity-empty-state">
+        <div class="empty-icon">${icon('compass',24)}</div>
+        <h3>No opportunities are visible yet.</h3>
+        <p>Complete your Student Passport while Tefsen prepares the catalogue, or open the admin review area if you manage opportunity data.</p>
+        <div class="opportunity-empty-actions"><button class="btn btn-primary" type="button" data-route="passport">Complete Student Passport</button>${adminCapability ? '<button class="btn btn-secondary" type="button" data-route="admin">Open Admin Review</button>' : ''}</div>
+      </section>`}</div>`;
     renderShell(content, { wide:true });
   } catch (error) {
     console.error(error);
@@ -872,6 +902,7 @@ async function renderOpportunityDetail(opportunityId) {
 
     const source = safeUrl(item.officialSourceUrl || '');
     const preview = item.verificationStatus === 'preview';
+    const starter = item.catalogSource === 'starter';
     const eligibility = evaluateEligibility(passport, item);
     const list = (values, fallback) => values?.length
       ? `<ul class="opportunity-list">${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul>`
@@ -887,7 +918,7 @@ async function renderOpportunityDetail(opportunityId) {
           <div class="opportunity-meta">
             <span class="opportunity-chip">${escapeHTML(item.fundingType)}</span>
             ${(item.studyLevels || []).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
-            <span class="opportunity-chip ${preview ? 'preview' : ''}">${preview ? 'Preview data' : escapeHTML(item.verificationStatus)}</span>
+            <span class="opportunity-chip ${preview ? 'preview' : starter ? 'starter' : ''}">${preview ? 'Preview data' : starter ? 'Official-source starter' : escapeHTML(item.verificationStatus)}</span>
           </div>
 
           <section class="opportunity-section">
@@ -916,13 +947,16 @@ async function renderOpportunityDetail(opportunityId) {
           </div>
           <div class="opportunity-section">
             <h2>Deadline</h2>
-            <p>${escapeHTML(opportunityDateLabel(item.deadline))}</p>
+            <p>${escapeHTML(opportunityDeadlineLabel(item))}</p>
+            ${item.deadlineNote && item.deadline ? `<p style="color:var(--muted);font-size:.82rem">${escapeHTML(item.deadlineNote)}</p>` : ''}
           </div>
           <div class="opportunity-section">
             <h2>Source status</h2>
             <div class="opportunity-source-note">${preview
               ? 'This is clearly marked preview data for development. It is not a real scholarship listing.'
-              : 'Tefsen summarizes opportunity data for discovery. Always confirm final requirements on the official provider source before applying.'}</div>
+              : starter
+                ? `${opportunitySourceCheckedLabel(item)}. This starter record is maintained in Tefsen’s source catalogue until live Firestore records are published. Always confirm final requirements on the official provider source before applying.`
+                : 'Tefsen summarizes opportunity data for discovery. Always confirm final requirements on the official provider source before applying.'}</div>
             ${source ? `<a class="btn btn-primary btn-block" style="margin-top:12px" href="${source}" target="_blank" rel="noopener noreferrer">Open official source</a>` : ''}
           </div>
           <div class="opportunity-section">
