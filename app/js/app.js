@@ -3063,6 +3063,18 @@ async function handleClick(event) {
   if (adminReview) { await handleAdminReview(adminReview); return; }
   const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
   if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
+  const savedCompare = event.target.closest('[data-saved-compare]');
+  if (savedCompare) { toggleSavedComparison(savedCompare); return; }
+  if (event.target.closest('[data-saved-compare-clear]')) {
+    savedOpportunityCompareIds.clear();
+    syncSavedComparisonUI();
+    return;
+  }
+  const savedRemove = event.target.closest('[data-saved-remove]');
+  if (savedRemove) { openSavedRemoveConfirm(savedRemove); return; }
+  const confirmSavedRemove = event.target.closest('[data-confirm-remove-saved]');
+  if (confirmSavedRemove) { await confirmRemoveSaved(confirmSavedRemove); return; }
+
   const opportunityView = event.target.closest('[data-opportunity-view]');
   if (opportunityView) {
     opportunityDiscoveryFilters.view = opportunityView.dataset.opportunityView || 'all';
@@ -3150,6 +3162,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-success-story-form]')) { event.preventDefault(); await handleSuccessStorySubmit(form); return; }
   if (form.matches('[data-journey-story-form]')) { event.preventDefault(); await handleJourneyStorySubmit(form); return; }
   if (form.matches('[data-community-post-form]')) { event.preventDefault(); await handleCommunityPostSubmit(form); return; }
+  if (form.matches('[data-saved-note-form]')) { event.preventDefault(); await handleSavedDecisionNote(form); return; }
   if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
