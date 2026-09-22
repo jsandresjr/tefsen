@@ -1,7 +1,7 @@
-const CACHE = 'tefsen-web-shell-v25-audit-cleanup';
+const CACHE = 'tefsen-web-shell-v26-ui-v3';
 const SHELL = [
   './', './index.html',
-  './css/app.css', './css/premium.css', './css/premium-v2.css', './css/social-cleanup.css', './css/profile-page-fix.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css', './css/v2.css',
+  './css/app.css', './css/premium.css', './css/premium-v2.css', './css/social-cleanup.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css', './css/v2.css', './css/v3-polish.css',
   './js/app.js', './js/config/firebase-config.js', './js/config/schema.js', './js/firebase-client.js', './js/store.js', './js/utils.js', './js/services/opportunity-service.js', './js/services/student-passport-service.js', './js/services/eligibility-engine.js', './js/services/journey-service.js', './js/services/deadline-engine.js', './js/services/community-service.js', './js/services/opportunity-admin-service.js',
   './assets/tefsen-logo.png', './assets/favicon.png'
 ];
