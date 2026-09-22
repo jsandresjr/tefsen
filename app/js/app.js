@@ -1140,18 +1140,18 @@ async function renderStudentPassport() {
           <h2>Academic direction</h2>
           <p>Use the information you know now. You can update it later.</p>
           <div class="passport-form-grid">
-            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="e.g. Sri Lanka"></div>
-            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="e.g. Sri Lankan"></div>
+            <div class="field"><label>Current country</label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="Enter your current country"></div>
+            <div class="field"><label>Nationality</label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="Enter your nationality"></div>
             <div class="field"><label>Current education level</label><select class="select" name="currentEducationLevel">${passportSelectOptions(levels, passport.currentEducationLevel)}</select></div>
             <div class="field"><label>Target education level</label><select class="select" name="targetEducationLevel">${passportSelectOptions(levels, passport.targetEducationLevel)}</select></div>
             <div class="field"><label>Main field / subject</label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science"></div>
             <div class="field"><label>Current institution</label><input class="input" name="institution" value="${escapeHTML(passport.institution)}" maxlength="160" placeholder="University or school"></div>
             <div class="field"><label>GPA (optional)</label><input class="input" name="gpa" type="number" min="0" max="5" step="0.01" value="${passport.gpa ?? ''}" placeholder="e.g. 3.67"></div>
             <div class="field"><label>GPA scale</label><select class="select" name="gpaScale"><option value="4" ${Number(passport.gpaScale) === 4 ? 'selected' : ''}>4.0</option><option value="5" ${Number(passport.gpaScale) === 5 ? 'selected' : ''}>5.0</option></select></div>
-            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, USA"></div>
+            <div class="field passport-field-wide"><label>Preferred study countries</label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="Germany, Japan, Canada"></div>
             <div class="field"><label>Funding preference</label><select class="select" name="fundingPreference">${passportSelectOptions(funding, passport.fundingPreference)}</select></div>
             <div class="field"><label>English-test status</label><select class="select" name="englishTestStatus">${passportSelectOptions(english, passport.englishTestStatus)}</select></div>
-            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="Sinhala, English"></div>
+            <div class="field passport-field-wide"><label>Languages</label><input class="input" name="languages" value="${escapeHTML((passport.languages || []).join(', '))}" maxlength="500" placeholder="English, Spanish, Arabic"></div>
             <div class="field passport-field-wide"><label>Skills</label><input class="input" name="skills" value="${escapeHTML((passport.skills || []).join(', '))}" maxlength="600" placeholder="Python, UI design, research"></div>
             <div class="field passport-field-wide"><label>Study / career goal</label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What opportunity are you trying to reach?">${escapeHTML(passport.studyGoal)}</textarea></div>
           </div>
@@ -1184,107 +1184,223 @@ async function renderStudentPassport() {
 
 function eligibilityCheckMarkup(result) {
   const marks = { met:'✓', action:'!', not_met:'×', unknown:'?' };
-  const score = result.compatibility === null ? '—' : `${result.compatibility}%`;
-  return `<section class="opportunity-section">
-    <h2>Can I Apply?</h2>
-    <div class="eligibility-summary">
-      <div class="eligibility-score"><div><strong>${score}</strong><br><span style="color:var(--muted)">known criteria matched</span></div></div>
+  return `<div class="eligibility-compare-block">
+    <div class="eligibility-compare-summary">
       <div>
-        <h3 style="margin-top:0">${escapeHTML(result.summary)}</h3>
-        <p style="color:var(--muted);line-height:1.6">${escapeHTML(result.disclaimer)}</p>
-        <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
+        <b>${escapeHTML(result.summary)}</b>
+        <p>${escapeHTML(result.disclaimer)}</p>
       </div>
+      <button class="btn btn-secondary" type="button" data-route="passport">Update Student Passport</button>
     </div>
     <div class="eligibility-checks">
-      ${result.checks.map(item => `<div class="eligibility-check ${item.status}"><span class="eligibility-mark">${marks[item.status] || '?'}</span><div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div></div>`).join('')}
+      ${result.checks.map(item => `<div class="eligibility-check ${item.status}">
+        <span class="eligibility-mark">${marks[item.status] || '?'}</span>
+        <div><b>${escapeHTML(item.label)}</b><p>${escapeHTML(item.message)}</p></div>
+      </div>`).join('')}
     </div>
-  </section>`;
+  </div>`;
+}
+
+function opportunityAudienceLabel(item = {}) {
+  const nationalities = (item.eligibleNationalities || []).filter(Boolean);
+  if (!nationalities.length) {
+    return {
+      label:'Nationality rules not structured',
+      detail:'Check the official source for country or nationality eligibility.'
+    };
+  }
+
+  if (nationalities.some(value => /international|all nationalit|any nationalit/i.test(String(value)))) {
+    return {
+      label:'International applicants',
+      detail:'The stored eligibility indicates broad international access. Confirm programme-specific rules.'
+    };
+  }
+
+  const first = nationalities.slice(0,3).join(', ');
+  return {
+    label:nationalities.length === 1 ? first : `${nationalities.length} nationality rules stored`,
+    detail:nationalities.length <= 3 ? first : `${first} +${nationalities.length - 3} more`
+  };
+}
+
+function opportunityDetailList(values = [], fallback = 'No structured information is stored yet.') {
+  const cleanValues = (values || []).filter(Boolean);
+  return cleanValues.length
+    ? `<ul class="opportunity-detail-list">${cleanValues.map(value => `<li><span class="opportunity-detail-list-mark">${icon('check',14)}</span><span>${escapeHTML(value)}</span></li>`).join('')}</ul>`
+    : `<div class="opportunity-detail-missing">${icon('info',16)}<span>${escapeHTML(fallback)}</span></div>`;
 }
 
 async function renderOpportunityDetail(opportunityId) {
   renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button><div class="loading-card" style="margin-top:14px"></div>`, { wide:true });
+
   try {
     const [item, passport, journey] = await Promise.all([
       getOpportunityById(state.mode, opportunityId),
       getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
       getJourneyState(state.mode, state.user.uid, opportunityId).catch(() => null)
     ]);
+
     currentStudentPassport = passport;
     if (journey) currentJourneyStates.set(opportunityId, journey);
+
     if (!item) {
       renderShell(`<button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back</button>${emptyState('info','Opportunity not found','This listing may be unavailable, private, expired, or not yet published.')}`, { wide:true });
       return;
     }
 
     const source = safeUrl(item.officialSourceUrl || '');
-    const preview = item.verificationStatus === 'preview';
-    const starter = item.catalogSource === 'starter';
     const eligibility = evaluateEligibility(passport, item);
-    const list = (values, fallback) => values?.length
-      ? `<ul class="opportunity-list">${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul>`
-      : `<p style="color:var(--muted)">${escapeHTML(fallback)}</p>`;
+    const rawMatch = scoreOpportunityMatch(passport, item);
+    const matchView = opportunityMatchPresentation(rawMatch);
+    const deadline = opportunityDeadlinePresentation(item);
+    const trust = opportunityTrustPresentation(item);
+    const audience = opportunityAudienceLabel(item);
+    const completeness = studentPassportCompleteness(passport);
+    const saved = Boolean(journey?.saved);
+    const started = Boolean(journey?.started);
+    const studyLevels = (item.studyLevels || []).filter(Boolean);
+    const subjects = (item.subjects || []).filter(Boolean);
+    const sourceChecked = opportunitySourceCheckedLabel(item);
+
+    const compatibility = eligibility.compatibility === null ? '—' : `${eligibility.compatibility}%`;
+    const knownChecks = eligibility.counts.met + eligibility.counts.not_met;
+    const unknownChecks = eligibility.counts.unknown + eligibility.counts.action;
 
     const content = `${demoBanner()}
-      <button class="btn btn-ghost" data-route="opportunities">${icon('back',17)} Back to opportunities</button>
-      <div class="opportunity-detail-layout" style="margin-top:14px">
-        <article class="opportunity-detail-card">
-          <span class="opportunity-kicker">${escapeHTML(item.opportunityType)} · ${escapeHTML(item.country)}</span>
-          <h1>${escapeHTML(item.title)}</h1>
-          <p style="color:var(--muted);line-height:1.65">${escapeHTML(item.summary || 'Opportunity details')}</p>
-          <div class="opportunity-meta">
-            <span class="opportunity-chip">${escapeHTML(item.fundingType)}</span>
-            ${(item.studyLevels || []).map(value => `<span class="opportunity-chip">${escapeHTML(value)}</span>`).join('')}
-            <span class="opportunity-chip ${preview ? 'preview' : starter ? 'starter' : ''}">${preview ? 'Preview data' : starter ? 'Official-source starter' : escapeHTML(item.verificationStatus)}</span>
-          </div>
+      <div class="opportunity-detail-page">
+        <div class="opportunity-detail-backrow">
+          <button class="btn btn-ghost" type="button" data-route="opportunities">${icon('back',17)} Back to opportunities</button>
+          <span>Official provider information remains authoritative.</span>
+        </div>
 
-          <section class="opportunity-section">
-            <h2>Fields of study</h2>
-            ${list(item.subjects, 'Subject information has not been added yet.')}
-          </section>
-          <section class="opportunity-section">
-            <h2>What it may cover</h2>
-            ${list(item.benefits, 'Funding-benefit details have not been added yet.')}
-          </section>
-          <section class="opportunity-section">
-            <h2>Eligibility & requirements</h2>
-            ${list(item.requirements, 'Structured eligibility requirements have not been added yet.')}
-          </section>
-          <section class="opportunity-section">
-            <h2>Required documents</h2>
-            ${list(item.requiredDocuments, 'Required-document information has not been added yet.')}
-          </section>
-          ${eligibilityCheckMarkup(eligibility)}
-        </article>
+        <section class="opportunity-detail-hero">
+          <div class="opportunity-detail-hero-main">
+            <div class="opportunity-detail-hero-topline">
+              <span class="opportunity-type-mark">${icon('compass',15)} ${escapeHTML(item.opportunityType || 'Opportunity')}</span>
+              ${started ? '<span class="opportunity-journey-state">In Journey</span>' : saved ? '<span class="opportunity-saved-state">Saved</span>' : ''}
+            </div>
+            <h1>${escapeHTML(item.title)}</h1>
+            <p class="opportunity-detail-provider">${escapeHTML(item.provider || item.university || 'Opportunity provider')}${item.university && item.provider ? ` · ${escapeHTML(item.university)}` : ''}</p>
+            <p class="opportunity-detail-summary">${escapeHTML(item.summary || 'Review the structured details and official provider source before deciding whether to apply.')}</p>
 
-        <aside class="opportunity-detail-card">
-          <div class="opportunity-section" style="margin-top:0;padding-top:0;border-top:0">
-            <h2>Provider</h2>
-            <p><b>${escapeHTML(item.provider)}</b>${item.university ? `<br><span style="color:var(--muted)">${escapeHTML(item.university)}</span>` : ''}</p>
-          </div>
-          <div class="opportunity-section">
-            <h2>Deadline</h2>
-            <p>${escapeHTML(opportunityDeadlineLabel(item))}</p>
-            ${item.deadlineNote && item.deadline ? `<p style="color:var(--muted);font-size:.82rem">${escapeHTML(item.deadlineNote)}</p>` : ''}
-          </div>
-          <div class="opportunity-section">
-            <h2>Source status</h2>
-            <div class="opportunity-source-note">${preview
-              ? 'This is clearly marked preview data for development. It is not a real scholarship listing.'
-              : starter
-                ? `${opportunitySourceCheckedLabel(item)}. This starter record is maintained in Tefsen’s source catalogue until live Firestore records are published. Always confirm final requirements on the official provider source before applying.`
-                : 'Tefsen summarizes opportunity data for discovery. Always confirm final requirements on the official provider source before applying.'}</div>
-            ${source ? `<a class="btn btn-primary btn-block" style="margin-top:12px" href="${source}" target="_blank" rel="noopener noreferrer">Open official source</a>` : ''}
-          </div>
-          <div class="opportunity-section">
-            <h2>Your application journey</h2>
-            ${journey?.started ? `<p style="color:var(--muted)">Current stage: <b style="color:var(--text)">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>` : (journey?.saved ? '<p style="color:var(--muted)">Saved. Start a private journey when you are ready to prepare and track progress.</p>' : '<p style="color:var(--muted)">Save this opportunity or start a private journey to track preparation and progress.</p>')}
-            <div class="journey-actions">
-              <button class="btn btn-secondary" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save opportunity'}</button>
-              <button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(item.id)}">${journey?.started ? 'Open journey' : 'Start journey'}</button>
+            <div class="opportunity-detail-primary-badges">
+              <span class="opportunity-funding-badge">${escapeHTML(item.fundingType || 'Funding not specified')}</span>
+              <span class="opportunity-location-badge">${escapeHTML(item.country || 'Multiple / global')}</span>
+              <span class="opportunity-level-detail">${escapeHTML(studyLevels.join(' · ') || 'Study level varies')}</span>
             </div>
           </div>
-        </aside>
+
+          <div class="opportunity-detail-decision-panel">
+            <div class="opportunity-detail-match ${matchView.personalized ? 'personalized' : 'incomplete'}">
+              <span>YOUR PROFILE</span>
+              <strong>${escapeHTML(matchView.label)}</strong>
+              <p>${escapeHTML(matchView.detail)}</p>
+            </div>
+            <div class="opportunity-detail-deadline ${deadline.tone}">
+              <span>DEADLINE</span>
+              <strong>${escapeHTML(deadline.label)}</strong>
+              <p>${escapeHTML(deadline.detail)}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="opportunity-detail-facts" aria-label="Opportunity key facts">
+          <article><span>Destination</span><strong>${escapeHTML(item.country || 'Not specified')}</strong></article>
+          <article><span>Funding</span><strong>${escapeHTML(item.fundingType || 'Not specified')}</strong></article>
+          <article><span>Study level</span><strong>${escapeHTML(studyLevels.join(', ') || 'Varies')}</strong></article>
+          <article><span>Intake</span><strong>${escapeHTML(item.intake || 'Check provider')}</strong></article>
+          <article><span>Eligibility scope</span><strong>${escapeHTML(audience.label)}</strong><small>${escapeHTML(audience.detail)}</small></article>
+        </section>
+
+        <div class="opportunity-detail-v4-layout">
+          <main class="opportunity-detail-main">
+            <section class="opportunity-detail-section">
+              <header><span>01</span><div><h2>Study areas</h2><p>Subjects or programme areas currently stored for this opportunity.</p></div></header>
+              ${opportunityDetailList(subjects, 'Subject coverage is not structured yet. Review the official programme page.')}
+            </section>
+
+            <section class="opportunity-detail-section">
+              <header><span>02</span><div><h2>Funding & benefits</h2><p>Use this as a summary only; the official funding package may include conditions or exceptions.</p></div></header>
+              ${opportunityDetailList(item.benefits, 'Detailed benefits are not structured yet. Check the official source for the current funding package.')}
+            </section>
+
+            <section class="opportunity-detail-section">
+              <header><span>03</span><div><h2>Who can apply</h2><p>Eligibility can vary by nationality, education level, programme and applicant circumstances.</p></div></header>
+              <div class="opportunity-audience-card">
+                <div><span>Nationality / country scope</span><strong>${escapeHTML(audience.label)}</strong><p>${escapeHTML(audience.detail)}</p></div>
+                <div><span>Target study level</span><strong>${escapeHTML(studyLevels.join(', ') || 'Not structured')}</strong><p>Compare this with your Student Passport and the provider rules.</p></div>
+              </div>
+              ${opportunityDetailList(item.requirements, 'Structured eligibility requirements are incomplete. Use the official provider source before deciding whether you can apply.')}
+            </section>
+
+            <section class="opportunity-detail-section">
+              <header><span>04</span><div><h2>Documents & language</h2><p>Preparation requirements vary by programme and applicant.</p></div></header>
+              <div class="opportunity-detail-two-col">
+                <div>
+                  <h3>Required documents</h3>
+                  ${opportunityDetailList(item.requiredDocuments, 'No structured document checklist is stored yet.')}
+                </div>
+                <div>
+                  <h3>Language requirements</h3>
+                  ${opportunityDetailList(item.languageRequirements, 'No structured language requirement is stored yet.')}
+                </div>
+              </div>
+            </section>
+
+            <section class="opportunity-detail-section opportunity-eligibility-section">
+              <header><span>05</span><div><h2>Structured eligibility comparison</h2><p>Tefsen compares only requirements that are structured and available. It does not make an admission decision.</p></div></header>
+              <div class="opportunity-eligibility-overview">
+                <div><span>Known criteria matched</span><strong>${compatibility}</strong><small>${knownChecks} comparable criteria</small></div>
+                <div><span>Action / unknown</span><strong>${unknownChecks}</strong><small>Needs profile data or official-source review</small></div>
+                <div><span>Student Passport</span><strong>${completeness}%</strong><small>Profile completeness</small></div>
+              </div>
+              ${eligibilityCheckMarkup(eligibility)}
+            </section>
+          </main>
+
+          <aside class="opportunity-detail-side">
+            <section class="opportunity-side-card source ${trust.tone}">
+              <div class="opportunity-side-card-head">
+                <span class="opportunity-trust-icon">${icon('check',16)}</span>
+                <div><span>SOURCE TRUST</span><strong>${escapeHTML(trust.label)}</strong></div>
+              </div>
+              <p>${escapeHTML(trust.detail)}</p>
+              <dl>
+                <div><dt>Provider</dt><dd>${escapeHTML(item.provider || item.university || 'Not specified')}</dd></div>
+                <div><dt>Source check</dt><dd>${escapeHTML(sourceChecked)}</dd></div>
+                <div><dt>Status</dt><dd>${escapeHTML(item.verificationStatus || 'unverified')}</dd></div>
+              </dl>
+              <div class="opportunity-source-warning">Tefsen helps you discover and organize information. The provider’s official page controls final eligibility, deadline, funding and application requirements.</div>
+              ${source ? `<a class="btn btn-primary btn-block" href="${source}" target="_blank" rel="noopener noreferrer">Open official source ↗</a>` : '<div class="opportunity-detail-missing">No official source URL is available for this record.</div>'}
+            </section>
+
+            <section class="opportunity-side-card">
+              <span class="opportunity-side-kicker">YOUR NEXT STEP</span>
+              <h2>${started ? 'Continue your application journey' : saved ? 'Ready to start preparing?' : 'Keep this opportunity on your path'}</h2>
+              <p>${started
+                ? `Current stage: ${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}. Your Journey is private by default.`
+                : saved
+                  ? 'This opportunity is saved. Start a private Journey when you want tasks, notes and progress tracking.'
+                  : 'Save the opportunity first, or start a private Journey to track preparation and deadlines.'}</p>
+              <div class="opportunity-detail-actions">
+                <button class="opportunity-save-button ${saved ? 'saved' : ''}" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${saved ? 'true' : 'false'}" aria-pressed="${saved}">
+                  ${icon('bookmark',16)} <span>${saved ? 'Saved' : 'Save opportunity'}</span>
+                </button>
+                <button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(item.id)}">${started ? 'Open Journey' : 'Start Journey'}</button>
+              </div>
+            </section>
+
+            <section class="opportunity-side-card global-note">
+              <span class="opportunity-side-kicker">GLOBAL STUDENT PLATFORM</span>
+              <h2>Eligibility follows your profile, not a default country.</h2>
+              <p>Tefsen uses the nationality, study level, field and destination preferences you choose in Student Passport. Country-specific opportunities remain clearly scoped to their provider rules.</p>
+              <button class="btn btn-secondary btn-block" type="button" data-route="passport">Review Student Passport</button>
+            </section>
+          </aside>
+        </div>
       </div>`;
+
     renderShell(content, { wide:true });
   } catch (error) {
     console.error(error);

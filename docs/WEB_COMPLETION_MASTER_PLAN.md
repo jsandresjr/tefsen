@@ -95,4 +95,22 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - source trust and deadline state remain independent
 - service-worker cache bumped for new card UI
 
-**Next: Step 4 — opportunity detail page completeness and source/freshness UX**
+**Step 4: Opportunity detail page completeness and source/freshness UX — complete on branch `tefsen-web-completion-04-opportunity-detail`**
+- rebuilt opportunity detail into a decision-oriented student page
+- clear provider, funding, destination, study level, intake and audience facts
+- structured nationality/country eligibility scope shown without assuming any default country
+- separate profile-match and deadline decision signals
+- detailed study-area, funding, eligibility, document and language sections
+- source trust panel with provider, source-check context and official-source warning
+- official source remains authoritative for eligibility, deadlines and funding
+- sticky desktop action/source sidebar with mobile fallback
+- Save / Start Journey integrated into the decision flow
+- Student Passport completeness and structured eligibility comparison surfaced clearly
+- country-specific opportunities remain scoped to their stored provider rules
+- removed Sri Lanka-specific Student Passport placeholders from the core UI
+- added `docs/GLOBAL_STUDENT_PRODUCT_RULES.md`
+- service-worker cache bumped for the new detail experience
+
+**Global product rule:** Tefsen is for students in every country. Nationality/current country are user profile data, never a platform default.
+
+**Next: Step 5 — eligibility experience and explainable match results**
