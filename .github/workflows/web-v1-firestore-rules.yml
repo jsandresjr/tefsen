@@ -1,0 +1,43 @@
+name: Tefsen Web V1 Firestore Rules
+
+on:
+  pull_request:
+    paths:
+      - 'firebase-tests/**'
+      - '.github/workflows/web-v1-firestore-rules.yml'
+      - 'app/js/services/student-passport-service.js'
+      - 'app/js/services/journey-service.js'
+      - 'app/js/services/opportunity-service.js'
+      - 'app/js/services/opportunity-admin-service.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firestore-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: firebase-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run Firestore emulator security tests
+        run: npm run test:emulator
