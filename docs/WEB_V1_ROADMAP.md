@@ -73,7 +73,7 @@ Status: **Implemented on `tefsen-web-journey-v1` (production journey security ru
 
 ## Milestone 5 — Success stories and communities
 
-Planned:
+Status: **Implemented on `tefsen-web-communities-v1` using explicit public post metadata and aggregated community pages**
 
 - Scholarship/university success post type
 - Public journey milestones as explicit opt-in
