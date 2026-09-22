@@ -92,13 +92,13 @@ export async function getOpportunityById(mode, opportunityId) {
     return row ? normalizeOpportunity(row, row.id) : null;
   }
 
-  const snap = await getDoc(doc(db, C.opportunities, id));
-  if (snap.exists()) {
-    const item = normalizeOpportunity(snap.data(), snap.id);
-    if (item.status !== 'published' || item.visibility !== 'public') return null;
-    return item;
-  }
-
   const starter = STARTER_OPPORTUNITIES.find(item => item.id === id);
-  return starter ? normalizeOpportunity(starter, starter.id) : null;
+  if (starter) return normalizeOpportunity(starter, starter.id);
+
+  const snap = await getDoc(doc(db, C.opportunities, id));
+  if (!snap.exists()) return null;
+
+  const item = normalizeOpportunity(snap.data(), snap.id);
+  if (item.status !== 'published' || item.visibility !== 'public') return null;
+  return item;
 }
