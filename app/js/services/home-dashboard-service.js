@@ -53,7 +53,12 @@ function routeForJourney(journey) {
 
 function nearestDeadlineEntry(journeys, opportunities, now) {
   return journeys
-    .filter(row => row?.saved || row?.started)
+    .filter(row => {
+      if (!(row?.saved || row?.started)) return false;
+      const status = normStatus(row?.status);
+      if (row?.started && ['accepted','rejected','withdrawn'].includes(status)) return false;
+      return true;
+    })
     .map(row => {
       const item = opportunities.get(String(row.opportunityId || ''));
       const days = homeDeadlineDays(item?.deadline || '', now);
@@ -75,6 +80,9 @@ export function buildHomeDashboardModel({
   const activeJourneys = visibleJourneys.filter(row => row?.started && !['accepted','rejected','withdrawn'].includes(normStatus(row.status)));
   const acceptedJourneys = visibleJourneys.filter(row => row?.started && normStatus(row.status) === 'accepted');
   const savedNotStarted = visibleJourneys.filter(row => row?.saved && !row?.started);
+  const activePriority = activeJourneys
+    .map(journey => ({ journey, progress:journeyTaskProgress(journey) }))
+    .sort((a,b) => Number(b.journey.updatedAtMillis || 0) - Number(a.journey.updatedAtMillis || 0))[0] || null;
   const nearest = nearestDeadlineEntry(visibleJourneys, opportunityById, now);
 
   const essential = passportDetails?.sections?.essential || { complete:0, total:6, percent:0, missing:[] };
@@ -118,14 +126,8 @@ export function buildHomeDashboardModel({
       button:'Open accepted Journey',
       reason:'Your accepted outcome is now more important than finding another application task.'
     };
-  } else if (activeJourneys.length) {
-    const row = activeJourneys
-      .map(journey => ({ journey, progress:journeyTaskProgress(journey) }))
-      .sort((a,b) => {
-        const aUpdated = Number(a.journey.updatedAtMillis || 0);
-        const bUpdated = Number(b.journey.updatedAtMillis || 0);
-        return bUpdated - aUpdated;
-      })[0];
+  } else if (activePriority) {
+    const row = activePriority;
     state = 'journey';
     action = {
       tone:'journey',
@@ -199,7 +201,7 @@ export function buildHomeDashboardModel({
       route:routeForJourney(nearest.journey),
       status:normStatus(nearest.journey.status)
     } : null,
-    activeJourney:activeJourneys[0] || null,
+    activeJourney:activePriority?.journey || null,
     acceptedJourney:acceptedJourneys[0] || null,
     topMatch,
     stats:{
