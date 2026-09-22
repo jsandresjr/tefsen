@@ -9,7 +9,7 @@ import {
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
 import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
-import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, emptyStudentPassport } from './services/student-passport-service.js';
+import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
   listJourneyStates, getJourneyState, setOpportunitySaved, startJourney,
@@ -44,6 +44,7 @@ let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
 let currentProfileView = null;
 let currentStudentPassport = null;
+let passportOnboardingJustCompleted = false;
 let currentJourneyStates = new Map();
 const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
   query: '',
@@ -159,12 +160,14 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, reactions, notifications, conversations] = await Promise.all([
+    const [profile, reactions, notifications, conversations, passport] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
-      getConversations(state.mode, user.uid).catch(() => [])
+      getConversations(state.mode, user.uid).catch(() => []),
+      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid))
     ]);
+    currentStudentPassport = passport;
     reactionState = reactions;
     setState({
       profile,
@@ -205,7 +208,7 @@ async function handleAuthChange(user) {
       toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
       renderRoute();
     });
-    if (!location.hash || location.hash === '#/') go('home'); else renderRoute();
+    if (!location.hash || location.hash === '#/') go(shouldShowPassportOnboarding(passport) ? 'passport' : 'home'); else renderRoute();
   } catch (error) {
     console.error(error);
     toast(humanError(error), 'error');
@@ -1109,11 +1112,192 @@ function passportSelectOptions(values, current = '', placeholder = 'Choose one')
 
 function checked(value) { return value ? 'checked' : ''; }
 
+function passportOnboardingLevels() {
+  return ['Secondary school','Diploma','Undergraduate','Master','Doctorate','Other'];
+}
+
+function passportOnboardingFunding() {
+  return ['Fully funded only','Fully or partially funded','Any funding','Undecided'];
+}
+
+function renderPassportOnboarding(passport) {
+  const levels = passportOnboardingLevels();
+  const funding = passportOnboardingFunding();
+  const progress = studentPassportOnboardingProgress(passport);
+
+  const content = `${demoBanner()}
+    <div class="passport-onboarding-page">
+      <section class="passport-onboarding-shell">
+        <aside class="passport-onboarding-aside">
+          <a class="passport-onboarding-brand" href="../" aria-label="Tefsen home"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+          <div>
+            <span class="opportunity-kicker">PRIVATE STUDENT PASSPORT</span>
+            <h1>Tell Tefsen what you are working toward.</h1>
+            <p>These details help Tefsen compare opportunities with your education path. Your Student Passport is private by default.</p>
+          </div>
+          <div class="passport-onboarding-promise">
+            <div>${icon('check',16)}<span>No default country. You choose your real profile.</span></div>
+            <div>${icon('check',16)}<span>No sensitive document uploads in this onboarding.</span></div>
+            <div>${icon('check',16)}<span>You can edit everything later.</span></div>
+          </div>
+        </aside>
+
+        <form class="passport-onboarding-card" data-passport-onboarding-form data-current-step="0">
+          <div class="passport-onboarding-progress">
+            <span data-passport-onboarding-progress-label>Welcome</span>
+            <div><i data-passport-onboarding-progress-bar style="width:20%"></i></div>
+            <small>${progress.completed}/${progress.total} essential fields already complete</small>
+          </div>
+
+          <section class="passport-onboarding-step active" data-passport-onboarding-pane="0">
+            <span class="passport-onboarding-step-kicker">WELCOME TO YOUR STUDENT PASSPORT</span>
+            <h2>Better matches start with a small amount of context.</h2>
+            <p>You do not need to complete your entire academic history now. Start with six essential fields, then Tefsen can rank opportunities more meaningfully.</p>
+            <div class="passport-onboarding-preview-grid">
+              <article><span>01</span><div><b>About you</b><small>Country, nationality and current study level.</small></div></article>
+              <article><span>02</span><div><b>Your target</b><small>Study level and field you want to pursue.</small></div></article>
+              <article><span>03</span><div><b>Funding</b><small>Tell Tefsen how important funding is to your search.</small></div></article>
+            </div>
+          </section>
+
+          <section class="passport-onboarding-step" data-passport-onboarding-pane="1" hidden>
+            <span class="passport-onboarding-step-kicker">STEP 1 OF 3 · ABOUT YOU</span>
+            <h2>Where are you studying from?</h2>
+            <p>Country and nationality can affect scholarship eligibility. Tefsen never assumes either one.</p>
+            <div class="passport-onboarding-fields">
+              <div class="field"><label>Current country <span>Required</span></label><input class="input" name="currentCountry" value="${escapeHTML(passport.currentCountry)}" maxlength="120" placeholder="Enter your current country" autocomplete="country-name" required></div>
+              <div class="field"><label>Nationality <span>Required</span></label><input class="input" name="nationality" value="${escapeHTML(passport.nationality)}" maxlength="120" placeholder="Enter your nationality" required></div>
+              <div class="field"><label>Current education level <span>Required</span></label><select class="select" name="currentEducationLevel" required>${passportSelectOptions(levels, passport.currentEducationLevel)}</select></div>
+            </div>
+          </section>
+
+          <section class="passport-onboarding-step" data-passport-onboarding-pane="2" hidden>
+            <span class="passport-onboarding-step-kicker">STEP 2 OF 3 · YOUR TARGET</span>
+            <h2>What are you trying to study next?</h2>
+            <p>This gives Tefsen the strongest signals for opportunity ranking.</p>
+            <div class="passport-onboarding-fields">
+              <div class="field"><label>Target education level <span>Required</span></label><select class="select" name="targetEducationLevel" required>${passportSelectOptions(levels, passport.targetEducationLevel)}</select></div>
+              <div class="field"><label>Main field / subject <span>Required</span></label><input class="input" name="mainField" value="${escapeHTML(passport.mainField)}" maxlength="120" placeholder="e.g. Computer Science, Economics, Biology" required></div>
+              <div class="field passport-field-wide"><label>Study / career goal <small>Optional</small></label><textarea class="textarea" name="studyGoal" maxlength="300" placeholder="What kind of opportunity or future are you working toward?">${escapeHTML(passport.studyGoal)}</textarea></div>
+            </div>
+          </section>
+
+          <section class="passport-onboarding-step" data-passport-onboarding-pane="3" hidden>
+            <span class="passport-onboarding-step-kicker">STEP 3 OF 3 · FUNDING & DESTINATIONS</span>
+            <h2>What kind of opportunity fits your plan?</h2>
+            <p>Funding preference improves ranking. Preferred countries are optional and can include any destinations you are considering.</p>
+            <div class="passport-onboarding-fields">
+              <div class="field"><label>Funding preference <span>Required</span></label><select class="select" name="fundingPreference" required>${passportSelectOptions(funding, passport.fundingPreference)}</select></div>
+              <div class="field passport-field-wide"><label>Preferred study countries <small>Optional</small></label><input class="input" name="preferredCountries" value="${escapeHTML((passport.preferredCountries || []).join(', '))}" maxlength="500" placeholder="e.g. Germany, Japan, Canada"></div>
+            </div>
+            <div class="passport-onboarding-privacy">${icon('info',17)}<span>This information stays in your private Student Passport. Tefsen does not publish it to your community profile.</span></div>
+          </section>
+
+          <div class="passport-onboarding-error" data-passport-onboarding-error></div>
+          <footer class="passport-onboarding-actions">
+            <button class="btn btn-ghost" type="button" data-passport-onboarding-skip>Skip for now</button>
+            <div>
+              <button class="btn btn-secondary" type="button" data-passport-onboarding-back hidden>Back</button>
+              <button class="btn btn-primary" type="button" data-passport-onboarding-next>Start</button>
+              <button class="btn btn-primary" type="submit" data-passport-onboarding-submit hidden>Create my Student Passport</button>
+            </div>
+          </footer>
+        </form>
+      </section>
+    </div>`;
+
+  renderShell(content, { wide:true, right:false });
+}
+
+function renderPassportOnboardingComplete(passport) {
+  const completeness = studentPassportCompleteness(passport);
+  const progress = studentPassportOnboardingProgress(passport);
+  const content = `${demoBanner()}
+    <div class="passport-ready-page">
+      <section class="passport-ready-card">
+        <div class="passport-ready-mark">${icon('check',30)}</div>
+        <span class="opportunity-kicker">YOUR TEFSEN JOURNEY IS READY</span>
+        <h1>Start discovering opportunities built around your path.</h1>
+        <p>Your essential Student Passport is ready. Tefsen can now use your nationality, study direction and funding preference to improve ranking and explain structured eligibility.</p>
+        <div class="passport-ready-stats">
+          <div><strong>${progress.completed}/${progress.total}</strong><span>essential fields</span></div>
+          <div><strong>${completeness}%</strong><span>full Passport complete</span></div>
+          <div><strong>Private</strong><span>default visibility</span></div>
+        </div>
+        <div class="passport-ready-next">
+          <article><span>1</span><div><b>Explore opportunities</b><small>See matches from the global catalogue.</small></div></article>
+          <article><span>2</span><div><b>Open a detail page</b><small>Compare structured eligibility with your Passport.</small></div></article>
+          <article><span>3</span><div><b>Save and start Journey</b><small>Keep preparation, tasks and progress private.</small></div></article>
+        </div>
+        <div class="passport-ready-actions">
+          <button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button>
+          <button class="btn btn-secondary" type="button" data-passport-onboarding-finish>Continue editing Passport</button>
+        </div>
+      </section>
+    </div>`;
+  renderShell(content, { wide:true, right:false });
+}
+
+function setPassportOnboardingStep(form, nextStep) {
+  const step = Math.max(0, Math.min(3, Number(nextStep) || 0));
+  form.dataset.currentStep = String(step);
+  form.querySelectorAll('[data-passport-onboarding-pane]').forEach(pane => {
+    const active = Number(pane.dataset.passportOnboardingPane) === step;
+    pane.hidden = !active;
+    pane.classList.toggle('active', active);
+  });
+
+  const labels = ['Welcome','About you','Your target','Funding & destinations'];
+  const widths = [20,45,70,100];
+  const label = form.querySelector('[data-passport-onboarding-progress-label]');
+  const bar = form.querySelector('[data-passport-onboarding-progress-bar]');
+  if (label) label.textContent = labels[step] || labels[0];
+  if (bar) bar.style.width = `${widths[step] || 20}%`;
+
+  const back = form.querySelector('[data-passport-onboarding-back]');
+  const next = form.querySelector('[data-passport-onboarding-next]');
+  const submit = form.querySelector('[data-passport-onboarding-submit]');
+  if (back) back.hidden = step === 0;
+  if (next) {
+    next.hidden = step === 3;
+    next.textContent = step === 0 ? 'Start' : 'Continue';
+  }
+  if (submit) submit.hidden = step !== 3;
+  form.querySelector('[data-passport-onboarding-error]')?.replaceChildren();
+  form.querySelector('[data-passport-onboarding-pane]:not([hidden]) input, [data-passport-onboarding-pane]:not([hidden]) select, [data-passport-onboarding-pane]:not([hidden]) textarea')?.focus();
+}
+
+function validatePassportOnboardingStep(form, step) {
+  const pane = form.querySelector(`[data-passport-onboarding-pane="${step}"]`);
+  if (!pane || step === 0) return true;
+  const required = [...pane.querySelectorAll('[required]')];
+  for (const field of required) {
+    if (!String(field.value || '').trim()) {
+      field.focus();
+      const label = field.closest('.field')?.querySelector('label')?.textContent?.replace('Required','').trim() || 'This field';
+      const error = form.querySelector('[data-passport-onboarding-error]');
+      if (error) error.textContent = `${label} is required to continue.`;
+      return false;
+    }
+  }
+  return true;
+}
+
 async function renderStudentPassport() {
   renderShell(`<header class="page-head"><div><h1>Student Passport</h1><p>Preparing your private opportunity profile…</p></div></header><div class="loading-card"></div>`, { wide:true });
   try {
     const passport = await getStudentPassport(state.mode, state.user.uid);
     currentStudentPassport = passport;
+
+    if (passportOnboardingJustCompleted) {
+      renderPassportOnboardingComplete(passport);
+      return;
+    }
+    if (shouldShowPassportOnboarding(passport)) {
+      renderPassportOnboarding(passport);
+      return;
+    }
+
     const completeness = studentPassportCompleteness(passport);
     const levels = ['Secondary school','Diploma','Undergraduate','Master','Doctorate','Other'];
     const funding = ['Fully funded only','Fully or partially funded','Any funding','Undecided'];
@@ -2242,6 +2426,27 @@ async function handleClick(event) {
     renderSettings();
     return;
   }
+  const onboardingForm = event.target.closest('[data-passport-onboarding-form]');
+  if (event.target.closest('[data-passport-onboarding-next]') && onboardingForm) {
+    const step = Number(onboardingForm.dataset.currentStep || 0);
+    if (validatePassportOnboardingStep(onboardingForm, step)) setPassportOnboardingStep(onboardingForm, step + 1);
+    return;
+  }
+  if (event.target.closest('[data-passport-onboarding-back]') && onboardingForm) {
+    setPassportOnboardingStep(onboardingForm, Number(onboardingForm.dataset.currentStep || 0) - 1);
+    return;
+  }
+  const onboardingSkip = event.target.closest('[data-passport-onboarding-skip]');
+  if (onboardingSkip) {
+    await handlePassportOnboardingSkip(onboardingSkip);
+    return;
+  }
+  if (event.target.closest('[data-passport-onboarding-finish]')) {
+    passportOnboardingJustCompleted = false;
+    await renderStudentPassport();
+    return;
+  }
+
   const routeEl = event.target.closest('[data-route]');
   const syncSubscription = event.target.closest('[data-sync-subscription]');
   if (syncSubscription) {
@@ -2355,6 +2560,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
   if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
+  if (form.matches('[data-passport-onboarding-form]')) { event.preventDefault(); await handlePassportOnboardingSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
   if (form.matches('[data-success-story-form]')) { event.preventDefault(); await handleSuccessStorySubmit(form); return; }
   if (form.matches('[data-journey-story-form]')) { event.preventDefault(); await handleJourneyStorySubmit(form); return; }
@@ -2680,6 +2886,58 @@ async function handleProfilePhotoRemove(button) {
     }
   });
 }
+async function handlePassportOnboardingSave(form) {
+  const step = Number(form.dataset.currentStep || 0);
+  if (!validatePassportOnboardingStep(form, step)) return;
+
+  const fd = new FormData(form);
+  const submit = form.querySelector('[data-passport-onboarding-submit]');
+  const preferredCountries = String(fd.get('preferredCountries') || '').split(',').map(value => value.trim()).filter(Boolean);
+  const base = currentStudentPassport || emptyStudentPassport(state.user.uid);
+  const input = {
+    ...base,
+    currentCountry: String(fd.get('currentCountry') || '').trim(),
+    nationality: String(fd.get('nationality') || '').trim(),
+    currentEducationLevel: String(fd.get('currentEducationLevel') || '').trim(),
+    targetEducationLevel: String(fd.get('targetEducationLevel') || '').trim(),
+    mainField: String(fd.get('mainField') || '').trim(),
+    studyGoal: String(fd.get('studyGoal') || '').trim(),
+    fundingPreference: String(fd.get('fundingPreference') || '').trim(),
+    preferredCountries,
+    onboardingStatus: 'completed'
+  };
+
+  await withButton(submit, async () => {
+    try {
+      currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, input);
+      passportOnboardingJustCompleted = true;
+      toast('Your Student Passport is ready.', 'success');
+      await renderStudentPassport();
+    } catch (error) {
+      const errorEl = form.querySelector('[data-passport-onboarding-error]');
+      if (errorEl) errorEl.textContent = humanError(error);
+      else toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handlePassportOnboardingSkip(button) {
+  const current = currentStudentPassport || emptyStudentPassport(state.user.uid);
+  await withButton(button, async () => {
+    try {
+      currentStudentPassport = await saveStudentPassport(state.mode, state.user.uid, {
+        ...current,
+        onboardingStatus: 'skipped'
+      });
+      passportOnboardingJustCompleted = false;
+      toast('You can finish Student Passport anytime.', 'success');
+      go('opportunities');
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
 async function handleStudentPassportSave(form) {
   const fd = new FormData(form);
   const submit = form.querySelector('button[type="submit"]');
@@ -2699,6 +2957,7 @@ async function handleStudentPassportSave(form) {
     languages: csv('languages'),
     skills: csv('skills'),
     studyGoal: String(fd.get('studyGoal') || '').trim(),
+    onboardingStatus: currentStudentPassport?.onboardingStatus === 'skipped' ? 'skipped' : 'completed',
     documentsReady: {
       passport: fd.get('docPassport') === 'on',
       transcript: fd.get('docTranscript') === 'on',
