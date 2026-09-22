@@ -6,6 +6,7 @@ const source = fs.readFileSync('../app/js/services/student-passport-service.js',
 const withoutImports = source.replace(/import[\s\S]*?from\s+['"][^'"]+['"];\s*/g, '');
 const pureSection = withoutImports.slice(0, withoutImports.indexOf('function demoKey'));
 const api = new Function(
+  'const SCHEMA = { collections: {} };\n' +
   pureSection.replace(/\bexport\s+/g, '') +
   '; return { emptyStudentPassport, normalizeStudentPassport, studentPassportOnboardingProgress, shouldShowPassportOnboarding, studentPassportCompleteness };'
 )();
