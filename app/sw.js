@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v33-passport-onboarding';
+const CACHE = 'tefsen-web-shell-v34-passport-quality';
 const SHELL = [
   './', './index.html',
   './css/app.css', './css/premium.css', './css/premium-v2.css', './css/social-cleanup.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css', './css/v2.css', './css/v3-polish.css', './css/v4-profile.css',
