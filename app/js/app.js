@@ -668,10 +668,10 @@ async function renderOpportunityDetail(opportunityId) {
           </div>
           <div class="opportunity-section">
             <h2>Your application journey</h2>
-            ${journey ? `<p style="color:var(--muted)">Current stage: <b style="color:var(--text)">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>` : '<p style="color:var(--muted)">Save this opportunity or start a private journey to track preparation and progress.</p>'}
+            ${journey?.started ? `<p style="color:var(--muted)">Current stage: <b style="color:var(--text)">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</b></p>` : (journey?.saved ? '<p style="color:var(--muted)">Saved. Start a private journey when you are ready to prepare and track progress.</p>' : '<p style="color:var(--muted)">Save this opportunity or start a private journey to track preparation and progress.</p>')}
             <div class="journey-actions">
               <button class="btn btn-secondary" type="button" data-opportunity-save="${escapeHTML(item.id)}" data-opportunity-saved="${journey?.saved ? 'true' : 'false'}">${journey?.saved ? 'Saved' : 'Save opportunity'}</button>
-              <button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(item.id)}">${journey ? 'Open journey' : 'Start journey'}</button>
+              <button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(item.id)}">${journey?.started ? 'Open journey' : 'Start journey'}</button>
             </div>
           </div>
         </aside>
@@ -726,7 +726,9 @@ function journeyCardMarkup(journey, opportunity) {
         ${journey.personalTargetDate ? `<span style="color:var(--muted)"> · Personal target ${escapeHTML(journey.personalTargetDate)}</span>` : ''}
       </div>
     </div>
-    <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open journey</button>
+    ${journey.started
+      ? `<button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open journey</button>`
+      : `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(journey.opportunityId)}">Start journey</button>`}
   </article>`;
 }
 
@@ -739,9 +741,10 @@ async function renderJourneys() {
     ]);
     currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
     const opportunityMap = new Map(opportunities.map(item => [item.id, item]));
-    const active = journeys.filter(row => !['accepted','rejected','withdrawn'].includes(row.status));
-    const saved = journeys.filter(row => row.saved).length;
-    const withDeadline = journeys
+    const visibleJourneys = journeys.filter(row => row.saved || row.started);
+    const active = visibleJourneys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status));
+    const saved = visibleJourneys.filter(row => row.saved).length;
+    const withDeadline = visibleJourneys
       .map(row => ({ row, info: deadlineInfo(opportunityMap.get(row.opportunityId)?.deadline || '') }))
       .filter(entry => entry.info.valid && entry.info.daysRemaining >= 0)
       .sort((a,b) => a.info.daysRemaining - b.info.daysRemaining);
@@ -760,7 +763,7 @@ async function renderJourneys() {
         </section>
         <div class="passport-private-note"><span>${icon('info',18)}</span><div><b>Private by default.</b><br>Application stage, notes, targets and checklist status are not published to your Tefsen community profile.</div></div>
         <header class="page-head"><div><h2 style="margin:0">Saved & active opportunities</h2><p>Official deadlines remain separate from your personal preparation target.</p></div><button class="btn btn-secondary" data-route="opportunities">Find opportunities</button></header>
-        <div class="journey-list">${journeys.length ? journeys.map(row => journeyCardMarkup(row, opportunityMap.get(row.opportunityId))).join('') : emptyState('bookmark','No journeys yet','Save an opportunity or start a journey from an opportunity page.')}</div>
+        <div class="journey-list">${visibleJourneys.length ? visibleJourneys.map(row => journeyCardMarkup(row, opportunityMap.get(row.opportunityId))).join('') : emptyState('bookmark','No journeys yet','Save an opportunity or start a journey from an opportunity page.')}</div>
       </div>`;
     renderShell(content, { wide:true });
   } catch (error) {
