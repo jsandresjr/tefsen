@@ -147,4 +147,23 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile onboarding design added
 - service-worker cache bumped for the onboarding experience
 
-**Next: Step 7 — Student Passport form quality, validation and completion guidance**
+**Step 7: Student Passport form quality, validation and completion guidance — complete on branch `tefsen-web-completion-07-passport-quality`**
+- full Student Passport editor reorganized into Essentials / Academic profile / Preferences / Document readiness
+- live completion guide shows section-by-section progress
+- overall Passport completion is weighted toward essential profile data and explicitly separated from eligibility
+- sticky desktop completion guide with responsive tablet/mobile fallback
+- “Improve next” guidance prioritizes missing essential fields before recommended fields
+- field helper text explains how Tefsen uses each value
+- current country/nationality remain explicit user-entered global profile data
+- GPA validation respects selected 4.0 or 5.0 scale
+- impossible GPA values are blocked before save and normalized safely server-side
+- Tefsen does not auto-convert GPA scales
+- preferred countries, languages and skills are limited to 12 list items
+- incomplete essential fields warn but do not block partial Passport saves
+- live inline validation and save-state feedback added
+- document readiness stays a private preparation tracker, not proof of eligibility
+- completion score is described as profile completeness, not admission probability
+- deterministic Passport quality tests added
+- service-worker cache bumped for the editor redesign
+
+**Next: Step 8 — Home dashboard next-action logic and empty/new-user state**
