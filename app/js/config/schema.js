@@ -5,6 +5,7 @@
 export const SCHEMA = Object.freeze({
   collections: {
     users: 'users',
+    publicProfiles: 'public_profiles',
     posts: 'posts',
     notifications: 'notifications',
     conversations: 'conversations',
