@@ -122,3 +122,15 @@ test('submitted rows are counted separately from preparation work', () => {
   assert.equal(workspace.counts.submitted,2);
   assert.equal(workspace.counts.active,3);
 });
+
+test('passed official deadline is explicit before submission', () => {
+  const row=buildJourneyPriorityRow(
+    journey({status:'preparing'}),
+    opportunity({deadline:'2026-09-20'}),
+    now
+  );
+  assert.equal(row.officialDays,-2);
+  assert.equal(row.attention.key,'deadline_expired');
+  assert.equal(row.attention.tone,'expired');
+  assert.equal(row.priority,0);
+});
