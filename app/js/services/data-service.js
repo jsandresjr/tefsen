@@ -43,6 +43,73 @@ function updateLikedCache(userId, postId, active) {
   writeLikedCache(userId, liked);
 }
 
+function savedCacheKey(userId) {
+  return `tefsen_saved_posts_${String(userId || 'guest')}`;
+}
+
+function readSavedCache(userId) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(savedCacheKey(userId)) || '{}');
+    if (Array.isArray(parsed)) {
+      return new Map(parsed.map(id => [String(id), 0]));
+    }
+    return new Map(Object.entries(parsed || {}).map(([id,millis]) => [
+      String(id),
+      Math.max(0, Number(millis || 0))
+    ]));
+  } catch {
+    return new Map();
+  }
+}
+
+function writeSavedCache(userId, values) {
+  try {
+    const entries = [...values.entries()]
+      .filter(([id]) => Boolean(id))
+      .slice(-500);
+    localStorage.setItem(savedCacheKey(userId), JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
+}
+
+function updateSavedCache(userId, postId, active, savedAtMillis = Date.now()) {
+  const saved = readSavedCache(userId);
+  active ? saved.set(String(postId), Math.max(0, Number(savedAtMillis || Date.now()))) : saved.delete(String(postId));
+  writeSavedCache(userId, saved);
+}
+
+function savedReferenceCollection(userId) {
+  return collection(db, C.users, String(userId), S.savedPosts || 'savedPosts');
+}
+
+async function getSavedPostReferences(mode, userId) {
+  const cached = readSavedCache(userId);
+  if (!userId) return [];
+
+  if (mode === 'demo') {
+    return [...cached.entries()].map(([postId, savedAtMillis]) => ({ postId, savedAtMillis }));
+  }
+
+  try {
+    const snap = await getDocs(query(savedReferenceCollection(userId), limit(500)));
+    const refs = snap.docs.map(row => {
+      const raw = row.data() || {};
+      const savedAtMillis = Number(raw.savedAtMillis || timestampToDate(raw.savedAt)?.getTime() || timestampToDate(raw.createdAt)?.getTime() || 0);
+      return {
+        postId:String(raw.postId || row.id),
+        savedAtMillis:Math.max(0,savedAtMillis)
+      };
+    }).filter(row => row.postId);
+
+    const next = new Map(refs.map(row => [row.postId,row.savedAtMillis]));
+    writeSavedCache(userId,next);
+    return refs;
+  } catch {
+    return [...cached.entries()].map(([postId, savedAtMillis]) => ({ postId, savedAtMillis }));
+  }
+}
+
 function toBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
@@ -559,9 +626,44 @@ export async function deletePost(mode, userId, postId) {
 
 export async function getReactionIds(mode, userId) {
   if (!userId) return { saved: new Set(), liked: new Set() };
+  const refs = await getSavedPostReferences(mode,userId);
   return {
-    saved: new Set(),
-    liked: mode === 'demo' ? new Set() : readLikedCache(userId)
+    saved:new Set(refs.map(row=>row.postId)),
+    liked:mode === 'demo' ? readLikedCache(userId) : readLikedCache(userId)
+  };
+}
+
+export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
+  if (!userId) return { posts:[], referenceCount:0, staleCount:0 };
+
+  const refs = await getSavedPostReferences(mode,userId);
+  const known = new Map(
+    (Array.isArray(knownPosts)?knownPosts:[])
+      .filter(post=>post?.id)
+      .map(post=>[String(post.id),post])
+  );
+
+  const rows = await Promise.all(refs.slice(0,100).map(async refRow => {
+    const postId=String(refRow.postId||'');
+    if(!postId) return null;
+
+    let post=known.get(postId)||null;
+    if(!post){
+      post=await getPost(mode,postId).catch(()=>null);
+    }
+    if(!post || !isPublicProfileActivity(post)) return null;
+
+    return {
+      ...post,
+      _savedAtMillis:Math.max(0,Number(refRow.savedAtMillis||0))
+    };
+  }));
+
+  const posts=rows.filter(Boolean);
+  return {
+    posts,
+    referenceCount:refs.length,
+    staleCount:Math.max(0,refs.length-posts.length)
   };
 }
 
@@ -620,8 +722,42 @@ export async function toggleLike(mode, userId, postId) {
   return !active;
 }
 
-export async function toggleSave() {
-  throw new Error('Saved posts are not enabled in the current Tefsen app data model.');
+export async function toggleSave(mode, userId, postId) {
+  if (!userId || !postId) throw new Error('Missing user or post ID.');
+  const canonicalPostId=String(postId);
+
+  if (mode === 'demo') {
+    const post=demoPosts.find(row=>String(row.id)===canonicalPostId);
+    if(!post || !isPublicProfileActivity(post)) throw new Error('Only public Community posts can be saved.');
+    const saved=readSavedCache(userId);
+    const active=saved.has(canonicalPostId);
+    updateSavedCache(userId,canonicalPostId,!active,Date.now());
+    return !active;
+  }
+
+  const saveRef=doc(db,C.users,String(userId),S.savedPosts || 'savedPosts',canonicalPostId);
+  const snap=await getDoc(saveRef);
+  const active=snap.exists();
+
+  if(active){
+    await deleteDoc(saveRef);
+    updateSavedCache(userId,canonicalPostId,false);
+    return false;
+  }
+
+  const post=await getPost(mode,canonicalPostId).catch(()=>null);
+  if(!post || !isPublicProfileActivity(post)) throw new Error('Only public Community posts can be saved.');
+
+  const savedAtMillis=Date.now();
+  await setDoc(saveRef,{
+    uid:String(userId),
+    userId:String(userId),
+    postId:canonicalPostId,
+    savedAt:serverTimestamp(),
+    savedAtMillis
+  });
+  updateSavedCache(userId,canonicalPostId,true,savedAtMillis);
+  return true;
 }
 
 export function subscribeComments(mode, postId, callback, errorCallback = console.error) {
