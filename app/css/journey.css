@@ -1937,3 +1937,36 @@
     padding-left:0;
   }
 }
+
+.journey-attention-label.expired{color:#e39aa2}
+.journey-attention-label.expired>span{background:#ed9aa4}
+.journey-attention-banner.expired{
+  border-color:rgba(255,143,156,.15);
+  background:linear-gradient(90deg,rgba(255,143,156,.05),rgba(7,28,31,.80));
+}
+.journey-attention-banner.expired .journey-attention-icon{
+  color:#e99ba4;
+  background:rgba(255,143,156,.07);
+}
+.journey-priority-card.expired{
+  border-color:rgba(255,143,156,.14);
+  background:
+    radial-gradient(circle at 100% 0,rgba(255,143,156,.035),transparent 14rem),
+    linear-gradient(180deg,#102225,#071c1f);
+}
+.journey-detail-hero.expired{
+  background:
+    radial-gradient(circle at 0 0,rgba(255,143,156,.06),transparent 22rem),
+    linear-gradient(145deg,#102326,#061b1e 75%);
+}
+.journey-stage-status.expired{
+  color:#e39aa2;
+  border-color:rgba(255,143,156,.11);
+  background:rgba(255,143,156,.035);
+}
+.journey-detail-date-grid .expired b{color:#df9ba2}
+.journey-detail-task.readonly{opacity:.82}
+.journey-task-check.static{
+  cursor:default;
+  color:#7f9996;
+}
