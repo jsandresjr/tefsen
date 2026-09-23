@@ -26,6 +26,7 @@ import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './service
 import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
+import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -431,11 +432,12 @@ function structuredPostMarkup(post) {
       <div class="success18-card-note">Personal experience · open the story for full context and verification guidance.</div>`;
   }
   if (post.postType === 'journey_story') {
-    const milestones = post.publicMilestones || [];
+    const model=buildJourneyStoryModel(post);
+    const milestones=(model?.milestones || []).slice(0,3);
     return `
-      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
-      ${milestones.length ? `<div class="public-milestones">${milestones.map(item => `<div class="public-milestone"><span class="public-milestone-dot"></span><div><b>${escapeHTML(item.stage || 'Milestone')}${item.month ? ` · ${escapeHTML(item.month)}` : ''}</b>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`).join('')}</div>` : ''}
-      <div class="community-banner">Only milestones this student explicitly chose to publish are shown. Private Tefsen Journey data is not displayed here automatically.</div>`;
+      <div class="journey19-card-top">${postTypeBadgeMarkup(post)}<span>Selected public milestones</span></div>
+      ${milestones.length ? `<div class="journey19-card-timeline">${milestones.map(item => `<div><span></span><p><b>${escapeHTML(item.stage || 'Milestone')}</b>${item.month ? `<small>${escapeHTML(item.month)}</small>` : ''}</p></div>`).join('')}</div>` : ''}
+      <div class="journey19-card-note">Public story only · private Tefsen Journey data is not shown automatically.</div>`;
   }
   return '';
 }
@@ -3161,6 +3163,120 @@ function success18DetailMarkup(post, model, comments) {
   </div>`;
 }
 
+function journey19ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function journey19MonthLabel(value) {
+  const match=/^(\d{4})-(\d{2})$/.exec(String(value||''));
+  if(!match) return String(value||'');
+  const date=new Date(Number(match[1]),Number(match[2])-1,1);
+  return date.toLocaleDateString(undefined,{year:'numeric',month:'short'});
+}
+
+function journey19DetailMarkup(post,model,comments) {
+  const liked=reactionState.liked.has(post.id);
+  const contextLinks=journey19ContextLinks(model);
+
+  const timeline=model.milestones.length
+    ? model.milestones.map((item,index)=>`<article class="journey19-timeline-item">
+        <div class="journey19-timeline-rail"><span></span>${index<model.milestones.length-1?'<i></i>':''}</div>
+        <div class="journey19-timeline-content">
+          <small>${item.month ? escapeHTML(journey19MonthLabel(item.month)) : 'Month not shared'}</small>
+          <h3>${escapeHTML(item.stage || 'Milestone')}</h3>
+          ${item.note ? `<p>${nl2br(item.note)}</p>` : '<p class="muted">No additional public note.</p>'}
+        </div>
+      </article>`).join('')
+    : '<div class="journey19-no-milestones">No public milestones were included in this story.</div>';
+
+  return `<div class="journey19-reader">
+    <button class="btn btn-ghost journey19-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="journey19-detail">
+      <header class="journey19-hero">
+        <div class="journey19-hero-main">
+          <span class="story-type journey">Journey story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>A student-selected public timeline. It is not the student's private Tefsen Journey record, official admissions guidance or a recommended path for someone else.</p>
+          <div class="journey19-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified,model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="journey19-hero-aside">
+          <span>WHAT THIS SHOWS</span>
+          <div><b>Selected milestones only</b><small>The student chose which milestones and notes to publish.</small></div>
+          <div><b>Month-level timing</b><small>Exact private dates are not requested by the public Journey-story form.</small></div>
+          <div><b>Not a blueprint</b><small>Timelines and requirements can differ by student, provider, country and intake.</small></div>
+        </aside>
+      </header>
+
+      <section class="journey19-context-strip">
+        <div><small>Subject</small><b>${escapeHTML(model.subject || 'Not specified')}</b></div>
+        <div><small>University</small><b>${escapeHTML(model.university || 'Not specified')}</b></div>
+        <div><small>Intake</small><b>${escapeHTML(model.intake || 'Not specified')}</b></div>
+        <div><small>Public milestones</small><b>${model.milestones.length}</b></div>
+      </section>
+
+      <div class="journey19-body-layout">
+        <main class="journey19-main">
+          <section class="journey19-intro">
+            <span class="opportunity-kicker">STORY CONTEXT</span>
+            <div class="journey19-intro-copy">${nl2br(model.content || 'This student did not add a longer introduction.')}</div>
+          </section>
+
+          <section class="journey19-timeline-section">
+            <header><span class="opportunity-kicker">PUBLIC TIMELINE</span><h2>Milestones this student chose to share</h2><p>These entries are a public story, not a live view of the student's private Journey workspace.</p></header>
+            <div class="journey19-timeline">${timeline}</div>
+          </section>
+
+          ${model.tags.length ? `<div class="tag-row journey19-tags">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="journey19-reader-side">
+          <section class="journey19-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Private Journey stays private</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card">
+            ${icon('info',17)}
+            <div><b>Personal timeline, not a recommendation</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current requirements</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="journey19-context-links">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this public story</h2><p>Community spaces provide student context. Official institution/provider sources control formal requirements.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions journey19-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like Journey story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="journey19-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Ask about the public story or add helpful context. Do not request private application, identity, visa, travel or financial details.</p></div></header>
+      <form class="journey19-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="journey19-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
 async function renderPostDetail(postId) {
   stopComments?.(); stopComments = null;
   let post = state.posts.find(p => p.id === postId);
@@ -3190,6 +3306,27 @@ async function renderPostDetail(postId) {
     stopComments=subscribeComments(state.mode,postId,comments=>{
       currentComments=comments;
       drawSuccess();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
+  if (post.postType === 'journey_story') {
+    const model=buildJourneyStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Journey story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawJourney=()=>{
+      renderShell(journey19DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawJourney();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawJourney();
     },e=>toast(humanError(e),'error'));
     return;
   }
@@ -3682,13 +3819,40 @@ function openSuccessStoryModal(prefill = {}) {
 }
 
 function openJourneyStoryModal(prefill = {}) {
-  const rows=[1,2,3,4].map(i=>`<div class="milestone-form-row"><input class="input" name="stage${i}" maxlength="80" placeholder="Milestone, e.g. Applied"><input class="input" name="month${i}" type="month"><input class="input" name="note${i}" maxlength="300" placeholder="What you choose to share"></div>`).join('');
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share selected journey milestones</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
-    <div class="community-banner" style="margin-bottom:14px">This does not publish your private Tefsen Journey. Only the fields you enter below become public.</div>
-    <form class="form-grid" data-journey-story-form>
-      <div class="story-form-grid"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" value="${escapeHTML(prefill.subject||'')}"></div><div class="field"><label>University (optional)</label><input class="input" name="university" maxlength="180" value="${escapeHTML(prefill.university||'')}"></div><div class="field"><label>Intake (optional)</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}"></div><div class="field"><label>Story title</label><input class="input" name="title" maxlength="180" required placeholder="My scholarship application journey"></div><div class="field story-form-wide"><label>Introduction</label><textarea class="textarea" name="content" maxlength="3000" required></textarea></div></div>
-      <h3>Public milestones</h3>${rows}
-      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish journey story</button>
+  const rows=[1,2,3,4].map(i=>`
+    <div class="journey19-milestone-row">
+      <div class="field"><label>Milestone ${i} stage ${i===1?'<span>Required</span>':''}</label><input class="input" name="stage${i}" maxlength="80" placeholder="e.g. Applied, Interview, Offer received"></div>
+      <div class="field"><label>Month</label><input class="input" name="month${i}" type="month"></div>
+      <div class="field journey19-note-field"><label>What you choose to share</label><input class="input" name="note${i}" maxlength="300" placeholder="Optional public context — no IDs, documents or private details"></div>
+    </div>`).join('');
+
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal journey19-modal" role="dialog" aria-modal="true" aria-labelledby="journey19-title"><header class="modal-head"><div><span class="journey19-modal-kicker">PUBLIC JOURNEY STORY</span><h2 id="journey19-title">Share selected Journey milestones</h2></div><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <section class="journey19-publish-intro">
+      <div><b>Nothing is imported automatically</b><span>Your private Journey stage, checklist, target dates, notes and post-acceptance plan stay private.</span></div>
+      <div><b>You choose each milestone</b><span>Only the subject, university/intake context, introduction and milestone fields you enter here become public.</span></div>
+      <div><b>Protect sensitive details</b><span>No application IDs, passport/visa numbers, booking references, exact addresses, account/card numbers or private documents.</span></div>
+    </section>
+    <form class="form-grid journey19-form" data-journey-story-form>
+      <div class="story-form-grid">
+        <div class="field"><label>Subject / field <span>Required</span></label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}" placeholder="e.g. Computer Science"></div>
+        <div class="field"><label>University / institution</label><input class="input" name="university" maxlength="180" value="${escapeHTML(prefill.university||'')}" placeholder="Optional public context"></div>
+        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="e.g. Fall 2027"></div>
+        <div class="field"><label>Story title <span>Required</span></label><input class="input" name="title" maxlength="180" required placeholder="My scholarship application Journey"></div>
+        <div class="field story-form-wide"><label>Introduction <span>Required · at least 40 characters</span></label><textarea class="textarea journey19-intro-text" name="content" maxlength="3000" required placeholder="What was this Journey about? What context would help another student understand your timeline?"></textarea><small class="form-help">Share personal context, not instructions or guarantees for someone else.</small></div>
+      </div>
+
+      <section class="journey19-milestones">
+        <header><div><span class="opportunity-kicker">PUBLIC MILESTONES</span><h3>Choose up to four moments</h3><p>Month-level timing is enough. Exact dates are intentionally not requested here.</p></div></header>
+        <div class="journey19-milestone-list">${rows}</div>
+      </section>
+
+      <section class="journey19-public-note">
+        ${icon('info',16)}
+        <div><b>This story will be public</b><p>Only the values in this form are published. Tefsen does not copy your private Journey checklist, private notes, target dates, application status history or post-acceptance planning into this story.</p></div>
+      </section>
+
+      <div class="form-error" data-story-error></div>
+      <div class="journey19-publish-actions"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish Journey story</button></div>
     </form>
   </div></section></div>`;
 }
@@ -4768,13 +4932,65 @@ async function handleSuccessStorySubmit(form) {
 }
 
 async function handleJourneyStorySubmit(form) {
-  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
+  const fd=new FormData(form);
+  const submit=form.querySelector('button[type="submit"]');
+  const errorEl=form.querySelector('[data-story-error]');
   const milestones=[];
-  for(let i=1;i<=4;i++){const stage=String(fd.get(`stage${i}`)||'').trim(),month=String(fd.get(`month${i}`)||'').trim(),note=String(fd.get(`note${i}`)||'').trim();if(stage||note)milestones.push({stage,month,note});}
-  if(!milestones.length){errorEl.textContent='Add at least one public milestone.';return;}
-  const subject=String(fd.get('subject')||'').trim(), university=String(fd.get('university')||'').trim(), intake=String(fd.get('intake')||'').trim();
-  const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'Student Journey',tags:['student-journey',subject].filter(Boolean),postType:'journey_story',publicMilestones:milestones,communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Journey story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+  for(let i=1;i<=4;i++){
+    milestones.push({
+      stage:fd.get(`stage${i}`),
+      month:fd.get(`month${i}`),
+      note:fd.get(`note${i}`)
+    });
+  }
+
+  const draft=validateJourneyStoryDraft({
+    subject:fd.get('subject'),
+    university:fd.get('university'),
+    intake:fd.get('intake'),
+    title:fd.get('title'),
+    content:fd.get('content'),
+    publicMilestones:milestones
+  });
+
+  errorEl.textContent='';
+  form.querySelectorAll('[aria-invalid="true"]').forEach(el=>el.removeAttribute('aria-invalid'));
+
+  if(!draft.valid){
+    const first=draft.errors[0];
+    const field=form.elements.namedItem(first.field);
+    const fieldEl=field instanceof RadioNodeList ? field[0] : field;
+    fieldEl?.setAttribute?.('aria-invalid','true');
+    fieldEl?.focus?.();
+    errorEl.textContent=first.message;
+    return;
+  }
+
+  const value=draft.value;
+  const payload={
+    title:value.title,
+    content:value.content,
+    subject:value.subject || 'Student Journey',
+    tags:['student-journey',value.subject].filter(Boolean),
+    postType:'journey_story',
+    publicMilestones:value.publicMilestones,
+    communitySubject:value.subject,
+    communityUniversity:value.university,
+    communityIntake:value.intake,
+    imageFiles:[]
+  };
+
+  await withButton(submit,async()=>{
+    try{
+      const post=await createPost(state.mode,state.user,state.profile,payload);
+      modalRoot.innerHTML='';
+      if(state.mode==='demo')state.posts=[post,...state.posts];
+      toast('Journey story published.','success');
+      go(`post/${post.id}`);
+    }catch(error){
+      errorEl.textContent=humanError(error);
+    }
+  });
 }
 
 async function handleCommunityPostSubmit(form) {
