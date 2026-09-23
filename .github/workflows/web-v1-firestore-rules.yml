@@ -24,6 +24,10 @@ on:
       - 'app/js/services/notification-state-service.js'
       - 'app/js/services/saved-community-service.js'
       - 'app/js/services/settings-service.js'
+      - 'app/js/services/moderation-model.js'
+      - 'app/js/services/moderation-service.js'
+      - 'app/css/v27-moderation.css'
+      - 'app/js/config/schema.js'
       - 'app/css/v25-settings.css'
       - 'app/js/app.js'
       - 'app/js/services/data-service.js'
@@ -67,6 +71,8 @@ jobs:
           node --check ../app/js/services/notification-service.js
           node --check ../app/js/services/notification-state-service.js
           node --check ../app/js/services/settings-service.js
+          node --check ../app/js/services/moderation-model.js
+          node --check ../app/js/services/moderation-service.js
           node --check ../app/sw.js
 
       - name: Run Firestore emulator security tests
