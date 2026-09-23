@@ -98,6 +98,9 @@ test('Saved Community posts are owner-only and cannot spoof identity', async () 
     savedAtMillis:123
   }));
   await assertSucceeds(getDoc(ref));
+  const ownerList=await assertSucceeds(getDocs(collection(owner,'users','user-a','savedPosts')));
+  assert.equal(ownerList.size,1);
+  await assertFails(getDocs(collection(other,'users','user-a','savedPosts')));
   await assertFails(getDoc(doc(other, 'users', 'user-a', 'savedPosts', 'post-1')));
   await assertFails(getDoc(doc(anon, 'users', 'user-a', 'savedPosts', 'post-1')));
   await assertFails(setDoc(doc(other, 'users', 'user-a', 'savedPosts', 'post-2'), {
