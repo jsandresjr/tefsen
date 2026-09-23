@@ -56,6 +56,36 @@ function sortResults(rows=[]){
     String(a.title||'').localeCompare(String(b.title||''))
   );
 }
+function normalizeCoverageEntry(raw={}, label='records'){
+  const scanned=Math.max(0,Number(raw.scanned||0));
+  const limit=Math.max(0,Number(raw.limit||0));
+  const complete=raw.complete !== false;
+  return {label,scanned,limit,complete};
+}
+
+export function mergeSearchPublicPosts(...sources){
+  const byId=new Map();
+  for(const source of sources){
+    for(const post of Array.isArray(source)?source:[]){
+      if(!post?.id || !isPublicProfileActivity(post)) continue;
+      byId.set(String(post.id),post);
+    }
+  }
+  return [...byId.values()];
+}
+
+export function buildSearchCoverage(raw={}){
+  const people=normalizeCoverageEntry(raw.people,'public profiles');
+  const community=normalizeCoverageEntry(raw.community,'public Community records');
+  const opportunities=normalizeCoverageEntry(raw.opportunities,'public opportunities');
+  const entries=[people,community,opportunities];
+  const complete=entries.every(entry=>entry.complete);
+  const partial=entries.filter(entry=>!entry.complete);
+  const note=complete
+    ? 'Search covered the complete currently available public corpus returned by these sources.'
+    : `Search coverage is bounded. ${partial.map(entry=>`${entry.label}: first ${entry.scanned} records checked`).join(' · ')}. Matches outside those windows may not appear.`;
+  return {complete,people,community,opportunities,note};
+}
 
 function publicPostResult(post,query){
   if(!isPublicProfileActivity(post)) return null;
@@ -211,7 +241,8 @@ export function buildGlobalSearchModel({
   term='',
   users=[],
   posts=[],
-  opportunities=[]
+  opportunities=[],
+  coverage={}
 }={}){
   const query=clean(term,120);
   const publicPosts=(Array.isArray(posts)?posts:[]).filter(isPublicProfileActivity);
@@ -220,6 +251,7 @@ export function buildGlobalSearchModel({
     .filter(item=>String(item.status||'published').toLowerCase()==='published')
     .filter(item=>String(item.visibility||'public').toLowerCase()==='public');
 
+  const searchCoverage=buildSearchCoverage(coverage);
   const subjects=buildSubjectCommunities(publicPosts,publicOpportunities)
     .filter(row=>communityKey(row.name)!=='general');
   const universityRows=buildUniversityCommunities(publicPosts,publicOpportunities);
@@ -241,6 +273,8 @@ export function buildGlobalSearchModel({
         opportunities:publicOpportunities.slice(0,4)
       },
       empty:true,
+      coverage:searchCoverage,
+      countLabel:'Matches found in current search coverage',
       rankingNote:'Search uses deterministic text matching across public Tefsen content and opportunity metadata. It is not a quality, eligibility or recommendation score.'
     };
   }
@@ -284,6 +318,8 @@ export function buildGlobalSearchModel({
     intakes,
     discover:{subjects:[],universities:[],opportunities:[]},
     empty:counts.all===0,
+    coverage:searchCoverage,
+    countLabel:'Matches found in current search coverage',
     rankingNote:'Search uses deterministic text matching across public Tefsen content and opportunity metadata. It is not a quality, eligibility or recommendation score.'
   };
 }

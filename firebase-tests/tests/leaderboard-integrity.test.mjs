@@ -42,8 +42,7 @@ test('obsolete leaderboard state and styles are removed', () => {
   assert.doesNotMatch(appCss, /\.rank\.top/);
 });
 
-test('Step 28 recognition page is loaded and cached under V55', () => {
+test('Step 28 recognition page stays loaded and cached after later cache-version bumps', () => {
   assert.match(index, /css\/v28-recognition\.css/);
-  assert.match(sw, /tefsen-web-shell-v55-recognition-integrity/);
   assert.match(sw, /css\/v28-recognition\.css/);
 });

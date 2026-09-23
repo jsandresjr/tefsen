@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildGlobalSearchModel } from '../../app/js/services/global-search-service.js';
+import { buildGlobalSearchModel, buildSearchCoverage, mergeSearchPublicPosts } from '../../app/js/services/global-search-service.js';
 
 const users=[
   {
@@ -196,4 +196,51 @@ test('search ranking disclaimer avoids recommendation or eligibility claims',()=
   const model=buildGlobalSearchModel({term:'Computer Science',users,posts,opportunities});
   assert.match(model.rankingNote,/deterministic text matching/i);
   assert.match(model.rankingNote,/not a quality, eligibility or recommendation score/i);
+});
+
+
+test('search coverage reports bounded sources without pretending they are complete',()=>{
+  const coverage=buildSearchCoverage({
+    people:{scanned:250,limit:250,complete:false},
+    community:{scanned:140,limit:300,complete:true},
+    opportunities:{scanned:180,limit:180,complete:false}
+  });
+  assert.equal(coverage.complete,false);
+  assert.match(coverage.note,/bounded/i);
+  assert.match(coverage.note,/public profiles/i);
+  assert.match(coverage.note,/public opportunities/i);
+});
+
+test('search coverage can state when all current source windows are complete',()=>{
+  const coverage=buildSearchCoverage({
+    people:{scanned:20,limit:250,complete:true},
+    community:{scanned:45,limit:300,complete:true},
+    opportunities:{scanned:12,limit:180,complete:true}
+  });
+  assert.equal(coverage.complete,true);
+  assert.match(coverage.note,/complete currently available public corpus/i);
+});
+
+test('search post merge deduplicates public records and excludes hidden/private rows',()=>{
+  const merged=mergeSearchPublicPosts(
+    [posts[0],posts[2]],
+    [posts[0],posts[1],posts[3]]
+  );
+  assert.deepEqual(merged.map(row=>row.id),['p1','p2']);
+});
+
+test('search model labels counts as matches found within current coverage',()=>{
+  const model=buildGlobalSearchModel({
+    term:'Computer Science',
+    users,
+    posts,
+    opportunities,
+    coverage:{
+      people:{scanned:2,limit:250,complete:true},
+      community:{scanned:2,limit:300,complete:true},
+      opportunities:{scanned:2,limit:180,complete:true}
+    }
+  });
+  assert.match(model.countLabel,/matches found/i);
+  assert.equal(model.coverage.complete,true);
 });

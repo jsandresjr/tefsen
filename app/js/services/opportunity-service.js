@@ -7,6 +7,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
 const C = SCHEMA.collections;
+const SEARCH_OPPORTUNITY_SCAN_LIMIT = 180;
 
 function starterDeadlineOpen(item, now = new Date()) {
   const raw = String(item?.deadline || '').trim();
@@ -81,6 +82,45 @@ export async function getOpportunities(mode) {
   if (live.length) return live;
 
   return currentStarterOpportunities();
+}
+
+export async function getOpportunitySearchCorpus(mode) {
+  if (mode === 'demo') {
+    const items = DEMO_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
+    return {
+      items,
+      coverage:{ scanned:items.length, limit:SEARCH_OPPORTUNITY_SCAN_LIMIT, complete:true }
+    };
+  }
+
+  const q = query(
+    collection(db, C.opportunities),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(SEARCH_OPPORTUNITY_SCAN_LIMIT + 1)
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.slice(0, SEARCH_OPPORTUNITY_SCAN_LIMIT);
+  const items = docs
+    .map(row => normalizeOpportunity(row.data(), row.id))
+    .filter(item => item.status === 'published' && item.visibility === 'public');
+
+  if (items.length) {
+    return {
+      items,
+      coverage:{
+        scanned:docs.length,
+        limit:SEARCH_OPPORTUNITY_SCAN_LIMIT,
+        complete:snap.docs.length <= SEARCH_OPPORTUNITY_SCAN_LIMIT
+      }
+    };
+  }
+
+  const starter = currentStarterOpportunities();
+  return {
+    items:starter,
+    coverage:{ scanned:starter.length, limit:SEARCH_OPPORTUNITY_SCAN_LIMIT, complete:true }
+  };
 }
 
 export async function getOpportunityById(mode, opportunityId) {
