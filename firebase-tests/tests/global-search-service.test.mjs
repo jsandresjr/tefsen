@@ -146,7 +146,7 @@ test('exact opportunity title match ranks above weaker metadata matches',()=>{
 });
 
 test('global search finds public discussion and success story surfaces',()=>{
-  const model=buildGlobalSearchModel({term:'scholarship',users,posts,opportunities});
+  const model=buildGlobalSearchModel({term:'Computer Science',users,posts,opportunities});
   assert.equal(model.community.some(row=>row.id==='p1'),true);
   assert.equal(model.community.some(row=>row.id==='p2'),true);
   assert.equal(model.community.find(row=>row.id==='p2').kind,'success');
