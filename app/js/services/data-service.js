@@ -2,7 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
-import { validatePublicProfileDraft } from './profile-presentation-service.js';
+import { validatePublicProfileDraft, resolveProfilePhotoForUpdate } from './profile-presentation-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp,
@@ -776,7 +776,7 @@ export async function updateUserProfile(mode, userId, data) {
   const currentAuthUser = auth?.currentUser;
   const email = String(current.email || currentAuthUser?.email || '').trim();
   const role = normalizeRoleValue(current.role, email);
-  let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
+  let profileImageUrl = resolveProfilePhotoForUpdate(current, currentAuthUser?.photoURL || '');
 
   if (photoFile) {
     const objectRef = ref(storage, `profile_images/${userId}.jpg`);
