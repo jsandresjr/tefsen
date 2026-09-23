@@ -49,6 +49,16 @@ function safeStatus(value) {
   return JOURNEY_STATUSES.includes(value) ? value : 'interested';
 }
 
+function dateOnlyMillis(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+}
+
 function taskId(prefix = 'task') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -277,10 +287,23 @@ export async function updateJourneyStage(mode, userId, opportunityId, nextStatus
   return persistJourney(mode, userId, opportunityId, journey);
 }
 
-export async function updateJourneyPlanning(mode, userId, opportunityId, { personalTargetDate = '', notes = '' } = {}) {
+export async function updateJourneyPlanning(mode, userId, opportunityId, { personalTargetDate = '', notes = '', officialDeadline = '' } = {}) {
   const journey = await getJourneyState(mode, userId, opportunityId);
   if (!journey) throw new Error('Save or start the opportunity before adding private planning details.');
-  journey.personalTargetDate = clean(personalTargetDate, 20);
+
+  const cleanTarget = clean(personalTargetDate, 20);
+  const preSubmission = ['interested','preparing','ready_to_apply'].includes(journey.status);
+  const targetMillis = dateOnlyMillis(cleanTarget);
+  const officialMillis = dateOnlyMillis(officialDeadline);
+
+  if (preSubmission && cleanTarget && targetMillis === null) {
+    throw new Error('Enter a valid personal preparation target date.');
+  }
+  if (preSubmission && targetMillis !== null && officialMillis !== null && targetMillis > officialMillis) {
+    throw new Error('Personal preparation target must be on or before the stored official deadline.');
+  }
+
+  journey.personalTargetDate = cleanTarget;
   journey.notes = clean(notes, 3000);
   return persistJourney(mode, userId, opportunityId, journey);
 }
