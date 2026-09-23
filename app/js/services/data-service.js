@@ -3,6 +3,7 @@ import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
 import { projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
+import { validateSuccessStoryDraft } from './success-story-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp,
@@ -375,6 +376,36 @@ export async function getDailyPostUsage(mode, userId) {
 
 export async function createPost(mode, user, profile, payload) {
   const policy = getWebPostingPolicy(profile);
+
+  if (String(payload?.postType || '') === 'success_story') {
+    const draft = validateSuccessStoryDraft({
+      title:payload.title,
+      content:payload.content,
+      ...(payload.successData || {})
+    });
+    if (!draft.valid) {
+      throw new Error(draft.errors[0]?.message || 'Check the success story before publishing.');
+    }
+    payload = {
+      ...payload,
+      title:draft.value.title,
+      content:draft.value.content,
+      subject:draft.value.subject || 'Student Success',
+      successData:{
+        university:draft.value.university,
+        opportunityName:draft.value.opportunityName,
+        country:draft.value.country,
+        subject:draft.value.subject,
+        studyLevel:draft.value.studyLevel,
+        intake:draft.value.intake,
+        fundingType:draft.value.fundingType
+      },
+      communityUniversity:draft.value.university,
+      communityIntake:draft.value.intake,
+      communitySubject:draft.value.subject
+    };
+  }
+
   const publicMetadata = normalizePublicPostMetadata(payload);
   const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
     .filter(file => file && file.size);

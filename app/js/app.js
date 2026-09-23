@@ -25,6 +25,7 @@ import { buildJourneyPriorityWorkspace } from './services/journey-priority-servi
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
 import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
+import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -420,20 +421,14 @@ function postTypeBadgeMarkup(post) {
 
 function structuredPostMarkup(post) {
   if (post.postType === 'success_story') {
-    const s = post.successData || {};
-    const facts = [
-      ['University', s.university],
-      ['Opportunity', s.opportunityName],
-      ['Country', s.country],
-      ['Subject', s.subject],
-      ['Study level', s.studyLevel],
-      ['Intake', s.intake],
-      ['Funding', s.fundingType]
-    ].filter(([,value]) => value);
+    const model=buildSuccessStoryModel(post);
+    const previewFacts=(model?.facts || [])
+      .filter(([label])=>['University','Scholarship / program / offer','Funding','Intake / year'].includes(label))
+      .slice(0,4);
     return `
-      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
-      ${facts.length ? `<div class="success-facts">${facts.map(([label,value]) => `<div class="success-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
-      <div class="community-banner">This is a student's shared experience, not an official statement of current scholarship or admission requirements.</div>`;
+      <div class="success18-card-top">${postTypeBadgeMarkup(post)}<span>Student-shared outcome</span></div>
+      ${previewFacts.length ? `<div class="success18-card-facts">${previewFacts.map(([label,value]) => `<div><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
+      <div class="success18-card-note">Personal experience · open the story for full context and verification guidance.</div>`;
   }
   if (post.postType === 'journey_story') {
     const milestones = post.publicMilestones || [];
@@ -3080,6 +3075,92 @@ function emptyState(ic, title, text) {
   return `<div class="panel empty-state"><div class="empty-icon">${icon(ic,26)}</div><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`;
 }
 
+function success18ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function success18DetailMarkup(post, model, comments) {
+  const liked=reactionState.liked.has(post.id);
+  const facts=model.facts.length
+    ? model.facts.map(([label,value])=>`<div class="success18-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')
+    : '<div class="success18-fact empty"><small>Outcome details</small><b>No structured facts were provided.</b></div>';
+  const contextLinks=success18ContextLinks(model);
+
+  return `<div class="success18-reader">
+    <button class="btn btn-ghost success18-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="success18-detail">
+      <header class="success18-hero">
+        <div class="success18-hero-main">
+          <span class="story-type success">✓ Student success story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>Shared voluntarily by a student as personal experience. It is not an official decision notice or current admissions guidance.</p>
+          <div class="success18-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified, model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="success18-hero-aside">
+          <span>HOW TO READ THIS</span>
+          <div><b>Personal outcome</b><small>This describes what happened to this student.</small></div>
+          <div><b>Not a guarantee</b><small>Another student may face different requirements, timelines or results.</small></div>
+          <div><b>Verify officially</b><small>Use the university/provider source before making application decisions.</small></div>
+        </aside>
+      </header>
+
+      <section class="success18-facts" aria-label="Success story facts">${facts}</section>
+
+      <div class="success18-body-layout">
+        <main class="success18-story">
+          <span class="opportunity-kicker">THE STUDENT'S STORY</span>
+          <div class="success18-story-copy">${nl2br(model.content || 'This student did not add a longer story.')}</div>
+          ${model.tags.length ? `<div class="tag-row">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="success18-reader-side">
+          <section class="success18-trust-card">
+            ${icon('info',17)}
+            <div><b>Experience, not requirements</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current information</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Public by choice</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="success18-context">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this story</h2><p>Use Tefsen community spaces for student context, then verify formal requirements on official sources.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions success18-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like success story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="success18-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Add helpful context, encouragement or a relevant question. Do not treat the story as official admissions advice.</p></div></header>
+      <form class="success18-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="success18-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
 async function renderPostDetail(postId) {
   stopComments?.(); stopComments = null;
   let post = state.posts.find(p => p.id === postId);
@@ -3087,7 +3168,32 @@ async function renderPostDetail(postId) {
     renderShell(`<div class="loading-card"></div>`);
     post = await getPost(state.mode, postId).catch(() => null);
   }
-  if (!post) { renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.')); return; }
+  if (!post) {
+    renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.'));
+    return;
+  }
+
+  if (post.postType === 'success_story') {
+    const model=buildSuccessStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Success story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawSuccess=()=>{
+      renderShell(success18DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawSuccess();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawSuccess();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
   currentComments = [];
   const draw = () => {
     const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
@@ -3547,21 +3653,30 @@ function renderRoute() {
 
 
 function openSuccessStoryModal(prefill = {}) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share a student success</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
-    <div class="community-banner" style="margin-bottom:14px">Publish only information you choose to make public. Do not include application IDs, passport/visa numbers, addresses, financial account details or private documents.</div>
-    <form class="form-grid" data-success-story-form>
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal success18-modal" role="dialog" aria-modal="true" aria-labelledby="success18-title"><header class="modal-head"><div><span class="success18-modal-kicker">PUBLIC STUDENT EXPERIENCE</span><h2 id="success18-title">Share a student success</h2></div><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <section class="success18-publish-intro">
+      <div><b>Share what happened</b><span>The offer, scholarship, admission or other outcome you personally received.</span></div>
+      <div><b>Add useful context</b><span>What helped, what surprised you, or what another student should verify for themselves.</span></div>
+      <div><b>Keep private data out</b><span>No application IDs, passport/visa numbers, addresses, financial account details, booking references or private documents.</span></div>
+    </section>
+    <form class="form-grid success18-form" data-success-story-form>
       <div class="story-form-grid">
-        <div class="field"><label>University</label><input class="input" name="university" maxlength="180" required value="${escapeHTML(prefill.university||'')}"></div>
-        <div class="field"><label>Scholarship / program / offer</label><input class="input" name="opportunityName" maxlength="180" required></div>
-        <div class="field"><label>Country</label><input class="input" name="country" maxlength="120"></div>
-        <div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}"></div>
-        <div class="field"><label>Study level</label><input class="input" name="studyLevel" maxlength="100" placeholder="Undergraduate, Master…"></div>
-        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="Fall 2027"></div>
+        <div class="field"><label>University / institution <span>Required</span></label><input class="input" name="university" maxlength="180" required value="${escapeHTML(prefill.university||'')}" placeholder="Institution connected to this outcome"></div>
+        <div class="field"><label>Scholarship / program / offer <span>Required</span></label><input class="input" name="opportunityName" maxlength="180" required placeholder="Name of the scholarship, program or offer"></div>
+        <div class="field"><label>Country</label><input class="input" name="country" maxlength="120" placeholder="Optional destination context"></div>
+        <div class="field"><label>Subject / field <span>Required</span></label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}" placeholder="e.g. Computer Science"></div>
+        <div class="field"><label>Study level</label><input class="input" name="studyLevel" maxlength="100" placeholder="Undergraduate, Master's…"></div>
+        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="e.g. Fall 2027"></div>
         <div class="field"><label>Funding</label><select class="select" name="fundingType"><option value="">Not specified</option><option>Fully funded</option><option>Partial funding</option><option>Self funded / offer only</option><option>Other</option></select></div>
-        <div class="field story-form-wide"><label>Headline</label><input class="input" name="title" maxlength="180" placeholder="I received a scholarship offer"></div>
-        <div class="field story-form-wide"><label>Your message</label><textarea class="textarea" name="content" maxlength="3000" required placeholder="Share what happened and what might help the next student."></textarea></div>
+        <div class="field story-form-wide"><label>Headline</label><input class="input" name="title" maxlength="180" placeholder="e.g. I received a scholarship offer"></div>
+        <div class="field story-form-wide"><label>Your story <span>Required · at least 40 characters</span></label><textarea class="textarea success18-story-text" name="content" maxlength="3000" required placeholder="What happened? What helped you? What should another student verify on the official source?"></textarea><small class="form-help">Write from your own experience. Do not present your result as a guarantee for another student.</small></div>
       </div>
-      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish success story</button>
+      <section class="success18-public-note">
+        ${icon('info',16)}
+        <div><b>This will be public</b><p>The structured facts above and your story text can appear in Community, subject, university and intake spaces when they match. Official provider information remains authoritative.</p></div>
+      </section>
+      <div class="form-error" data-story-error></div>
+      <div class="success18-publish-actions"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish success story</button></div>
     </form>
   </div></section></div>`;
 }
@@ -4589,27 +4704,67 @@ async function handleStudentPassportSave(form) {
 
 
 async function handleSuccessStorySubmit(form) {
-  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
-  const opportunityName=String(fd.get('opportunityName')||'').trim();
-  const subject=String(fd.get('subject')||'').trim();
-  const university=String(fd.get('university')||'').trim();
+  const fd=new FormData(form);
+  const submit=form.querySelector('button[type="submit"]');
+  const errorEl=form.querySelector('[data-story-error]');
+  const draft=validateSuccessStoryDraft({
+    university:fd.get('university'),
+    opportunityName:fd.get('opportunityName'),
+    country:fd.get('country'),
+    subject:fd.get('subject'),
+    studyLevel:fd.get('studyLevel'),
+    intake:fd.get('intake'),
+    fundingType:fd.get('fundingType'),
+    title:fd.get('title'),
+    content:fd.get('content')
+  });
+
+  errorEl.textContent='';
+  form.querySelectorAll('[aria-invalid="true"]').forEach(el=>el.removeAttribute('aria-invalid'));
+
+  if(!draft.valid){
+    const first=draft.errors[0];
+    const field=form.elements.namedItem(first.field);
+    const fieldEl=field instanceof RadioNodeList ? field[0] : field;
+    fieldEl?.setAttribute?.('aria-invalid','true');
+    fieldEl?.focus?.();
+    errorEl.textContent=first.message;
+    return;
+  }
+
+  const value=draft.value;
   const payload={
-    title:String(fd.get('title')||'').trim() || `I received ${opportunityName}`,
-    content:String(fd.get('content')||'').trim(),
-    subject:subject || 'Student Success',
-    tags:['student-success', subject].filter(Boolean),
+    title:value.title,
+    content:value.content,
+    subject:value.subject || 'Student Success',
+    tags:['student-success', value.subject].filter(Boolean),
     postType:'success_story',
     successData:{
-      university, opportunityName, country:String(fd.get('country')||'').trim(),
-      subject, studyLevel:String(fd.get('studyLevel')||'').trim(),
-      intake:String(fd.get('intake')||'').trim(), fundingType:String(fd.get('fundingType')||'').trim()
+      university:value.university,
+      opportunityName:value.opportunityName,
+      country:value.country,
+      subject:value.subject,
+      studyLevel:value.studyLevel,
+      intake:value.intake,
+      fundingType:value.fundingType
     },
-    communityUniversity:university,
-    communityIntake:String(fd.get('intake')||'').trim(),
-    communitySubject:subject,
+    communityUniversity:value.university,
+    communityIntake:value.intake,
+    communitySubject:value.subject,
     imageFiles:[]
   };
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Success story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+
+  await withButton(submit,async()=>{
+    try{
+      const post=await createPost(state.mode,state.user,state.profile,payload);
+      modalRoot.innerHTML='';
+      if(state.mode==='demo')state.posts=[post,...state.posts];
+      toast('Success story published.','success');
+      go(`post/${post.id}`);
+    }catch(error){
+      errorEl.textContent=humanError(error);
+    }
+  });
 }
 
 async function handleJourneyStorySubmit(form) {
