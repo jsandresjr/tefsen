@@ -43,6 +43,7 @@ function priorityFor({journey,officialDays,personalDays,targetAfterOfficial,prog
   if(TERMINAL.has(status)) return 90;
 
   if(PRE_SUBMISSION.has(status)) {
+    if(officialDays!==null && officialDays<0) return -1;
     if(officialDays===0) return 0;
     if(officialDays!==null && officialDays>0 && officialDays<=3) return 1;
     if(personalDays!==null && personalDays<0) return 2;
@@ -92,6 +93,13 @@ function attentionFor({journey,opportunity,officialDays,personalDays,targetAfter
   }
 
   if(PRE_SUBMISSION.has(status)) {
+    if(officialDays!==null && officialDays<0) {
+      return {
+        key:'deadline_expired',tone:'expired',label:'Stored deadline passed',
+        title:'The stored official application deadline has passed',
+        detail:'Do not assume late submission or a new cycle is available. Check the official provider source before taking further application action.'
+      };
+    }
     if(officialDays===0) {
       return {
         key:'deadline_today',tone:'urgent',label:'Deadline today',
