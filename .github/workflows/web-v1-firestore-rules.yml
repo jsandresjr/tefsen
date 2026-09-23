@@ -14,6 +14,10 @@ on:
       - 'js/main.js'
       - 'services/**'
       - 'tefsen-web-signup-like-fix/**'
+      - 'delete-account.html'
+      - 'delete-account/**'
+      - 'privacy-policy/**'
+      - 'app/js/services/privacy-request-service.js'
       - 'app/index.html'
       - 'app/sw.js'
       - '.github/workflows/web-v1-firestore-rules.yml'
@@ -105,6 +109,7 @@ jobs:
           node --check ../app/js/services/app-check-readiness-service.js
           node --check ../app/js/services/auth-service.js
           node --check ../app/js/services/account-bootstrap-service.js
+          node --check ../app/js/services/privacy-request-service.js
           node --check ../app/js/store.js
           node --check ../app/sw.js
 
