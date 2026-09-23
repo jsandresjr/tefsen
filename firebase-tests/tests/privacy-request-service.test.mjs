@@ -37,3 +37,11 @@ test('privacy access and portability requests use distinct subjects',()=>{
 test('privacy request helper exposes one canonical support address',()=>{
   assert.equal(privacyRequestSupportAddress(),'support@tefsen.com');
 });
+
+
+test('non-deletion privacy requests do not include subscription cancellation copy',()=>{
+  const access=decodeURIComponent(buildPrivacyRequestMailto('access',{email:'student@example.test'}));
+  const portable=decodeURIComponent(buildPrivacyRequestMailto('portability',{email:'student@example.test'}));
+  assert.doesNotMatch(access,/Google Play subscriptions must be cancelled separately/i);
+  assert.doesNotMatch(portable,/Google Play subscriptions must be cancelled separately/i);
+});
