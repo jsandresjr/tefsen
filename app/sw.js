@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v63-account-privacy';
+const CACHE = 'tefsen-web-shell-v64-accessibility-dialogs';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
