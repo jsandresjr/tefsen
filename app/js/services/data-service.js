@@ -634,7 +634,7 @@ export async function getReactionIds(mode, userId) {
 }
 
 export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
-  if (!userId) return { posts:[], referenceCount:0, staleCount:0 };
+  if (!userId) return { posts:[], savedIds:[], referenceCount:0, staleCount:0 };
 
   const refs = await getSavedPostReferences(mode,userId);
   const known = new Map(
@@ -662,6 +662,7 @@ export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
   const posts=rows.filter(Boolean);
   return {
     posts,
+    savedIds:refs.map(row=>row.postId),
     referenceCount:refs.length,
     staleCount:Math.max(0,refs.length-posts.length)
   };
