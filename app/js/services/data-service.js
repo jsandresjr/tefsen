@@ -273,7 +273,6 @@ function isWebPostForToday(post, dayKey) {
 
 export function normalizeUser(raw = {}, id = '') {
   const subscription = resolveSubscription(raw);
-  const email = raw.email || '';
   return {
     ...raw,
     id: id || raw.id || raw.uid || '',
