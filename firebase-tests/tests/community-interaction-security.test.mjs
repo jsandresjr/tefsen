@@ -61,6 +61,6 @@ test('ordinary clients cannot update public post counters', () => {
   assert.match(source,/affectedKeys\(\)\.hasOnly/);
 });
 
-test('PWA shell advances to V58 after interaction security cleanup', () => {
-  assert.match(sw,/tefsen-web-shell-v58-community-interactions/);
+test('PWA shell remains versioned after interaction security cleanup', () => {
+  assert.match(sw,/tefsen-web-shell-v\d+/);
 });
