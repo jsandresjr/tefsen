@@ -162,7 +162,7 @@ function trapModalKeyboard(event) {
 const modalAccessibilityObserver = new MutationObserver(() => {
   currentDialog() ? activateModalAccessibility() : deactivateModalAccessibility();
 });
-modalAccessibilityObserver.observe(modalRoot,{ childList:true, subtree:true });
+modalAccessibilityObserver.observe(modalRoot,{ childList:true });
 let stopAuth = null;
 let stopPosts = null;
 let stopComments = null;
@@ -438,7 +438,7 @@ function renderShell(content, options = {}) {
         </nav>
         <div class="nav-divider"></div>
         <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
-        <nav class="nav-list">
+        <nav class="nav-list" aria-label="Account and saved navigation">
           ${navItems.filter(([id]) => ['saved','notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
