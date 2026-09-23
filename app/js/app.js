@@ -3081,6 +3081,94 @@ function emptyState(ic, title, text) {
   return `<div class="panel empty-state"><div class="empty-icon">${icon(ic,26)}</div><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`;
 }
 
+function success18ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function success18DetailMarkup(post, model, comments) {
+  const liked=reactionState.liked.has(post.id);
+  const saved=reactionState.saved.has(post.id);
+  const facts=model.facts.length
+    ? model.facts.map(([label,value])=>`<div class="success18-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')
+    : '<div class="success18-fact empty"><small>Outcome details</small><b>No structured facts were provided.</b></div>';
+  const contextLinks=success18ContextLinks(model);
+
+  return `<div class="success18-reader">
+    <button class="btn btn-ghost success18-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="success18-detail">
+      <header class="success18-hero">
+        <div class="success18-hero-main">
+          <span class="story-type success">✓ Student success story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>Shared voluntarily by a student as personal experience. It is not an official decision notice or current admissions guidance.</p>
+          <div class="success18-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified, model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="success18-hero-aside">
+          <span>HOW TO READ THIS</span>
+          <div><b>Personal outcome</b><small>This describes what happened to this student.</small></div>
+          <div><b>Not a guarantee</b><small>Another student may face different requirements, timelines or results.</small></div>
+          <div><b>Verify officially</b><small>Use the university/provider source before making application decisions.</small></div>
+        </aside>
+      </header>
+
+      <section class="success18-facts" aria-label="Success story facts">${facts}</section>
+
+      <div class="success18-body-layout">
+        <main class="success18-story">
+          <span class="opportunity-kicker">THE STUDENT'S STORY</span>
+          <div class="success18-story-copy">${nl2br(model.content || 'This student did not add a longer story.')}</div>
+          ${model.tags.length ? `<div class="tag-row">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="success18-reader-side">
+          <section class="success18-trust-card">
+            ${icon('info',17)}
+            <div><b>Experience, not requirements</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current information</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Public by choice</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="success18-context">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this story</h2><p>Use Tefsen community spaces for student context, then verify formal requirements on official sources.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions success18-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like success story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="success18-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Add helpful context, encouragement or a relevant question. Do not treat the story as official admissions advice.</p></div></header>
+      <form class="success18-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="success18-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
 async function renderPostDetail(postId) {
   stopComments?.(); stopComments = null;
   let post = state.posts.find(p => p.id === postId);
@@ -3088,7 +3176,32 @@ async function renderPostDetail(postId) {
     renderShell(`<div class="loading-card"></div>`);
     post = await getPost(state.mode, postId).catch(() => null);
   }
-  if (!post) { renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.')); return; }
+  if (!post) {
+    renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.'));
+    return;
+  }
+
+  if (post.postType === 'success_story') {
+    const model=buildSuccessStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Success story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawSuccess=()=>{
+      renderShell(success18DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawSuccess();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawSuccess();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
   currentComments = [];
   const draw = () => {
     const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
