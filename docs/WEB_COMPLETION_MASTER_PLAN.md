@@ -345,4 +345,25 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - desktop/tablet/mobile subject-community redesign added
 - service-worker cache bumped to V43
 
-**Next: Step 17 — University and intake communities**
+**Step 17: University and intake communities — complete on branch `tefsen-web-completion-17-university-intake-communities`**
+- university pages rebuilt as public student spaces instead of one mixed feed with generic intake/opportunity sidebars
+- university-community model filters to public activity before counts, grouping or ranking
+- hidden/private posts and posts from other universities are excluded
+- university discussions, unanswered questions and voluntary outcome stories are separated
+- university discussion ordering uses public replies, saves and likes and explicitly states it is not a quality or accuracy score
+- intake spaces are derived from public posts and exact stored opportunity intake labels
+- intake cards show discussion, outcome and exact intake-opportunity counts
+- linked subjects, countries and funding types are derived from stored public/opportunity data without assuming a default country
+- university pages clearly state they are not official university channels
+- admissions, fees, funding, deadlines, visas and enrollment requirements are explicitly delegated to official institution/provider sources
+- intake pages now have their own public-only model and exclude other intakes
+- opportunities carrying the selected intake label are separated from university-wide opportunities with no intake value
+- opportunities with no intake value are never presented as exact intake matches
+- intake pages explain that private Tefsen Journey data is not imported or exposed
+- intake privacy guidance blocks publication of application IDs, passport/visa numbers, booking references, exact addresses and private documents
+- university and intake outcomes are presented as voluntary experiences, not guarantees or current official requirements
+- deterministic university/intake regression tests added
+- desktop/tablet/mobile university and intake redesign added
+- service-worker cache bumped to V44
+
+**Next: Step 18 — Success story publishing and reading experience**
