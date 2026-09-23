@@ -116,6 +116,11 @@ async function syncOwnPublicProfile(mode, userId, source = {}) {
   }
 }
 
+function settingsPermissionDenied(error) {
+  const code = String(error?.code || '').trim().toLowerCase();
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
+}
+
 export async function getUserSettings(mode, userId) {
   const cached = readSettingsCache(userId);
   if (!userId) return cached;
@@ -123,7 +128,18 @@ export async function getUserSettings(mode, userId) {
 
   try {
     const snap = await getDoc(userSettingsDocument(userId));
-    const settings = normalizeUserSettings(snap.exists() ? snap.data() : {});
+    if (!snap.exists()) return cached;
+
+    const raw = snap.data() || {};
+    const remote = normalizeUserSettings(raw);
+    const remoteSchema = Number(raw.schemaVersion || 0);
+
+    // Settings schema v1 only supported dark mode. Preserve a local v2
+    // appearance choice while production rules/documents are being migrated.
+    const settings = remoteSchema < 2
+      ? normalizeUserSettings({ ...remote, theme:cached.theme })
+      : remote;
+
     writeSettingsCache(userId, settings);
     return settings;
   } catch {
@@ -140,16 +156,41 @@ export async function saveUserSettings(mode, userId, draft = {}) {
     return settings;
   }
 
-  await setDoc(userSettingsDocument(userId), {
+  const ref = userSettingsDocument(userId);
+  const payload = {
     ...settings,
     uid:String(userId),
     userId:String(userId),
     documentType:'preferences',
     updatedAt:serverTimestamp()
-  });
+  };
 
-  writeSettingsCache(userId, settings);
-  return settings;
+  try {
+    await setDoc(ref, payload);
+    writeSettingsCache(userId, settings);
+    return settings;
+  } catch (error) {
+    if (!settingsPermissionDenied(error)) throw error;
+
+    // Keep appearance usable on this browser if production Firestore still has
+    // the legacy schema-v1 dark-only rule. This does not weaken access control:
+    // only the signed-in user's local cache is written here.
+    writeSettingsCache(userId, settings);
+
+    // Best-effort backward-compatible write keeps the other existing private
+    // preferences synced until the production rules accept schema v2.
+    try {
+      await setDoc(ref, {
+        ...payload,
+        schemaVersion:1,
+        theme:'dark'
+      });
+    } catch {
+      // Local settings remain available even if the legacy write is also denied.
+    }
+
+    return { ...settings, __localOnly:true };
+  }
 }
 
 async function getSavedPostReferences(mode, userId) {
