@@ -89,9 +89,7 @@ export function buildPublicProfileModel({
     role:String(profile.role || 'Student'),
     verified:Boolean(profile.verified),
     publicStats:{
-      posts:publicPosts.length,
-      followers:Number(profile.followersCount || 0),
-      following:Number(profile.followingCount || 0)
+      posts:publicPosts.length
     },
     capabilities,
     privateWorkspace:own ? {
@@ -130,9 +128,7 @@ export function projectPublicUser(raw={}, id='') {
     photoUrl,
     role,
     verified:Boolean(raw.verified),
-    points:Math.max(0,Number(raw.points || 0)),
-    followersCount:Math.max(0,Number(raw.followersCount || 0)),
-    followingCount:Math.max(0,Number(raw.followingCount || 0))
+    points:Math.max(0,Number(raw.points || 0))
   };
 }
 
