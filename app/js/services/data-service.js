@@ -2,6 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
+import { validatePublicProfileDraft } from './public-profile-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp,
@@ -742,10 +743,13 @@ export async function updateUserProfile(mode, userId, data) {
     return normalizeUser(existing, userId);
   }
 
-  const fullName = String(data.fullName || '').trim().slice(0, 80);
-  const username = String(data.username || '').trim().replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40);
-  const bio = String(data.bio || '').trim().slice(0, 500);
-  if (!fullName) throw new Error('Full name is required.');
+  const validation = validatePublicProfileDraft({
+    fullName:data.fullName,
+    username:data.username,
+    bio:data.bio
+  });
+  if (!validation.valid) throw new Error(validation.errors[0]?.message || 'Check the public profile fields.');
+  const { fullName, username, bio } = validation.value;
 
   const userRef = doc(db, C.users, userId);
   const snap = await getDoc(userRef);
