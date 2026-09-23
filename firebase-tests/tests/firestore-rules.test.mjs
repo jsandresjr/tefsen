@@ -85,6 +85,37 @@ test('Application Journey is owner-only', async () => {
   await assertSucceeds(deleteDoc(ref));
 });
 
+test('Saved Community posts are owner-only and cannot spoof identity', async () => {
+  const owner = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const anon = env.unauthenticatedContext().firestore();
+  const ref = doc(owner, 'users', 'user-a', 'savedPosts', 'post-1');
+
+  await assertSucceeds(setDoc(ref, {
+    uid:'user-a',
+    userId:'user-a',
+    postId:'post-1',
+    savedAtMillis:123
+  }));
+  await assertSucceeds(getDoc(ref));
+  const ownerList=await assertSucceeds(getDocs(collection(owner,'users','user-a','savedPosts')));
+  assert.equal(ownerList.size,1);
+  await assertFails(getDocs(collection(other,'users','user-a','savedPosts')));
+  await assertFails(getDoc(doc(other, 'users', 'user-a', 'savedPosts', 'post-1')));
+  await assertFails(getDoc(doc(anon, 'users', 'user-a', 'savedPosts', 'post-1')));
+  await assertFails(setDoc(doc(other, 'users', 'user-a', 'savedPosts', 'post-2'), {
+    uid:'user-a',
+    userId:'user-a',
+    postId:'post-2'
+  }));
+  await assertFails(setDoc(doc(owner, 'users', 'user-a', 'savedPosts', 'post-2'), {
+    uid:'user-b',
+    userId:'user-b',
+    postId:'post-2'
+  }));
+  await assertSucceeds(deleteDoc(ref));
+});
+
 test('Ordinary users can read only published public opportunities', async () => {
   const userDb = env.authenticatedContext('user-a').firestore();
   const anonDb = env.unauthenticatedContext().firestore();

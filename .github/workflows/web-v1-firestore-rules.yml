@@ -21,6 +21,7 @@ on:
       - 'app/js/services/journey-story-service.js'
       - 'app/js/services/global-search-service.js'
       - 'app/js/services/notification-service.js'
+      - 'app/js/services/saved-community-service.js'
       - 'app/js/services/data-service.js'
       - 'app/css/communities.css'
       - 'app/css/v4-profile.css'

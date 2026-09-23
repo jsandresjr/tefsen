@@ -505,4 +505,26 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 
 A future Follow feature would require an explicit follower relationship collection, idempotent follow/unfollow writes, count consistency strategy, privacy/blocking rules, abuse controls, notification behavior, deletion behavior and production security tests before any UI is enabled.
 
-**Next: Step 24 — Saved Community posts**
+**Step 24: Saved Community posts — complete on branch `tefsen-web-completion-24-saved-community-posts`**
+- replaced the throwing `toggleSave()` stub with a real private saved-post implementation
+- saved Community references use `users/{uid}/savedPosts/{postId}` with explicit user/post identity fields
+- demo mode uses a per-user local saved-post cache instead of fake pre-populated saved content
+- authenticated startup now loads saved Community IDs into the existing reaction state
+- saved-post references are cached locally for fast state restoration and graceful read fallback
+- Save/Unsave now works for ordinary discussions, Success stories and Journey stories
+- dedicated Success-story and Journey-story readers now include Save controls
+- saving validates that the target still resolves as public Community content before creating a new reference
+- dedicated Saved Community loader resolves posts independently of the current feed window, so older saved posts are not lost just because they are outside the current feed subscription
+- hidden/private/deleted posts are not rendered merely because an old saved reference still exists
+- Saved Community model deduplicates posts, sorts by saved time and separates discussions from student outcome stories
+- Saved Community page now has a private-library hero, summary counts, discussion/outcome sections and a clear empty state
+- Saved Community is clearly separated from Saved Opportunities and Application Journeys
+- Saved Community is now discoverable from the secondary sidebar and account menu
+- unavailable stale references are reported without exposing hidden content
+- isolated Web V1 rules contract now makes `users/{uid}/savedPosts/{postId}` owner-only and prevents spoofed uid/userId/postId writes
+- regression tests cover owner-only Firestore access, sorting, counts, deduplication, hidden/private exclusion and privacy/distinction wording
+- production Firestore deployment parity remains part of Step 35 security review; this step defines and mechanically tests the intended Web V1 contract
+- service-worker cache bumped to V51 and Saved Community service added to offline shell
+- responsive desktop/tablet/mobile Saved Community workspace added
+
+**Next: Step 25 — Settings, account and subscription experience**

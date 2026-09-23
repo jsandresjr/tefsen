@@ -24,6 +24,14 @@ service cloud.firestore {
       allow read, create, update, delete: if isOwner(uid);
     }
 
+    match /users/{uid}/savedPosts/{postId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.userId == uid
+        && request.resource.data.postId == postId;
+    }
+
     match /opportunities/{opportunityId} {
       allow read: if isAdmin()
         || (resource.data.status == "published"
@@ -37,8 +45,8 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // This isolated test ruleset intentionally denies every legacy collection.
-    // It exists only to mechanically test the new Web V1 privacy/admin contract.
+    // This isolated test ruleset intentionally denies legacy collections except
+    // the explicit Web V1 owner-private/admin contracts above.
     match /{document=**} {
       allow read, write: if false;
     }
