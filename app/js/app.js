@@ -3927,24 +3927,78 @@ async function handleMessage(form) {
   try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
   catch(e){ input.value=text; toast(humanError(e),'error'); }
 }
+function updatePublicProfileValidation(form) {
+  const fd = new FormData(form);
+  const draft = {
+    fullName:String(fd.get('fullName') || ''),
+    username:String(fd.get('username') || ''),
+    bio:String(fd.get('bio') || '')
+  };
+  const validation = validatePublicProfileDraft(draft);
+
+  form.querySelectorAll('[data-profile-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector('[data-profile-error="' + error.field + '"]');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const bioCount = form.querySelector('[data-profile-bio-count]');
+  const bio = form.elements.namedItem('bio');
+  if (bioCount && bio instanceof HTMLTextAreaElement) bioCount.textContent = String(bio.value.length);
+
+  const summary = form.querySelector('[data-profile-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  return { draft:validation.value, validation };
+}
+
 async function handleProfileSave(form) {
   const fd = new FormData(form);
+  const { draft, validation } = updatePublicProfileValidation(form);
+  if (!validation.valid) {
+    const first = validation.errors[0];
+    const field = form.elements.namedItem(first?.field || '');
+    if (field instanceof HTMLElement) field.focus();
+    toast('Check the highlighted public profile field before saving.', 'error');
+    return;
+  }
+
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
   await withButton(submit, async () => {
     try {
       const profile = await updateUserProfile(state.mode, state.user.uid, {
-        fullName: String(fd.get('fullName') || '').trim(),
-        username: String(fd.get('username') || '').trim(),
-        bio: String(fd.get('bio') || '').trim(),
-        profileImageFile: selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+        fullName:draft.fullName,
+        username:draft.username,
+        bio:draft.bio,
+        profileImageFile:selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
       });
       state.profile = { ...state.profile, ...profile };
       state.posts = state.posts.map(post => post.authorId === state.user.uid
-        ? { ...post, authorName: profile.fullName, authorPhotoUrl: profile.photoUrl || '' }
+        ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
+      const input = form.querySelector('[data-profile-photo-input]');
+      if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
       modalRoot.innerHTML = '';
-      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Profile and photo updated.' : 'Profile updated.', 'success');
+      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
     } catch (error) {
       toast(humanError(error), 'error');
@@ -4191,6 +4245,8 @@ function handleInput(event) {
     if (preview) {
       preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
     }
+    const stateEl = input.form?.querySelector('[data-profile-photo-state]');
+    if (stateEl) stateEl.textContent = 'Preview selected — save profile to publish this photo';
     return;
   }
 
@@ -4263,7 +4319,12 @@ document.addEventListener('input', event => {
     return;
   }
   const postAcceptanceForm = event.target.closest?.('[data-post-acceptance-plan-form]');
-  if (postAcceptanceForm) updatePostAcceptanceValidation(postAcceptanceForm);
+  if (postAcceptanceForm) {
+    updatePostAcceptanceValidation(postAcceptanceForm);
+    return;
+  }
+  const profileForm = event.target.closest?.('[data-profile-form]');
+  if (profileForm) updatePublicProfileValidation(profileForm);
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
