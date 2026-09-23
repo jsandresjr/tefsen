@@ -180,49 +180,199 @@ export function subjectCommunityData(name, posts = [], opportunities = []) {
   };
 }
 
-export function universityCommunityData(name, posts = [], opportunities = []) {
-  const target = communityKey(name);
-  const communityPosts = posts.filter(post =>
-    communityKey(post.communityUniversity || post.successData?.university || '') === target
-  );
-  const communityOpportunities = opportunities.filter(opportunity =>
-    communityKey(opportunity.university || '') === target
-  );
-  const intakes = uniqueValues([
-    ...communityPosts.map(post => post.communityIntake || post.successData?.intake || ''),
-    ...communityOpportunities.map(opportunity => opportunity.intake || '')
-  ].filter(Boolean), 24);
+function postUniversityName(post={}) {
+  return clean(post.communityUniversity || post.successData?.university || '',180);
+}
 
-  const countries = uniqueValues([
-    ...communityPosts.map(post => post.successData?.country || ''),
-    ...communityOpportunities.map(opportunity => opportunity.country || '')
-  ].filter(Boolean), 12);
+function postIntakeName(post={}) {
+  return clean(post.communityIntake || post.successData?.intake || '',80);
+}
+
+function opportunityUniversityName(opportunity={}) {
+  return clean(opportunity.university || '',180);
+}
+
+function opportunityIntakeName(opportunity={}) {
+  return clean(opportunity.intake || '',80);
+}
+
+function rankedDiscussions(posts=[]) {
+  return [...posts]
+    .filter(post=>communityPostType(post)==='discussion')
+    .sort((a,b)=>discussionActivityScore(b)-discussionActivityScore(a));
+}
+
+function unansweredDiscussions(posts=[]) {
+  return [...posts]
+    .filter(post=>Number(post.commentCount || 0)===0)
+    .sort((a,b)=>{
+      const bySaves=Number(b.saveCount || 0)-Number(a.saveCount || 0);
+      return bySaves || Number(b.likeCount || 0)-Number(a.likeCount || 0);
+    });
+}
+
+function rankedOutcomes(posts=[]) {
+  return [...posts]
+    .filter(post=>communityPostType(post)!=='discussion')
+    .sort((a,b)=>outcomeActivityScore(b)-outcomeActivityScore(a));
+}
+
+export function buildUniversityCommunityModel(name, posts = [], opportunities = []) {
+  const university=clean(name,180);
+  const target=communityKey(university);
+
+  const publicPosts=(Array.isArray(posts) ? posts : [])
+    .filter(isPublicProfileActivity)
+    .filter(post=>communityKey(postUniversityName(post))===target);
+
+  const linkedOpportunities=(Array.isArray(opportunities) ? opportunities : [])
+    .filter(opportunity=>communityKey(opportunityUniversityName(opportunity))===target);
+
+  const discussions=rankedDiscussions(publicPosts);
+  const unanswered=unansweredDiscussions(discussions);
+  const outcomes=rankedOutcomes(publicPosts);
+
+  const intakes=uniqueValues([
+    ...publicPosts.map(post=>postIntakeName(post)),
+    ...linkedOpportunities.map(opportunity=>opportunityIntakeName(opportunity))
+  ].filter(Boolean),24);
+
+  const intakeSummaries=intakes.map(intake=>{
+    const intakeKey=communityKey(intake);
+    const intakePosts=publicPosts.filter(post=>communityKey(postIntakeName(post))===intakeKey);
+    const exactOpportunities=linkedOpportunities.filter(opportunity=>communityKey(opportunityIntakeName(opportunity))===intakeKey);
+    return {
+      name:intake,
+      postCount:intakePosts.length,
+      discussionCount:intakePosts.filter(post=>communityPostType(post)==='discussion').length,
+      outcomeCount:intakePosts.filter(post=>communityPostType(post)!=='discussion').length,
+      opportunityCount:exactOpportunities.length
+    };
+  }).sort((a,b)=>
+    (b.opportunityCount*3 + b.discussionCount*2 + b.outcomeCount) -
+    (a.opportunityCount*3 + a.discussionCount*2 + a.outcomeCount)
+  );
+
+  const countries=uniqueValues([
+    ...publicPosts.map(post=>post.successData?.country || ''),
+    ...linkedOpportunities.map(opportunity=>opportunity.country || '')
+  ].filter(Boolean),12);
+
+  const subjects=uniqueValues([
+    ...publicPosts.map(post=>post.communitySubject || post.successData?.subject || post.subject || ''),
+    ...linkedOpportunities.flatMap(opportunity=>Array.isArray(opportunity.subjects) ? opportunity.subjects : [])
+  ].filter(Boolean),20);
+
+  const fundingTypes=uniqueValues(
+    linkedOpportunities.map(opportunity=>opportunity.fundingType).filter(Boolean),
+    10
+  );
 
   return {
-    name: clean(name,180),
-    posts: communityPosts,
-    opportunities: communityOpportunities,
+    name:university || 'University',
+    discussions,
+    unanswered,
+    outcomes,
+    opportunities:linkedOpportunities,
     intakes,
-    countries
+    intakeSummaries,
+    countries,
+    subjects,
+    fundingTypes,
+    counts:{
+      discussions:discussions.length,
+      unanswered:unanswered.length,
+      outcomes:outcomes.length,
+      opportunities:linkedOpportunities.length,
+      intakes:intakes.length,
+      subjects:subjects.length
+    },
+    empty:publicPosts.length===0 && linkedOpportunities.length===0,
+    rankingNote:'Discussion order uses public engagement signals such as replies, saves and likes. It is not a quality or accuracy score.',
+    sourceNote:'This is a student community space, not an official university channel. Official institution and provider sources remain authoritative for admissions, fees, funding, deadlines, visas and enrollment requirements.'
+  };
+}
+
+export function buildIntakeCommunityModel(universityName, intakeName, posts = [], opportunities = []) {
+  const university=clean(universityName,180);
+  const intake=clean(intakeName,80);
+  const universityKey=communityKey(university);
+  const intakeKey=communityKey(intake);
+
+  const publicPosts=(Array.isArray(posts) ? posts : [])
+    .filter(isPublicProfileActivity)
+    .filter(post=>
+      communityKey(postUniversityName(post))===universityKey &&
+      communityKey(postIntakeName(post))===intakeKey
+    );
+
+  const universityOpportunities=(Array.isArray(opportunities) ? opportunities : [])
+    .filter(opportunity=>communityKey(opportunityUniversityName(opportunity))===universityKey);
+
+  const exactOpportunities=universityOpportunities
+    .filter(opportunity=>communityKey(opportunityIntakeName(opportunity))===intakeKey);
+
+  const generalUniversityOpportunities=universityOpportunities
+    .filter(opportunity=>!opportunityIntakeName(opportunity));
+
+  const discussions=rankedDiscussions(publicPosts);
+  const unanswered=unansweredDiscussions(discussions);
+  const outcomes=rankedOutcomes(publicPosts);
+
+  const subjects=uniqueValues([
+    ...publicPosts.map(post=>post.communitySubject || post.successData?.subject || post.subject || ''),
+    ...exactOpportunities.flatMap(opportunity=>Array.isArray(opportunity.subjects) ? opportunity.subjects : [])
+  ].filter(Boolean),20);
+
+  const countries=uniqueValues([
+    ...publicPosts.map(post=>post.successData?.country || ''),
+    ...exactOpportunities.map(opportunity=>opportunity.country || ''),
+    ...generalUniversityOpportunities.map(opportunity=>opportunity.country || '')
+  ].filter(Boolean),12);
+
+  return {
+    university:university || 'University',
+    intake:intake || 'Intake',
+    discussions,
+    unanswered,
+    outcomes,
+    opportunities:exactOpportunities,
+    generalUniversityOpportunities,
+    subjects,
+    countries,
+    counts:{
+      discussions:discussions.length,
+      unanswered:unanswered.length,
+      outcomes:outcomes.length,
+      opportunities:exactOpportunities.length,
+      generalUniversityOpportunities:generalUniversityOpportunities.length,
+      subjects:subjects.length
+    },
+    empty:publicPosts.length===0 && exactOpportunities.length===0,
+    rankingNote:'Discussion order uses public engagement signals such as replies, saves and likes. It is not a quality or accuracy score.',
+    sourceNote:'This intake space is community context only. Confirm intake dates, admissions, fees, funding, enrollment, visa and arrival requirements on official university or provider sources.',
+    privacyNote:'Do not publish application IDs, passport or visa numbers, booking references, exact addresses, private documents or other sensitive application/travel information.'
+  };
+}
+
+export function universityCommunityData(name, posts = [], opportunities = []) {
+  const model=buildUniversityCommunityModel(name,posts,opportunities);
+  return {
+    name:model.name,
+    posts:[...model.discussions,...model.outcomes],
+    opportunities:model.opportunities,
+    intakes:model.intakes,
+    countries:model.countries
   };
 }
 
 export function intakeCommunityData(university, intake, posts = [], opportunities = []) {
-  const universityKey = communityKey(university);
-  const intakeKey = communityKey(intake);
-  const communityPosts = posts.filter(post =>
-    communityKey(post.communityUniversity || post.successData?.university || '') === universityKey &&
-    communityKey(post.communityIntake || post.successData?.intake || '') === intakeKey
-  );
-  const communityOpportunities = opportunities.filter(opportunity =>
-    communityKey(opportunity.university || '') === universityKey &&
-    (!opportunity.intake || communityKey(opportunity.intake) === intakeKey)
-  );
+  const model=buildIntakeCommunityModel(university,intake,posts,opportunities);
   return {
-    university: clean(university,180),
-    intake: clean(intake,80),
-    posts: communityPosts,
-    opportunities: communityOpportunities
+    university:model.university,
+    intake:model.intake,
+    posts:[...model.discussions,...model.outcomes],
+    opportunities:model.opportunities
   };
 }
 
