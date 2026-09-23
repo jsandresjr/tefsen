@@ -276,6 +276,7 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - add / change / remove photo controls are directly visible on the owner profile
 - selected profile photos are clearly labelled as preview-only until Save
 - JPG / PNG / WebP and 5 MB photo limits remain enforced
+- an explicitly removed stored profile photo stays removed on later text-only edits instead of restoring an Auth-provider photo
 - public name, username, bio and photo are visually separated from private Student Passport and application data
 - own Student Passport / saved opportunities / active Journeys moved into a distinct Private Workspace section
 - other students never receive the owner-only private workspace model

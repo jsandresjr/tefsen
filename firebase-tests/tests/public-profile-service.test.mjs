@@ -6,6 +6,7 @@ import {
   isPublicProfileActivity,
   projectPublicUser,
   publicProfileCapabilities,
+  resolveProfilePhotoForUpdate,
   validatePublicProfileDraft
 } from '../../app/js/services/public-profile-service.js';
 
@@ -178,4 +179,29 @@ test('public profile activity rejects hidden or private records',()=>{
 
 test('legacy demo activity without explicit flags remains visible',()=>{
   assert.equal(isPublicProfileActivity({title:'Demo discussion'}),true);
+});
+
+
+test('explicitly removed stored photo stays removed instead of restoring auth photo',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {profileImageUrl:'',photoURL:''},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'');
+});
+
+test('auth photo is used only when no stored photo preference exists',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {fullName:'A Student'},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'https://accounts.example.org/google-photo.jpg');
+});
+
+test('stored profile photo wins over auth photo',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {profileImageUrl:'https://cdn.example.org/custom.jpg'},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'https://cdn.example.org/custom.jpg');
 });

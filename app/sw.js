@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v66-light-mode';
+const CACHE = 'tefsen-web-shell-v67-profile-photo-removal';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',

@@ -2,7 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
-import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
+import { isPublicProfileActivity, projectPublicUser, resolveProfilePhotoForUpdate, validatePublicProfileDraft } from './public-profile-service.js';
 import { buildPublicProfileRecord, normalizePublicProfileRecord } from './public-profile-record-service.js';
 import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
@@ -1186,7 +1186,7 @@ export async function updateUserProfile(mode, userId, data) {
   if (!snap.exists()) throw new Error('Account profile is unavailable. Sign out and sign in again to restore it.');
   const current = snap.data();
   const currentAuthUser = auth?.currentUser;
-  let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
+  let profileImageUrl = resolveProfilePhotoForUpdate(current, currentAuthUser?.photoURL || '');
 
   const photoFile = data.profileImageFile instanceof File && data.profileImageFile.size
     ? data.profileImageFile

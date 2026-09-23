@@ -48,6 +48,18 @@ export function validatePublicProfileDraft({
   };
 }
 
+
+export function resolveProfilePhotoForUpdate(current={}, authPhoto='') {
+  const aliases=['profileImageUrl','profilePhotoUrl','profilePictureUrl','photoURL','photoUrl','avatarUrl','imageUrl'];
+  for (const key of aliases) {
+    if (Object.prototype.hasOwnProperty.call(current,key)) {
+      const value=current[key];
+      return value === undefined || value === null ? '' : String(value).trim();
+    }
+  }
+  return String(authPhoto || '').trim();
+}
+
 export function buildPublicProfileModel({
   profile={},
   own=false,
