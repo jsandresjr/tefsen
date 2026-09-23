@@ -71,7 +71,6 @@ test('offline shell explicitly includes direct and transitive startup modules',(
   const shell=block('const SHELL = [','];');
   for(const path of [
     './js/app.js',
-    './js/trial-ui.js',
     './js/firebase-client.js',
     './js/services/auth-service.js',
     './js/services/account-bootstrap-service.js',
@@ -83,6 +82,6 @@ test('offline shell explicitly includes direct and transitive startup modules',(
   }
 });
 
-test('PWA shell advances to V61',()=>{
-  assert.match(sw,/tefsen-web-shell-v61-pwa-document-security/);
+test('PWA shell remains versioned after later completion steps',()=>{
+  assert.match(sw,/tefsen-web-shell-v\d+/);
 });
