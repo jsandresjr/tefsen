@@ -119,3 +119,13 @@ test('notes remain editable across terminal outcome stage',()=>{
   assert.equal(model.planning.notesEditable,true);
   assert.equal(model.terminal,true);
 });
+
+test('detail guidance exposes a passed stored deadline before submission',()=>{
+  const model=buildJourneyDetailModel(
+    journey({status:'preparing',personalTargetDate:''}),
+    opportunity({deadline:'2026-09-20'}),
+    now
+  );
+  assert.equal(model.priority.attention.key,'deadline_expired');
+  assert.match(model.guidance.detail,/official provider source/i);
+});
