@@ -1,8 +1,8 @@
-const SETTINGS_SCHEMA_VERSION = 1;
+const SETTINGS_SCHEMA_VERSION = 2;
 
 const DEFAULTS = Object.freeze({
   schemaVersion: SETTINGS_SCHEMA_VERSION,
-  theme: 'dark',
+  theme: 'system',
   compactFeed: false,
   reducedMotion: false,
   language: 'en',
@@ -21,11 +21,16 @@ export function defaultUserSettings({ timeZone = '' } = {}) {
   return { ...DEFAULTS, timeZone: clean(timeZone, 100) };
 }
 
+function normalizeTheme(value, fallback = 'system') {
+  const theme = String(value || '').trim().toLowerCase();
+  return ['light', 'dark', 'system'].includes(theme) ? theme : fallback;
+}
+
 export function normalizeUserSettings(raw = {}, { timeZone = '' } = {}) {
   const fallback = defaultUserSettings({ timeZone });
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    theme: 'dark',
+    theme: normalizeTheme(raw.theme, fallback.theme),
     compactFeed: typeof raw.compactFeed === 'boolean' ? raw.compactFeed : fallback.compactFeed,
     reducedMotion: typeof raw.reducedMotion === 'boolean' ? raw.reducedMotion : fallback.reducedMotion,
     language: raw.language === 'en' ? 'en' : fallback.language,
@@ -148,12 +153,50 @@ export function applyNotificationPreferences(model = {}, rawSettings = {}) {
   };
 }
 
+let systemThemeMedia = null;
+let systemThemeListenerBound = false;
+
+function resolveAppearance(theme) {
+  if (theme === 'light' || theme === 'dark') return theme;
+  try {
+    return globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
+function applyAppearance(root, theme) {
+  const resolved = resolveAppearance(theme);
+  root.dataset.theme = theme;
+  root.dataset.appearance = resolved;
+  root.style.colorScheme = resolved;
+
+  const metaTheme = globalThis.document?.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', resolved === 'light' ? '#f7fafb' : '#041316');
+}
+
 export function applyRuntimeSettings(rawSettings = {}, root = globalThis.document?.documentElement) {
   const settings = normalizeUserSettings(rawSettings);
   if (!root) return settings;
+
   root.classList.toggle('pref-compact', settings.compactFeed);
   root.classList.toggle('pref-reduced-motion', settings.reducedMotion);
-  root.dataset.appearance = 'dark';
+  applyAppearance(root, settings.theme);
+
+  if (!systemThemeListenerBound && globalThis.matchMedia) {
+    systemThemeMedia = globalThis.matchMedia('(prefers-color-scheme: light)');
+    const refreshSystemAppearance = () => {
+      const activeRoot = globalThis.document?.documentElement;
+      if (activeRoot?.dataset.theme === 'system') applyAppearance(activeRoot, 'system');
+    };
+    if (typeof systemThemeMedia.addEventListener === 'function') {
+      systemThemeMedia.addEventListener('change', refreshSystemAppearance);
+    } else if (typeof systemThemeMedia.addListener === 'function') {
+      systemThemeMedia.addListener(refreshSystemAppearance);
+    }
+    systemThemeListenerBound = true;
+  }
+
   return settings;
 }
 
