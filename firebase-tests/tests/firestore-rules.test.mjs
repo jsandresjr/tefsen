@@ -116,6 +116,40 @@ test('Saved Community posts are owner-only and cannot spoof identity', async () 
   await assertSucceeds(deleteDoc(ref));
 });
 
+test('Settings preferences are owner-only, validated, and cannot spoof identity', async () => {
+  const owner = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const anon = env.unauthenticatedContext().firestore();
+  const ref = doc(owner, 'users', 'user-a', 'settings', 'preferences');
+  const valid = {
+    uid:'user-a',
+    userId:'user-a',
+    documentType:'preferences',
+    schemaVersion:1,
+    theme:'dark',
+    compactFeed:false,
+    reducedMotion:true,
+    language:'en',
+    region:'Sri Lanka',
+    timeZone:'Asia/Colombo',
+    notificationOpportunityDeadlines:true,
+    notificationJourneyReminders:true,
+    notificationCommunityActivity:false,
+    updatedAt:123
+  };
+
+  await assertSucceeds(setDoc(ref, valid));
+  await assertSucceeds(getDoc(ref));
+  await assertFails(getDoc(doc(other, 'users', 'user-a', 'settings', 'preferences')));
+  await assertFails(getDoc(doc(anon, 'users', 'user-a', 'settings', 'preferences')));
+  await assertFails(setDoc(doc(other, 'users', 'user-a', 'settings', 'preferences'), valid));
+  await assertFails(setDoc(ref, { ...valid, uid:'user-b', userId:'user-b' }));
+  await assertFails(setDoc(ref, { ...valid, theme:'light' }));
+  await assertFails(setDoc(ref, { ...valid, unexpectedField:true }));
+  await assertSucceeds(updateDoc(ref, { region:'Canada', timeZone:'America/Toronto' }));
+  await assertSucceeds(deleteDoc(ref));
+});
+
 test('Ordinary users can read only published public opportunities', async () => {
   const userDb = env.authenticatedContext('user-a').firestore();
   const anonDb = env.unauthenticatedContext().firestore();
