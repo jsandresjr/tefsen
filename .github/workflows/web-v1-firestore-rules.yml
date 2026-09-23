@@ -8,6 +8,7 @@ on:
       - 'docs/WEB_SURFACE_OWNERSHIP.md'
       - 'docs/PWA_DOCUMENT_SECURITY.md'
       - 'docs/ENTITLEMENT_ADMIN_AUTHORITY.md'
+      - 'docs/ACCOUNT_DELETION_PRIVACY_REQUESTS.md'
       - 'app.js'
       - 'script.js'
       - 'style.css'
