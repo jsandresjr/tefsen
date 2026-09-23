@@ -54,7 +54,7 @@ function openShareSheet(postId) {
       <section class="modal stage1-share-sheet" data-stage1-share-sheet role="dialog" aria-modal="true" aria-labelledby="stage1-share-title">
         <header class="modal-head">
           <div>
-            <h2 id="stage1-share-title">Share question</h2>
+            <h2 id="stage1-share-title">Share post</h2>
             <p>Choose how you want to share this Tefsen question.</p>
           </div>
           <button class="close-btn" type="button" data-stage1-share-close aria-label="Close share options">×</button>
@@ -78,7 +78,7 @@ async function handleShareChoice(button) {
   const url = sheet?.dataset.shareUrl || '';
   if (!url) return;
   const encodedUrl = encodeURIComponent(url);
-  const text = encodeURIComponent('Tefsen academic question');
+  const text = encodeURIComponent('Tefsen post');
   const choice = button.dataset.stage1Share;
 
   if (choice === 'whatsapp') {
@@ -106,12 +106,12 @@ async function handleShareChoice(button) {
     return;
   }
   if (choice === 'email') {
-    location.href = `mailto:?subject=${encodeURIComponent('Tefsen academic question')}&body=${encodeURIComponent(`I thought you might find this useful:\n\n${url}`)}`;
+    location.href = `mailto:?subject=${encodeURIComponent('Tefsen post')}&body=${encodeURIComponent(`I thought you might find this useful:\n\n${url}`)}`;
     closeShareSheet();
     return;
   }
   if (choice === 'copy') {
-    if (await copyShareLink(url)) showShareFeedback('Question link copied.');
+    if (await copyShareLink(url)) showShareFeedback('Post link copied.');
     else showShareFeedback('Could not copy automatically.');
     closeShareSheet();
     return;
@@ -119,20 +119,13 @@ async function handleShareChoice(button) {
   if (choice === 'more') {
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Tefsen academic question', text: 'Tefsen academic question', url });
+        await navigator.share({ title: 'Tefsen post', text: 'Tefsen post', url });
       } catch {}
     } else if (await copyShareLink(url)) {
       showShareFeedback('Share menu unavailable — link copied instead.');
     }
     closeShareSheet();
   }
-}
-
-function hideKnownDisabledPrimaryControls() {
-  document.querySelectorAll('.sidebar [data-route="messages"], .sidebar [data-route="saved"]').forEach(el => {
-    el.hidden = true;
-    el.setAttribute('aria-hidden', 'true');
-  });
 }
 
 document.addEventListener('click', async event => {
@@ -162,6 +155,3 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeShareSheet();
 });
 
-const stage1Observer = new MutationObserver(() => hideKnownDisabledPrimaryControls());
-stage1Observer.observe(document.getElementById('app-root'), { childList: true, subtree: true });
-hideKnownDisabledPrimaryControls();
