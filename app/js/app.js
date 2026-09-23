@@ -57,6 +57,112 @@ import {
 
 const root = document.getElementById('app-root');
 const modalRoot = document.getElementById('modal-root');
+const DIALOG_FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let modalReturnFocus = null;
+let modalActive = false;
+let modalHeadingCounter = 0;
+
+function currentDialog() {
+  return modalRoot.querySelector('.modal');
+}
+
+function dialogFocusableElements(dialog = currentDialog()) {
+  if (!dialog) return [];
+  return [...dialog.querySelectorAll(DIALOG_FOCUSABLE_SELECTOR)]
+    .filter(element => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+}
+
+function normalizeDialogAccessibility(dialog) {
+  if (!dialog) return;
+  dialog.setAttribute('role','dialog');
+  dialog.setAttribute('aria-modal','true');
+
+  const heading = dialog.querySelector('h1, h2, h3');
+  if (!dialog.hasAttribute('aria-label') && !dialog.hasAttribute('aria-labelledby') && heading) {
+    if (!heading.id) heading.id = `tefsen-dialog-title-${++modalHeadingCounter}`;
+    dialog.setAttribute('aria-labelledby', heading.id);
+  }
+
+  dialog.querySelectorAll('[data-close-modal]').forEach(button => {
+    if (button.tagName === 'BUTTON' && !button.hasAttribute('type')) button.setAttribute('type','button');
+    if (button.classList.contains('close-btn') && !button.hasAttribute('aria-label')) {
+      button.setAttribute('aria-label','Close dialog');
+    }
+  });
+
+  if (!dialog.hasAttribute('tabindex')) dialog.setAttribute('tabindex','-1');
+}
+
+function activateModalAccessibility() {
+  const dialog = currentDialog();
+  if (!dialog) return;
+  if (!modalActive) {
+    modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalActive = true;
+  }
+  root.inert = true;
+  normalizeDialogAccessibility(dialog);
+
+  queueMicrotask(() => {
+    const activeDialog = currentDialog();
+    if (!activeDialog) return;
+    const preferred = activeDialog.querySelector('[autofocus], input:not([type="hidden"]), select, textarea, button, a[href]');
+    (preferred || activeDialog).focus({ preventScroll:true });
+  });
+}
+
+function deactivateModalAccessibility() {
+  if (!modalActive) return;
+  modalActive = false;
+  root.inert = false;
+  const returnTarget = modalReturnFocus;
+  modalReturnFocus = null;
+  queueMicrotask(() => {
+    if (returnTarget instanceof HTMLElement && returnTarget.isConnected) {
+      returnTarget.focus({ preventScroll:true });
+    }
+  });
+}
+
+function trapModalKeyboard(event) {
+  const dialog = currentDialog();
+  if (!dialog) return false;
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    modalRoot.innerHTML = '';
+    return true;
+  }
+
+  if (event.key !== 'Tab') return false;
+  const focusable = dialogFocusableElements(dialog);
+  if (!focusable.length) {
+    event.preventDefault();
+    dialog.focus();
+    return true;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+
+  if (event.shiftKey && (active === first || !dialog.contains(active))) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
+}
+
+const modalAccessibilityObserver = new MutationObserver(() => {
+  currentDialog() ? activateModalAccessibility() : deactivateModalAccessibility();
+});
+modalAccessibilityObserver.observe(modalRoot,{ childList:true, subtree:true });
 let stopAuth = null;
 let stopPosts = null;
 let stopComments = null;
@@ -262,13 +368,13 @@ async function handleAuthChange(user) {
 }
 
 function loadingScreen(text = 'Opening Tefsen Web…') {
-  return `<div style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></div>`;
+  return `<main id="app-main" tabindex="-1" style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></main>`;
 }
 
 function renderAuth(mode = 'login') {
   const isRegister = mode === 'register';
   root.innerHTML = `
-    <main class="auth-page">
+    <main id="app-main" class="auth-page" tabindex="-1">
       <section class="auth-art">
         <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
         <div class="auth-message">
@@ -343,7 +449,7 @@ function renderShell(content, options = {}) {
 
       ${rightContent ? `<aside class="rightbar">${rightContent}</aside>` : ''}
 
-      <main class="main-area"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
+      <main id="app-main" class="main-area" tabindex="-1"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
 
       <nav class="mobile-bottom" aria-label="Mobile navigation">
         ${mobileNavButton('home','home',route,'Home')}
@@ -5724,8 +5830,8 @@ document.addEventListener('input', event => {
   if (profileForm) updatePublicProfileValidation(profileForm);
 });
 document.addEventListener('keydown', event => {
+  if (trapModalKeyboard(event)) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
-  if (event.key==='Escape' && modalRoot.innerHTML) modalRoot.innerHTML='';
   if (event.key==='Escape' && state.ui.profileMenu) { state.ui.profileMenu = false; syncProfileMenu(); }
 });
 
