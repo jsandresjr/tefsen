@@ -12,7 +12,7 @@ import {
 
 test('settings defaults are deterministic and privacy-safe', () => {
   const settings = defaultUserSettings({ timeZone:'Asia/Colombo' });
-  assert.equal(settings.theme, 'dark');
+  assert.equal(settings.theme, 'system');
   assert.equal(settings.language, 'en');
   assert.equal(settings.timeZone, 'Asia/Colombo');
   assert.equal(settings.notificationOpportunityDeadlines, true);
@@ -20,15 +20,19 @@ test('settings defaults are deterministic and privacy-safe', () => {
   assert.equal(settings.notificationCommunityActivity, true);
 });
 
-test('settings normalization rejects unsupported theme and language values', () => {
+test('settings normalization supports Light Dark System and rejects unknown values', () => {
+  assert.equal(normalizeUserSettings({ theme:'light' }).theme, 'light');
+  assert.equal(normalizeUserSettings({ theme:'dark' }).theme, 'dark');
+  assert.equal(normalizeUserSettings({ theme:'system' }).theme, 'system');
+
   const settings = normalizeUserSettings({
-    theme:'light',
+    theme:'sepia',
     language:'xx',
     region:'  Sri   Lanka  ',
     compactFeed:true,
     reducedMotion:true
   });
-  assert.equal(settings.theme, 'dark');
+  assert.equal(settings.theme, 'system');
   assert.equal(settings.language, 'en');
   assert.equal(settings.region, 'Sri Lanka');
   assert.equal(settings.compactFeed, true);

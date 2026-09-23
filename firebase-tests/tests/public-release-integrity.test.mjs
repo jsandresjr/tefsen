@@ -154,6 +154,7 @@ test('README distinguishes canonical routes from legacy redirects',()=>{
   assert.match(readme,/delete-account\.html.*legacy redirect/i);
 });
 
-test('Step 39 advances the PWA cache version',()=>{
-  assert.match(sw,/tefsen-web-shell-v65-public-release-integrity/);
+test('PWA cache remains newer than the Step 39 release baseline',()=>{
+  const version=Number(sw.match(/tefsen-web-shell-v(\d+)/)?.[1] || 0);
+  assert.ok(version >= 65, `Expected PWA cache version >= 65, received ${version}`);
 });
