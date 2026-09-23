@@ -421,20 +421,14 @@ function postTypeBadgeMarkup(post) {
 
 function structuredPostMarkup(post) {
   if (post.postType === 'success_story') {
-    const s = post.successData || {};
-    const facts = [
-      ['University', s.university],
-      ['Opportunity', s.opportunityName],
-      ['Country', s.country],
-      ['Subject', s.subject],
-      ['Study level', s.studyLevel],
-      ['Intake', s.intake],
-      ['Funding', s.fundingType]
-    ].filter(([,value]) => value);
+    const model=buildSuccessStoryModel(post);
+    const previewFacts=(model?.facts || [])
+      .filter(([label])=>['University','Scholarship / program / offer','Funding','Intake / year'].includes(label))
+      .slice(0,4);
     return `
-      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
-      ${facts.length ? `<div class="success-facts">${facts.map(([label,value]) => `<div class="success-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
-      <div class="community-banner">This is a student's shared experience, not an official statement of current scholarship or admission requirements.</div>`;
+      <div class="success18-card-top">${postTypeBadgeMarkup(post)}<span>Student-shared outcome</span></div>
+      ${previewFacts.length ? `<div class="success18-card-facts">${previewFacts.map(([label,value]) => `<div><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
+      <div class="success18-card-note">Personal experience · open the story for full context and verification guidance.</div>`;
   }
   if (post.postType === 'journey_story') {
     const milestones = post.publicMilestones || [];
@@ -3091,7 +3085,6 @@ function success18ContextLinks(model) {
 
 function success18DetailMarkup(post, model, comments) {
   const liked=reactionState.liked.has(post.id);
-  const saved=reactionState.saved.has(post.id);
   const facts=model.facts.length
     ? model.facts.map(([label,value])=>`<div class="success18-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')
     : '<div class="success18-fact empty"><small>Outcome details</small><b>No structured facts were provided.</b></div>';
@@ -3152,7 +3145,6 @@ function success18DetailMarkup(post, model, comments) {
       <footer class="post-actions success18-actions">
         <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like success story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
         <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
-        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
         <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
         <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
       </footer>
