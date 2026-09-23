@@ -2413,6 +2413,7 @@ async function renderJourneyDetail(opportunityId) {
     currentJourneyStates.set(opportunityId, journey);
 
     const model = buildJourneyDetailModel(journey, opportunity);
+    const postAcceptance = model.postAcceptance;
     const nextStatuses = allowedJourneyTransitions(journey.status);
     const official = deadlineInfo(opportunity?.deadline || '');
     const personal = deadlineInfo(journey.personalTargetDate || '');
@@ -2544,6 +2545,8 @@ async function renderJourneyDetail(opportunityId) {
                 <div>${completedTasks.map(taskMarkup).join('')}</div>
               </details>` : ''}
             </section>
+
+            ${postAcceptancePanelMarkup(postAcceptance, opportunityId)}
 
             <section class="journey-detail-card">
               <header class="journey-detail-card-head">
