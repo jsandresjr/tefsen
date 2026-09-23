@@ -6,6 +6,17 @@ function photoUrl(profile={}) {
   return clean(profile.photoUrl || profile.profileImageUrl || profile.photoURL || '', 2000);
 }
 
+export function resolveProfilePhotoForUpdate(current={}, authPhoto='') {
+  const aliases=['profileImageUrl','profilePhotoUrl','profilePictureUrl','photoURL','photoUrl','avatarUrl','imageUrl'];
+  for (const key of aliases) {
+    if (Object.prototype.hasOwnProperty.call(current,key)) {
+      const value=current[key];
+      return value === undefined || value === null ? '' : String(value).trim();
+    }
+  }
+  return String(authPhoto || '').trim();
+}
+
 export function publicProfileCompletion(profile={}) {
   const fields = {
     fullName:Boolean(clean(profile.fullName || profile.displayName || '',80)),
