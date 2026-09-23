@@ -1970,3 +1970,39 @@
   cursor:default;
   color:#7f9996;
 }
+
+
+.journey-stage-confirm-modal .modal-body>p{
+  color:#91a6a3;
+  line-height:1.55;
+}
+.journey-stage-confirm-note{
+  margin-top:12px;
+  padding:10px 11px;
+  display:grid;
+  grid-template-columns:23px minmax(0,1fr);
+  gap:7px;
+  align-items:start;
+  border:1px solid rgba(81,226,212,.075);
+  border-radius:11px;
+  background:rgba(81,226,212,.025);
+  color:#758f8b;
+  font-size:.61rem;
+  line-height:1.45;
+}
+.journey-stage-confirm-note svg{
+  color:#77d4cb;
+}
+.journey-stage-confirm-modal .modal-actions{
+  margin-top:18px;
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+@media(max-width:520px){
+  .journey-stage-confirm-modal .modal-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+}
