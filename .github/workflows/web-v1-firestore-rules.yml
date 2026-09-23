@@ -19,6 +19,7 @@ on:
       - 'app/js/services/community-service.js'
       - 'app/js/services/success-story-service.js'
       - 'app/js/services/journey-story-service.js'
+      - 'app/js/services/global-search-service.js'
       - 'app/js/services/data-service.js'
       - 'app/css/communities.css'
       - 'app/css/v4-profile.css'
