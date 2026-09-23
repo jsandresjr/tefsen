@@ -154,7 +154,7 @@ function buildJourneyRows(journey,opportunity,readIds,now){
   const officialDeadline=clean(opportunity?.deadline,30);
   const officialDays=daysUntil(officialDeadline,now);
 
-  if(saved && officialDays!==null){
+  if(saved && officialDays!==null && (!started || PRE_SUBMISSION.has(status))){
     const tone=deadlineTone(officialDays);
     const shouldShow=started ? tone!==null : officialDays>=0 && officialDays<=14;
     if(shouldShow){
@@ -257,7 +257,7 @@ function buildJourneyRows(journey,opportunity,readIds,now){
 
     const enrollmentDate=clean(plan.enrollmentDate,30);
     const enrollmentDays=daysUntil(enrollmentDate,now);
-    if(enrollmentDays!==null && enrollmentDays<=14){
+    if(clean(plan.offerDecision,40)!=='declined_offer' && enrollmentDays!==null && enrollmentDays<=14){
       rows.push(derivedRow({
         id:`enrollment:${opportunityId}:${enrollmentDate}:${enrollmentDays<0?'passed':enrollmentDays<=3?'soon':'14'}`,
         type:'post_acceptance',
