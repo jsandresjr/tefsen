@@ -32,6 +32,7 @@ import { buildGlobalSearchModel, mergeSearchPublicPosts } from './services/globa
 import { buildNotificationCenterModel } from './services/notification-service.js';
 import { buildSavedCommunityModel } from './services/saved-community-service.js';
 import { buildAppCheckReadiness } from './services/app-check-readiness-service.js';
+import { buildPrivacyRequestMailto } from './services/privacy-request-service.js';
 import {
   defaultUserSettings, normalizeUserSettings, buildSettingsModel,
   applyNotificationPreferences, applyRuntimeSettings
@@ -3872,6 +3873,14 @@ function renderSettings() {
   const p = state.profile || {};
   const model = buildSettingsModel({ profile:p, user:state.user || {}, settings:currentUserSettings, adminAuthorized:adminCapability });
   const s = model.settings;
+  const privacyIdentity = {
+    fullName:model.identity.name,
+    email:model.identity.email,
+    username:p.username || ''
+  };
+  const deletionRequestHref = buildPrivacyRequestMailto('deletion', privacyIdentity);
+  const accessRequestHref = buildPrivacyRequestMailto('access', privacyIdentity);
+  const portabilityRequestHref = buildPrivacyRequestMailto('portability', privacyIdentity);
   const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" role="tab" aria-selected="${settingsTab === id}">${label}</button>`;
   const panelClass = id => `settings25-panel ${settingsTab === id ? 'active' : ''}`;
   const providerIsPassword = model.identity.provider === 'Email and password';
@@ -3941,7 +3950,15 @@ function renderSettings() {
           <div class="settings25-privacy-box"><span>POTENTIALLY PUBLIC</span><ul class="settings25-list">${model.privacy.publicItems.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul></div>
         </div>
       </article>
-      <article class="settings25-card"><div class="settings25-card-head"><div><h2>Privacy documents</h2><p>Read Tefsen’s published privacy information or manage account deletion from the dedicated account page.</p></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Account deletion information</a></div></div></article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Privacy documents & requests</h2><p>Read Tefsen’s published privacy information or start a privacy request from your signed-in account. Requests open your email app; nothing is sent automatically.</p></div></div>
+        <div class="account-actions">
+          <a class="btn btn-secondary" href="../privacy-policy/">Privacy policy</a>
+          <a class="btn btn-secondary" href="${escapeHTML(accessRequestHref)}">Request access to my data</a>
+          <a class="btn btn-secondary" href="${escapeHTML(portabilityRequestHref)}">Request portable data</a>
+          <a class="btn btn-secondary" href="../delete-account/">Account deletion information</a>
+        </div>
+      </article>
     </section>`;
 
   const security = `
@@ -3956,7 +3973,12 @@ function renderSettings() {
         <div class="settings25-row"><div class="settings25-row-copy"><b>Current session</b><p>Signing out removes this authenticated session. Private caches are keyed by account so another signed-in student does not inherit your settings.</p></div><button class="btn btn-secondary" type="button" data-logout>Sign out</button></div>
       </article>
       <article class="settings25-card settings25-danger">
-        <div class="settings25-card-head"><div><h2>Account deletion</h2><p>Deletion is intentionally handled on the dedicated account-deletion flow rather than as a one-click Settings action.</p></div><a class="btn btn-danger" href="../delete-account/">Review delete-account steps</a></div>
+        <div class="settings25-card-head"><div><h2>Account deletion</h2><p>Tefsen Web does not delete the account immediately from this browser. You can review the deletion scope and timeline, then send a verified deletion request to Tefsen support.</p></div></div>
+        <div class="settings25-security-note"><b>Google Play subscriptions are separate.</b> Deleting your Tefsen account does not automatically cancel a Google Play subscription. Cancel it in Google Play if you no longer want renewal charges.</div>
+        <div class="account-actions">
+          <a class="btn btn-secondary" href="../delete-account/">Review deletion details</a>
+          <a class="btn btn-danger" href="${escapeHTML(deletionRequestHref)}">Request account deletion</a>
+        </div>
       </article>
     </section>`;
 
