@@ -30,9 +30,37 @@ service cloud.firestore {
       }
 
       function validOwnerAccountCreate() {
-        return request.resource.data.uid == uid
-          && request.resource.data.role == "student"
-          && request.resource.data.verified == false;
+        return request.resource.data.keys().hasAll([
+          "uid",
+          "email",
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "role",
+          "profileImageUrl",
+          "photoURL",
+          "verified",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "uid",
+          "email",
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "role",
+          "profileImageUrl",
+          "photoURL",
+          "verified",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.role == "student"
+        && request.resource.data.verified == false;
       }
 
       allow read: if isOwner(uid) || isAdmin();
