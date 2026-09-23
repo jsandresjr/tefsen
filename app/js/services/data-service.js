@@ -18,6 +18,8 @@ const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
 const ALLOWED_ROLES = new Set(['student', 'HS_STUDENT', 'UNI_STUDENT', 'MENTOR', 'ADMIN']);
 const userProfileCache = new Map();
+const SEARCH_USER_SCAN_LIMIT = 250;
+const SEARCH_POST_SCAN_LIMIT = 300;
 
 function likedCacheKey(userId) {
   return `tefsen_liked_${String(userId || 'guest')}`;
@@ -1093,7 +1095,16 @@ function searchCandidateMatches(term, values = []) {
 
 export async function searchAll(mode, term) {
   const qText = String(term || '').trim().toLowerCase();
-  if (!qText) return { users: [], posts: [] };
+  if (!qText) {
+    return {
+      users: [],
+      posts: [],
+      coverage: {
+        people:{ scanned:0, limit:SEARCH_USER_SCAN_LIMIT, complete:true },
+        community:{ scanned:0, limit:SEARCH_POST_SCAN_LIMIT, complete:true }
+      }
+    };
+  }
 
   if (mode === 'demo') {
     const users = DEMO_USERS
@@ -1103,31 +1114,54 @@ export async function searchAll(mode, term) {
       .map(post => normalizePost(post, post.id))
       .filter(isPublicProfileActivity)
       .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]));
-    return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
+    return {
+      users,
+      posts,
+      coverage: {
+        people:{ scanned:DEMO_USERS.length, limit:SEARCH_USER_SCAN_LIMIT, complete:true },
+        community:{ scanned:demoPosts.filter(isPublicProfileActivity).length, limit:SEARCH_POST_SCAN_LIMIT, complete:true }
+      }
+    };
   }
 
   const [usersSnap, postsSnap] = await Promise.all([
-    getDocs(query(collection(db, C.users), limit(100))),
+    getDocs(query(collection(db, C.users), limit(SEARCH_USER_SCAN_LIMIT + 1))),
     getDocs(query(
       collection(db, C.posts),
       where('status', '==', 'published'),
       where('visibility', '==', 'public'),
-      limit(100)
+      limit(SEARCH_POST_SCAN_LIMIT + 1)
     ))
   ]);
 
-  const users = usersSnap.docs
-    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
-    .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]))
-    .slice(0, 20);
+  const userDocs = usersSnap.docs.slice(0, SEARCH_USER_SCAN_LIMIT);
+  const postDocs = postsSnap.docs.slice(0, SEARCH_POST_SCAN_LIMIT);
 
-  const posts = postsSnap.docs
+  const users = userDocs
+    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
+    .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]));
+
+  const posts = postDocs
     .map(row => normalizePost(row.data(), row.id))
     .filter(isPublicProfileActivity)
-    .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]))
-    .slice(0, 30);
+    .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]));
 
-  return { users, posts: await enrichPostAuthors(mode, posts) };
+  return {
+    users,
+    posts: await enrichPostAuthors(mode, posts),
+    coverage: {
+      people:{
+        scanned:userDocs.length,
+        limit:SEARCH_USER_SCAN_LIMIT,
+        complete:usersSnap.docs.length <= SEARCH_USER_SCAN_LIMIT
+      },
+      community:{
+        scanned:postDocs.length,
+        limit:SEARCH_POST_SCAN_LIMIT,
+        complete:postsSnap.docs.length <= SEARCH_POST_SCAN_LIMIT
+      }
+    }
+  };
 }
 
 export async function updateUserProfile(mode, userId, data) {
