@@ -165,8 +165,17 @@ service cloud.firestore {
           && request.resource.data.uid == uid
           && request.resource.data.userId == uid
           && request.resource.data.documentType == "preferences"
-          && request.resource.data.schemaVersion == 1
-          && request.resource.data.theme == "dark"
+          && (
+            (request.resource.data.schemaVersion == 1 && request.resource.data.theme == "dark")
+            || (
+              request.resource.data.schemaVersion == 2
+              && (
+                request.resource.data.theme == "light"
+                || request.resource.data.theme == "dark"
+                || request.resource.data.theme == "system"
+              )
+            )
+          )
           && request.resource.data.language == "en"
           && request.resource.data.compactFeed is bool
           && request.resource.data.reducedMotion is bool
