@@ -366,8 +366,9 @@ function mobileNavButton(id, ic, route, label) {
 
 function renderProfileDropdown() {
   const p = state.profile || {};
-  const role = normalizeRole(p.role || 'Student');
-  const isAdmin = String(p.role || '').trim().toLowerCase() === 'admin';
+  const rawRole = String(p.role || 'Student');
+  const isAdmin = adminCapability === true;
+  const role = isAdmin ? 'Admin' : (rawRole.trim().toLowerCase() === 'admin' ? 'Student' : normalizeRole(rawRole));
   const plan = isAdmin ? 'Admin Full Access' : (p.subscriptionActive ? 'Student Plus' : 'Free Student');
   return `<div class="profile-menu-backdrop" data-profile-menu-dismiss aria-hidden="true"></div>
     <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Tefsen account menu">
@@ -3383,7 +3384,7 @@ async function renderPostDetail(postId) {
   if (post.postType === 'success_story') {
     const model=buildSuccessStoryModel(post);
     const own=String(post.authorId || '')===String(state.user?.uid || '');
-    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    const admin=adminCapability === true;
     if (!model || (!model.isPublic && !own && !admin)) {
       renderShell(emptyState('info','Success story unavailable','This story is not publicly available.'));
       return;
@@ -3404,7 +3405,7 @@ async function renderPostDetail(postId) {
   if (post.postType === 'journey_story') {
     const model=buildJourneyStoryModel(post);
     const own=String(post.authorId || '')===String(state.user?.uid || '');
-    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    const admin=adminCapability === true;
     if (!model || (!model.isPublic && !own && !admin)) {
       renderShell(emptyState('info','Journey story unavailable','This story is not publicly available.'));
       return;
@@ -3744,7 +3745,7 @@ async function renderProfile(userId = '') {
 
 async function renderSubscription() {
   const p = state.profile || {};
-  const policy = getWebPostingPolicy(p);
+  const policy = getWebPostingPolicy(p, { admin:adminCapability });
   let usage = { textPosts: 0, imagePosts: 0 };
   try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
 
@@ -3759,7 +3760,7 @@ async function renderSubscription() {
       : 'Learn, ask and share for free — upgrade when you need more image publishing power.';
   const price = isAdmin
     ? `<div class="lux-access-token">${icon('check',18)} Full access</div>`
-    : `<div class="lux-price"><strong>$2.99</strong><span>/ month</span></div>`;
+    : `<div class="lux-price"><strong>Google Play</strong><span>price & offers</span></div>`;
   const primaryAction = isAdmin
     ? `<button class="btn lux-primary" type="button" data-route="settings">Open admin settings</button>`
     : isPlus
@@ -3815,7 +3816,7 @@ async function renderSubscription() {
             ${!isPlus && !isAdmin ? '<span class="lux-current-pill">Current plan</span>' : ''}
           </article>
           <article class="lux-plan-card lux-plan-card-plus ${isPlus ? 'is-current' : ''}">
-            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>$2.99 <small>/ month</small></h3><p>Designed for students who contribute more.</p></div>
+            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>Student Plus <small>Price shown in Google Play</small></h3><p>Designed for students who contribute more. Exact price, taxes and promotional eligibility are shown by Google Play for your account and region.</p></div>
             <ul><li>${icon('check',16)} Unlimited text posts</li><li>${icon('check',16)} 6 image posts per day</li><li>${icon('check',16)} 2 images per post</li><li>${icon('check',16)} Up to 6 MB total</li></ul>
             ${isPlus ? '<span class="lux-current-pill">Active plan</span>' : `<a class="lux-card-cta" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Upgrade with Google Play →</a>`}
           </article>
@@ -3824,7 +3825,7 @@ async function renderSubscription() {
 
       <section class="lux-billing-card">
         <div class="lux-billing-mark">G</div>
-        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here.</p></div>
+        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here. Google Play is the authority for current price, taxes, trial or promotional eligibility, renewal and cancellation terms.</p></div>
         ${isAdmin ? '' : (isPlus ? `<a class="btn lux-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage subscription</a>` : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Open Google Play</a>`)}
       </section>
     </div>`;
@@ -3869,7 +3870,7 @@ async function handleSettingsPreferencesSave(form) {
 
 function renderSettings() {
   const p = state.profile || {};
-  const model = buildSettingsModel({ profile:p, user:state.user || {}, settings:currentUserSettings });
+  const model = buildSettingsModel({ profile:p, user:state.user || {}, settings:currentUserSettings, adminAuthorized:adminCapability });
   const s = model.settings;
   const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" role="tab" aria-selected="${settingsTab === id}">${label}</button>`;
   const panelClass = id => `settings25-panel ${settingsTab === id ? 'active' : ''}`;
@@ -4374,7 +4375,7 @@ function openCommunityComposer(context = {}) {
 }
 
 function openComposer() {
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
     <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} image posts/day` : 'Unlimited image posts'} · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
@@ -4394,8 +4395,7 @@ function canDeletePost(post) {
   if (!post || !state.user?.uid) return false;
   const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || post.authorUid || post.creatorId || '');
   const ownPost = Boolean(ownerId) && ownerId === String(state.user.uid);
-  const admin = String(state.profile?.role || '').trim().toLowerCase() === 'admin';
-  return ownPost || admin;
+  return ownPost || adminCapability === true;
 }
 
 async function openPostMenu(postId) {
@@ -4732,12 +4732,12 @@ async function handleCompose(form) {
     tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFiles
   };
   if (!payload.title || !payload.content) return;
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const totalBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
   if (imageFiles.length > policy.maxImagesPerPost) { errorEl.textContent = `Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`; return; }
   if (totalBytes > policy.maxTotalImageBytes) { errorEl.textContent = `Your plan allows ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total images per post.`; return; }
   await withButton(submit, async()=>{
-    try { const post = await createPost(state.mode,state.user,state.profile,payload); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
+    try { const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability}); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
     catch(e){ errorEl.textContent=humanError(e); }
   });
 }
@@ -5412,7 +5412,7 @@ async function handleSuccessStorySubmit(form) {
 
   await withButton(submit,async()=>{
     try{
-      const post=await createPost(state.mode,state.user,state.profile,payload);
+      const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
       modalRoot.innerHTML='';
       if(state.mode==='demo')state.posts=[post,...state.posts];
       toast('Success story published.','success');
@@ -5474,7 +5474,7 @@ async function handleJourneyStorySubmit(form) {
 
   await withButton(submit,async()=>{
     try{
-      const post=await createPost(state.mode,state.user,state.profile,payload);
+      const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
       modalRoot.innerHTML='';
       if(state.mode==='demo')state.posts=[post,...state.posts];
       toast('Journey story published.','success');
@@ -5489,7 +5489,7 @@ async function handleCommunityPostSubmit(form) {
   const fd=new FormData(form),submit=form.querySelector('button[type="submit"]');
   const subject=form.dataset.communitySubject||'', university=form.dataset.communityUniversity||'', intake=form.dataset.communityIntake||'';
   const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'General',tags:[subject,university,intake].filter(Boolean).slice(0,6),postType:'discussion',communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
+  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
 }
 
 
@@ -5629,7 +5629,7 @@ function handleInput(event) {
   if (!fileInput) return;
   const preview = fileInput.form.querySelector('[data-image-preview]');
   const files = [...(fileInput.files || [])];
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
   const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
 
