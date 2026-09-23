@@ -270,4 +270,27 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile post-acceptance workspace added
 - service-worker cache bumped to V39 and includes the post-acceptance model/view
 
-**Next: Step 13 — Public profile final design and photo management**
+**Step 13: Public profile final design and photo management — complete on branch `tefsen-web-completion-13-profile-final`**
+- public identity is visually separated from private Student Passport and application-management data
+- own-profile public statistics now use only public posts / followers / following instead of mixing private Journey metrics into the public header
+- private Student Passport completeness, saved opportunities, active Journeys and study direction moved into a clearly labelled Private Student Workspace
+- public-profile setup quality has its own deterministic completion model and is explicitly not Student Passport completeness, eligibility or admission probability
+- missing public photo / username / bio produce direct profile-improvement actions
+- missing username is no longer replaced by a fake public handle
+- username validation rejects unsupported characters instead of silently rewriting the value
+- full-name / username / bio validation is enforced in both UI and persistence service
+- profile hero rebuilt with a softer rounded media tile instead of the previous circular gradient frame
+- photo controls are directly available from the profile hero
+- edit modal supports add / replace / remove / cancel-selected-photo flows
+- selected photo preview explains that it becomes public only after save
+- temporary browser photo-preview URLs are cleaned up on save, cancel, backdrop dismiss and Escape
+- profile-photo file type and 5 MB limit remain enforced in UI and persistence service
+- photo removal returns the public profile to initials and updates the user’s community-post author photo state locally
+- edit modal clearly labels public fields and reminds students that Student Passport / Journey data is not published there
+- public bio includes privacy guidance for application IDs, addresses, financial details and document numbers
+- public profile layout is responsive across desktop, tablet and mobile
+- deterministic public-profile presentation and validation tests added
+- CI now runs when profile model/view/data-service files change
+- service-worker cache bumped to V40 and includes the new profile model/view modules
+
+**Next: Step 14 — Other-student public profile and privacy review**
