@@ -270,4 +270,25 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile post-acceptance workspace added
 - service-worker cache bumped to V39 and includes the post-acceptance model/view
 
-**Next: Step 13 — Public profile final design and photo management**
+**Step 13: Public profile final design and photo management — complete on branch `tefsen-web-completion-13-public-profile`**
+- public profile rebuilt around student identity instead of private dashboard metrics
+- profile photo changed from a heavy circular frame to a cleaner editorial avatar treatment
+- add / change / remove photo controls are directly visible on the owner profile
+- selected profile photos are clearly labelled as preview-only until Save
+- JPG / PNG / WebP and 5 MB photo limits remain enforced
+- public name, username, bio and photo are visually separated from private Student Passport and application data
+- own Student Passport / saved opportunities / active Journeys moved into a distinct Private Workspace section
+- other students never receive the owner-only private workspace model
+- public profile completeness tracks only name / username / bio / photo and explicitly states it is not an admission or reputation score
+- missing username or bio gives guidance without blocking profile save
+- invalid public name / username / bio is blocked in both UI validation and data-service persistence
+- username supports letters, numbers, dots, underscores and hyphens
+- bio character count and inline validation added
+- public activity empty state no longer encourages filler posting
+- profile editor explicitly labels which fields are public and which student data remains private
+- deterministic public-profile model and validation tests added
+- responsive desktop / tablet / mobile profile redesign added
+- CI now runs when profile service or final profile CSS changes
+- service-worker cache bumped to V40 and includes the public-profile model
+
+**Next: Step 14 — Other-student public profile and privacy review**

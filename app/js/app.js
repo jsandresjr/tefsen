@@ -23,6 +23,7 @@ import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
+import { buildPublicProfileModel, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
@@ -2709,14 +2710,14 @@ async function renderProfile(userId = '') {
   const posts = state.posts.filter(p => postBelongsToUser(p, profile?.uid || ''));
 
   let follow = {
-    following: false,
-    followersCount: Number(profile?.followersCount || 0),
-    followingCount: Number(profile?.followingCount || 0)
+    following:false,
+    followersCount:Number(profile?.followersCount || 0),
+    followingCount:Number(profile?.followingCount || 0)
   };
   try {
     follow = await getFollowState(state.mode, state.user.uid, profile?.uid || '');
   } catch {
-    // Keep the public profile usable if follow state is temporarily unavailable.
+    // Public profile remains usable even if social state is unavailable.
   }
 
   let passport = null;
@@ -2733,101 +2734,126 @@ async function renderProfile(userId = '') {
     ? journeys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status))
     : [];
   const savedOpportunities = own ? journeys.filter(row => row.saved).length : 0;
-  const goal = own
-    ? (passport?.studyGoal || (passport?.mainField
-        ? `${passport.targetEducationLevel || 'Study'} opportunity in ${passport.mainField}`
-        : 'Add your education goal to Student Passport'))
-    : '';
 
-  const actions = own
-    ? `<div class="v3-profile-actions"><button class="btn btn-secondary" data-edit-profile>${icon('edit',17)} Edit public profile</button><button class="btn btn-primary" type="button" data-route="passport">Student Passport</button></div>`
-    : `<div class="v3-profile-actions"><button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button><button class="btn btn-secondary" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button></div>`;
+  const model = buildPublicProfileModel({
+    profile:{...profile,followersCount:follow.followersCount,followingCount:follow.followingCount},
+    own,
+    posts,
+    passportCompleteness:completeness,
+    activeJourneys:activeJourneys.length,
+    savedOpportunities
+  });
 
-  const stats = own
-    ? `<div class="v3-profile-metrics">
-        <div><strong>${completeness ? `${completeness}%` : 'Start'}</strong><span>Student Passport</span></div>
-        <div><strong>${savedOpportunities || '—'}</strong><span>Saved opportunities</span></div>
-        <div><strong>${activeJourneys.length || '—'}</strong><span>Active journeys</span></div>
-        <div><strong>${posts.length || '—'}</strong><span>Community posts</span></div>
+  const ownActions = `<div class="profile13-actions">
+    <button class="btn btn-primary" type="button" data-edit-profile>${icon('edit',17)} Edit public profile</button>
+    <button class="btn btn-secondary" type="button" data-route="passport">Student Passport</button>
+  </div>`;
+
+  const otherActions = `<div class="profile13-actions">
+    <button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button>
+    <button class="btn btn-secondary" type="button" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button>
+  </div>`;
+
+  const photo = own
+    ? `<div class="profile13-photo-block">
+        <button class="profile13-photo-button" type="button" data-profile-photo-edit aria-label="${model.hasPhoto ? 'Change profile photo' : 'Add profile photo'}">
+          <span class="profile13-avatar">${avatar(profile,'lg')}</span>
+          <span class="profile13-photo-edit">${icon('edit',15)}</span>
+        </button>
+        <div class="profile13-photo-links">
+          <button type="button" data-profile-photo-edit>${model.hasPhoto ? 'Change photo' : 'Add photo'}</button>
+          ${model.hasPhoto ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : ''}
+        </div>
       </div>`
-    : `<div class="v3-profile-metrics compact">
-        <div><strong>${formatCount(posts.length)}</strong><span>Posts</span></div>
-        <div><strong>${formatCount(follow.followersCount)}</strong><span>Followers</span></div>
-        <div><strong>${formatCount(follow.followingCount)}</strong><span>Following</span></div>
-      </div>`;
+    : `<div class="profile13-photo-block public"><span class="profile13-avatar">${avatar(profile,'lg')}</span></div>`;
 
-  const pathPanel = own
-    ? `<aside class="v3-profile-path">
-        <div class="v3-profile-path-head"><span class="opportunity-kicker">PRIVATE TO YOU</span><span class="v3-private-chip">Student path</span></div>
-        <h2>${escapeHTML(goal)}</h2>
-        <div class="v3-profile-path-row">
-          <div><span>Student Passport</span><strong>${completeness}%</strong></div>
-          <div class="v2-progress-track"><i style="width:${completeness}%"></i></div>
-        </div>
-        <div class="v3-profile-path-grid">
-          <button type="button" data-route="opportunities"><span>${icon('compass',18)}</span><div><b>Find opportunities</b><small>See structured matches</small></div></button>
-          <button type="button" data-route="journeys"><span>${icon('check',18)}</span><div><b>Continue Journey</b><small>${activeJourneys.length ? `${activeJourneys.length} active application${activeJourneys.length===1?'':'s'}` : 'Start from a saved opportunity'}</small></div></button>
-        </div>
-      </aside>`
-    : `<aside class="v3-profile-path public">
-        <span class="opportunity-kicker">PUBLIC PROFILE</span>
-        <h2>Student community profile</h2>
-        <p>Public posts and shared outcomes appear here. Private Student Passport and application progress are never shown.</p>
-      </aside>`;
+  const publicStats = `<div class="profile13-public-stats">
+    <div><strong>${formatCount(model.publicStats.posts)}</strong><span>Posts</span></div>
+    <div><strong>${formatCount(model.publicStats.followers)}</strong><span>Followers</span></div>
+    <div><strong>${formatCount(model.publicStats.following)}</strong><span>Following</span></div>
+  </div>`;
+
+  const identityGuide = own ? `<section class="profile13-completion">
+    <div class="profile13-completion-head">
+      <div><span>PUBLIC PROFILE QUALITY</span><strong>${model.identity.percent}%</strong></div>
+      <div class="profile13-completion-track"><i style="width:${model.identity.percent}%"></i></div>
+    </div>
+    <div class="profile13-completion-items">
+      ${model.identity.checks.map(item => `<button type="button" class="${item.complete ? 'complete' : ''}" data-edit-profile>
+        <span>${item.complete ? '✓' : '+'}</span><b>${escapeHTML(item.label)}</b>
+      </button>`).join('')}
+    </div>
+    <p>This score only reflects your public profile completeness. It is not an eligibility, admission or reputation score.</p>
+  </section>` : '';
+
+  const privateWorkspace = own ? `<section class="profile13-private-workspace">
+    <header>
+      <div><span class="opportunity-kicker">PRIVATE WORKSPACE</span><h2>Your student planning stays separate from your public identity.</h2><p>Student Passport, saved opportunities and application Journeys are private account data unless you explicitly publish a community story.</p></div>
+      <span class="profile13-private-chip">${icon('check',14)} Private to you</span>
+    </header>
+    <div class="profile13-private-grid">
+      <button type="button" data-route="passport">
+        <span class="profile13-private-icon">${icon('user',18)}</span>
+        <div><small>STUDENT PASSPORT</small><strong>${model.privateWorkspace.passportCompleteness}% complete</strong><p>Improve the private profile used for opportunity matching.</p></div>
+        <span>→</span>
+      </button>
+      <button type="button" data-route="journeys">
+        <span class="profile13-private-icon">${icon('check',18)}</span>
+        <div><small>ACTIVE JOURNEYS</small><strong>${model.privateWorkspace.activeJourneys || 'No active application'}</strong><p>${model.privateWorkspace.activeJourneys ? 'Continue application preparation and next steps.' : 'Start from a saved opportunity when you are ready.'}</p></div>
+        <span>→</span>
+      </button>
+      <button type="button" data-route="opportunities">
+        <span class="profile13-private-icon">${icon('bookmark',18)}</span>
+        <div><small>SAVED OPPORTUNITIES</small><strong>${model.privateWorkspace.savedOpportunities || 'Nothing saved yet'}</strong><p>Review opportunities privately before starting an application Journey.</p></div>
+        <span>→</span>
+      </button>
+    </div>
+  </section>` : `<section class="profile13-public-privacy-note">
+    ${icon('info',16)}
+    <div><b>Public community profile</b><p>Only profile information and community activity this student chooses to make public appear here. Student Passport and private application planning are not shown.</p></div>
+  </section>`;
 
   const activity = posts.length
     ? posts.map(postCard).join('')
-    : `<section class="v3-empty-profile">
-        <div class="v3-empty-icon">${icon('comment',22)}</div>
-        <h3>${own ? 'Your community space is ready.' : 'No public posts yet.'}</h3>
-        <p>${own ? 'Share a useful discussion, scholarship success, or selected journey story when you have something that can help another student.' : 'This student has not shared any public community posts yet.'}</p>
-        ${own ? '<div class="v3-empty-actions"><button class="btn btn-primary" type="button" data-route="explore">Open Community</button><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></div>' : ''}
+    : `<section class="profile13-empty">
+        <div class="profile13-empty-mark">${icon('comment',22)}</div>
+        <h3>${own ? 'No public activity yet.' : 'No public posts yet.'}</h3>
+        <p>${own ? 'Your profile does not need filler content. Share only useful discussions, success stories or selected Journey experiences when you want them public.' : 'This student has not shared any public community posts yet.'}</p>
+        ${own ? '<div><button class="btn btn-primary" type="button" data-route="explore">Open Community</button><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></div>' : ''}
       </section>`;
 
-  const content = `${demoBanner()}<div class="v3-profile-page">
-    <section class="v3-profile-shell">
-      <div class="v3-profile-identity">
-        <div class="v4-profile-photo-wrap">
-          ${own ? `<button class="v4-profile-photo-button" type="button" data-profile-photo-edit aria-label="${profile?.photoUrl ? 'Change profile photo' : 'Add profile photo'}">
-            <span class="v3-profile-avatar">${avatar(profile,'lg')}</span>
-            <span class="v4-profile-photo-badge" aria-hidden="true">${icon('edit',15)}</span>
-          </button>
-          <div class="v4-profile-photo-actions">
-            <button type="button" data-profile-photo-edit>${profile?.photoUrl ? 'Change photo' : 'Add photo'}</button>
-            ${profile?.photoUrl ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : ''}
-          </div>` : `<span class="v3-profile-avatar">${avatar(profile,'lg')}</span>`}
-        </div>
-        <div class="v3-profile-copy">
-          <div class="v3-profile-name-row">
-            <div>
-              <h1>${escapeHTML(profile?.fullName || 'Tefsen User')} ${verifiedMark(profile?.verified, profile?.role)}</h1>
-              <span class="handle">@${escapeHTML(profile?.username || 'tefsen-user')}</span>
-            </div>
-            ${rolePill(profile?.role || 'Student')}
+  const content = `${demoBanner()}<div class="profile13-page">
+    <section class="profile13-hero">
+      <div class="profile13-hero-glow"></div>
+      <div class="profile13-identity">
+        ${photo}
+        <div class="profile13-copy">
+          <div class="profile13-eyebrow">
+            <span>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</span>
+            ${profile?.verified ? '<span class="profile13-verified">Verified</span>' : ''}
           </div>
-          <p>${escapeHTML(profile?.bio || 'Building my education journey with Tefsen.')}</p>
-          ${actions}
+          <h1>${escapeHTML(model.fullName)} ${verifiedMark(profile?.verified, profile?.role)}</h1>
+          <button class="profile13-handle ${model.username ? '' : 'missing'}" type="button" ${own ? 'data-edit-profile' : 'disabled'}>${escapeHTML(model.handleLabel)}</button>
+          <p class="profile13-bio ${model.bio ? '' : 'missing'}">${escapeHTML(model.bioLabel)}</p>
+          ${own ? ownActions : otherActions}
+          ${publicStats}
         </div>
       </div>
-      ${pathPanel}
+      ${identityGuide}
     </section>
 
-    ${stats}
+    ${privateWorkspace}
 
-    <section class="v3-profile-activity">
-      <header class="v3-section-head">
-        <div>
-          <span class="opportunity-kicker">COMMUNITY</span>
-          <h2>${own ? 'Your public activity' : 'Public activity'}</h2>
-          <p>${own ? 'Discussions and outcomes you choose to share publicly.' : 'Public discussions and outcomes shared by this student.'}</p>
-        </div>
-        ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Community</button>' : ''}
+    <section class="profile13-activity">
+      <header class="profile13-section-head">
+        <div><span class="opportunity-kicker">COMMUNITY</span><h2>${own ? 'Your public activity' : 'Public activity'}</h2><p>${own ? 'Only things you intentionally share with the Tefsen community appear here.' : 'Public discussions and outcomes shared by this student.'}</p></div>
+        ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Open Community</button>' : ''}
       </header>
       <div class="feed-list">${activity}</div>
     </section>
   </div>`;
 
-  renderShell(content, { wide:true, right:false });
+  renderShell(content,{wide:true,right:false});
 }
 
 async function renderSubscription() {
@@ -3133,30 +3159,60 @@ function openEditProfile() {
   const p = state.profile || {};
   const hasPhoto = Boolean(safeUrl(p.photoUrl || p.profileImageUrl || p.photoURL || ''));
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
-    <section class="modal v4-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
-      <header class="modal-head"><h2 id="edit-profile-title">Edit profile</h2><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
+    <section class="modal v4-profile-modal profile13-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+      <header class="modal-head"><div><span class="profile13-modal-kicker">PUBLIC PROFILE</span><h2 id="edit-profile-title">Edit how students see you</h2></div><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
       <div class="modal-body">
-        <form class="form-grid" data-profile-form data-profile-modal>
-          <section class="v4-photo-editor">
+        <form class="form-grid profile13-editor-form" data-profile-form data-profile-modal>
+          <section class="v4-photo-editor profile13-photo-editor">
             <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
             <div class="v4-photo-editor-copy">
               <b>Profile photo</b>
-              <p>Use a clear photo that represents you. JPG, PNG or WebP, up to 5 MB.</p>
+              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. A selected image stays a preview until you save.</p>
               <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
               <div class="v4-photo-editor-actions">
-                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Change photo' : 'Add photo'}</button>
-                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove photo</button>' : ''}
+                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Choose a new photo' : 'Choose photo'}</button>
+                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove current photo</button>' : ''}
               </div>
+              <small class="profile13-photo-state" data-profile-photo-state>${hasPhoto ? 'Current public photo' : 'No public photo yet'}</small>
             </div>
           </section>
-          <div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div>
-          <div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div>
-          <div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div>
-          <div class="v4-profile-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div>
+
+          <section class="profile13-public-fields">
+            <div class="profile13-editor-note">${icon('info',16)}<p><b>These fields are public.</b> Your Student Passport, saved opportunities and Journey planning are not edited here and remain private.</p></div>
+
+            <div class="field">
+              <label>Public name</label>
+              <input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80" autocomplete="name">
+              <small>The name shown on posts and your profile.</small>
+              <span class="field-error" data-profile-error="fullName" hidden></span>
+            </div>
+
+            <div class="field">
+              <label>Username <small>Optional</small></label>
+              <div class="profile13-username-input"><span>@</span><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40" autocomplete="off" placeholder="yourname"></div>
+              <small>Letters, numbers, dots, underscores and hyphens only.</small>
+              <span class="field-error" data-profile-error="username" hidden></span>
+            </div>
+
+            <div class="field">
+              <div class="profile13-field-label"><label>Bio <small>Optional</small></label><small><span data-profile-bio-count>${String(p.bio || '').length}</span>/500</small></div>
+              <textarea class="textarea" name="bio" maxlength="500" placeholder="What do you study, care about, or share with the community?">${escapeHTML(p.bio || '')}</textarea>
+              <span class="field-error" data-profile-error="bio" hidden></span>
+            </div>
+
+            <div class="journey-planning-summary profile13-editor-summary" data-profile-summary hidden></div>
+          </section>
+
+          <div class="v4-profile-modal-footer">
+            <button class="btn btn-ghost" type="button" data-close-modal>Cancel</button>
+            <button class="btn btn-primary" type="submit">Save public profile</button>
+          </div>
         </form>
       </div>
     </section>
   </div>`;
+  const form = modalRoot.querySelector('[data-profile-form]');
+  if (form) updatePublicProfileValidation(form);
 }
 
 function openRemoveProfilePhotoModal() {
@@ -3871,24 +3927,78 @@ async function handleMessage(form) {
   try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
   catch(e){ input.value=text; toast(humanError(e),'error'); }
 }
+function updatePublicProfileValidation(form) {
+  const fd = new FormData(form);
+  const draft = {
+    fullName:String(fd.get('fullName') || ''),
+    username:String(fd.get('username') || ''),
+    bio:String(fd.get('bio') || '')
+  };
+  const validation = validatePublicProfileDraft(draft);
+
+  form.querySelectorAll('[data-profile-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector('[data-profile-error="' + error.field + '"]');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const bioCount = form.querySelector('[data-profile-bio-count]');
+  const bio = form.elements.namedItem('bio');
+  if (bioCount && bio instanceof HTMLTextAreaElement) bioCount.textContent = String(bio.value.length);
+
+  const summary = form.querySelector('[data-profile-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  return { draft:validation.value, validation };
+}
+
 async function handleProfileSave(form) {
   const fd = new FormData(form);
+  const { draft, validation } = updatePublicProfileValidation(form);
+  if (!validation.valid) {
+    const first = validation.errors[0];
+    const field = form.elements.namedItem(first?.field || '');
+    if (field instanceof HTMLElement) field.focus();
+    toast('Check the highlighted public profile field before saving.', 'error');
+    return;
+  }
+
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
   await withButton(submit, async () => {
     try {
       const profile = await updateUserProfile(state.mode, state.user.uid, {
-        fullName: String(fd.get('fullName') || '').trim(),
-        username: String(fd.get('username') || '').trim(),
-        bio: String(fd.get('bio') || '').trim(),
-        profileImageFile: selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+        fullName:draft.fullName,
+        username:draft.username,
+        bio:draft.bio,
+        profileImageFile:selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
       });
       state.profile = { ...state.profile, ...profile };
       state.posts = state.posts.map(post => post.authorId === state.user.uid
-        ? { ...post, authorName: profile.fullName, authorPhotoUrl: profile.photoUrl || '' }
+        ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
+      const input = form.querySelector('[data-profile-photo-input]');
+      if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
       modalRoot.innerHTML = '';
-      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Profile and photo updated.' : 'Profile updated.', 'success');
+      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
     } catch (error) {
       toast(humanError(error), 'error');
@@ -4135,6 +4245,8 @@ function handleInput(event) {
     if (preview) {
       preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
     }
+    const stateEl = input.form?.querySelector('[data-profile-photo-state]');
+    if (stateEl) stateEl.textContent = 'Preview selected — save profile to publish this photo';
     return;
   }
 
@@ -4207,7 +4319,12 @@ document.addEventListener('input', event => {
     return;
   }
   const postAcceptanceForm = event.target.closest?.('[data-post-acceptance-plan-form]');
-  if (postAcceptanceForm) updatePostAcceptanceValidation(postAcceptanceForm);
+  if (postAcceptanceForm) {
+    updatePostAcceptanceValidation(postAcceptanceForm);
+    return;
+  }
+  const profileForm = event.target.closest?.('[data-profile-form]');
+  if (profileForm) updatePublicProfileValidation(profileForm);
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
