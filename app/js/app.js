@@ -4170,7 +4170,19 @@ function adminReportCard(report) {
 
 async function renderAdmin() {
   if (!adminCapability) {
-    renderShell(`${emptyState('info','Admin authorization required','This area requires a Firebase Auth admin custom claim. A profile label alone is not enough.')}`, { wide:true, right:false });
+    const adminUid = escapeHTML(state.user?.uid || 'Unavailable');
+    renderShell(`
+      ${emptyState('info','Admin authorization required','Tefsen protects publishing and moderation with a Firebase Auth custom claim. Your public username or profile role cannot grant admin access by itself.')}
+      <section class="panel section-card" style="margin-top:16px">
+        <div class="panel-title"><div><h2>Secure admin setup</h2><small>Firebase Auth custom claim required</small></div></div>
+        <div class="community-banner" style="margin-bottom:14px">
+          <b>Signed-in Firebase UID</b><br>
+          <code style="display:block;margin-top:8px;word-break:break-all;user-select:all">${adminUid}</code>
+        </div>
+        <p style="color:var(--muted);line-height:1.7;margin:0">
+          Grant this exact Firebase Authentication user the custom claim <code>admin: true</code> from a trusted Firebase Admin SDK environment, then sign out and sign back in so the ID token refreshes. Do not grant admin by matching the username <b>JsJr</b> in browser code.
+        </p>
+      </section>`, { wide:true, right:false });
     return;
   }
 
