@@ -3,12 +3,13 @@ import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
 import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
+import { buildPublicProfileRecord, normalizePublicProfileRecord } from './public-profile-record-service.js';
 import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
 import { normalizeUserSettings, readSettingsCache, writeSettingsCache } from './settings-service.js';
 import { mergeNotificationReadIds, notificationReadStatePayload, mergeActivityNotificationRecords } from './notification-state-service.js';
 import {
-  collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc,
+  collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, writeBatch,
   onSnapshot, query, where, limit, serverTimestamp, documentId,
   getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
@@ -89,6 +90,31 @@ function savedReferenceCollection(userId) {
 
 function userSettingsDocument(userId) {
   return doc(db, C.users, String(userId), 'settings', 'preferences');
+}
+
+function publicProfileDocument(userId) {
+  return doc(db, C.publicProfiles, String(userId));
+}
+
+function publicProfileWritePayload(userId, source = {}) {
+  return {
+    ...buildPublicProfileRecord(userId, source),
+    updatedAt:serverTimestamp()
+  };
+}
+
+async function syncOwnPublicProfile(mode, userId, source = {}) {
+  if (!userId || mode === 'demo') return;
+  try {
+    await setDoc(
+      publicProfileDocument(userId),
+      publicProfileWritePayload(userId, source),
+      { merge:true }
+    );
+  } catch {
+    // The private account remains usable while production public-profile rules
+    // are being deployed. Public discovery will not fall back to private users.
+  }
 }
 
 export async function getUserSettings(mode, userId) {
@@ -267,7 +293,7 @@ export function normalizeUser(raw = {}, id = '') {
     subscriptionStatus: subscription.status,
     subscriptionPlan: subscription.plan,
     subscriptionExpiresAt: subscription.expiresAt,
-    username: raw.username || raw.handle || (email ? String(email).split('@')[0] : ''),
+    username: raw.username || raw.handle || '',
     bio: raw.bio || raw.about || ''
   };
 }
@@ -413,9 +439,9 @@ export async function getUserById(mode, userId) {
     return normalized;
   }
 
-  const snap = await getDoc(doc(db, C.users, userId));
+  const snap = await getDoc(publicProfileDocument(userId));
   const normalized = snap.exists()
-    ? projectPublicUser(normalizeUser(snap.data(), snap.id), snap.id)
+    ? projectPublicUser(normalizePublicProfileRecord(snap.data(), snap.id), snap.id)
     : null;
   if (normalized) userProfileCache.set(key, normalized);
   return normalized;
@@ -430,12 +456,14 @@ export async function getProfile(mode, user) {
   const snap = await getDoc(doc(db, C.users, user.uid));
   const fallback = {
     uid: user.uid,
-    fullName: user.displayName || user.email || 'Tefsen User',
+    fullName: user.displayName || 'Tefsen User',
     email: user.email || '',
     profileImageUrl: user.photoURL || '',
     role: normalizeRoleValue('', user.email || '')
   };
-  return normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
+  const profile=normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
+  await syncOwnPublicProfile(mode,user.uid,profile);
+  return profile;
 }
 
 export function subscribePosts(mode, callback, errorCallback = console.error) {
@@ -1110,7 +1138,7 @@ export async function searchAll(mode, term) {
   }
 
   const [usersSnap, postsSnap] = await Promise.all([
-    getDocs(query(collection(db, C.users), limit(SEARCH_USER_SCAN_LIMIT + 1))),
+    getDocs(query(collection(db, C.publicProfiles), limit(SEARCH_USER_SCAN_LIMIT + 1))),
     getDocs(query(
       collection(db, C.posts),
       where('status', '==', 'published'),
@@ -1123,7 +1151,7 @@ export async function searchAll(mode, term) {
   const postDocs = postsSnap.docs.slice(0, SEARCH_POST_SCAN_LIMIT);
 
   const users = userDocs
-    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id));
+    .map(row => projectPublicUser(normalizePublicProfileRecord(row.data(), row.id), row.id));
 
   const posts = postDocs
     .map(row => normalizePost(row.data(), row.id))
@@ -1209,7 +1237,14 @@ export async function updateUserProfile(mode, userId, data) {
     payload.createdAt = serverTimestamp();
   }
 
-  await setDoc(userRef, payload, { merge: true });
+  const batch=writeBatch(db);
+  batch.set(userRef,payload,{ merge:true });
+  batch.set(
+    publicProfileDocument(userId),
+    publicProfileWritePayload(userId,{ ...current, ...payload }),
+    { merge:true }
+  );
+  await batch.commit();
   userProfileCache.delete(`${mode}:${userId}`);
   return normalizeUser({ ...current, ...payload }, userId);
 }
@@ -1235,15 +1270,23 @@ export async function removeProfilePhoto(mode, userId) {
   }
 
   const userRef = doc(db, C.users, userId);
-  await setDoc(userRef, {
-    profileImageUrl: '',
-    photoURL: '',
-    updatedAt: serverTimestamp()
-  }, { merge: true });
+  const currentSnap=await getDoc(userRef);
+  const current=currentSnap.exists() ? currentSnap.data() : {};
+  const batch=writeBatch(db);
+  batch.set(userRef,{
+    profileImageUrl:'',
+    photoURL:'',
+    updatedAt:serverTimestamp()
+  },{ merge:true });
+  batch.set(
+    publicProfileDocument(userId),
+    publicProfileWritePayload(userId,{ ...current, profileImageUrl:'', photoURL:'', photoUrl:'' }),
+    { merge:true }
+  );
+  await batch.commit();
 
   userProfileCache.delete(`${mode}:${userId}`);
-  const snap = await getDoc(userRef);
-  return snap.exists() ? normalizeUser(snap.data(), userId) : null;
+  return normalizeUser({ ...current, profileImageUrl:'', photoURL:'' }, userId);
 }
 
 

@@ -39,6 +39,42 @@ beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
+    await setDoc(doc(db, 'users', 'user-a'), {
+      uid:'user-a',
+      email:'private-a@example.test',
+      fullName:'Amina Rahman',
+      displayName:'Amina Rahman',
+      username:'amina',
+      bio:'Student',
+      role:'student',
+      verified:false,
+      subscriptionActive:true,
+      profileImageUrl:'',
+      photoURL:''
+    });
+    await setDoc(doc(db, 'users', 'user-b'), {
+      uid:'user-b',
+      email:'private-b@example.test',
+      fullName:'Daniel Lee',
+      displayName:'Daniel Lee',
+      username:'daniel',
+      bio:'Student',
+      role:'student',
+      verified:false,
+      subscriptionActive:false,
+      profileImageUrl:'',
+      photoURL:''
+    });
+    await setDoc(doc(db, 'public_profiles', 'user-a'), {
+      uid:'user-a',
+      schemaVersion:1,
+      fullName:'Amina Rahman',
+      username:'amina',
+      bio:'Student',
+      profileImageUrl:'',
+      photoURL:'',
+      updatedAt:123
+    });
     await setDoc(doc(db, 'opportunities', 'public-opportunity'), {
       title: 'Public scholarship',
       status: 'published',
@@ -99,6 +135,102 @@ beforeEach(async () => {
       details:'Legacy moderation item'
     });
   });
+});
+
+test('Private user account document is readable only by its owner or admin', async () => {
+  const owner=env.authenticatedContext('user-a').firestore();
+  const other=env.authenticatedContext('user-b').firestore();
+  const anon=env.unauthenticatedContext().firestore();
+  const admin=env.authenticatedContext('admin-user',{admin:true}).firestore();
+
+  await assertSucceeds(getDoc(doc(owner,'users','user-a')));
+  await assertSucceeds(getDoc(doc(admin,'users','user-a')));
+  await assertFails(getDoc(doc(other,'users','user-a')));
+  await assertFails(getDoc(doc(anon,'users','user-a')));
+
+  await assertSucceeds(updateDoc(doc(owner,'users','user-a'),{
+    fullName:'Amina Updated',
+    displayName:'Amina Updated',
+    username:'amina.updated',
+    bio:'Updated public identity',
+    updatedAt:456
+  }));
+  await assertFails(updateDoc(doc(owner,'users','user-a'),{ role:'ADMIN' }));
+  await assertFails(updateDoc(doc(owner,'users','user-a'),{ subscriptionActive:false }));
+  await assertFails(updateDoc(doc(other,'users','user-a'),{ bio:'tampered' }));
+  await assertFails(deleteDoc(doc(owner,'users','user-a')));
+});
+
+test('Owner account creation cannot seed privileged or subscription fields', async () => {
+  const owner=env.authenticatedContext('user-c').firestore();
+  const adminAttempt=env.authenticatedContext('user-d').firestore();
+  const subscriptionAttempt=env.authenticatedContext('user-e').firestore();
+  const valid={
+    uid:'user-c',
+    email:'user-c@example.test',
+    fullName:'New Student',
+    displayName:'New Student',
+    username:'',
+    bio:'',
+    role:'student',
+    profileImageUrl:'',
+    photoURL:'',
+    verified:false,
+    createdAt:123,
+    updatedAt:123
+  };
+  await assertSucceeds(setDoc(doc(owner,'users','user-c'),valid));
+  await assertFails(setDoc(doc(owner,'users','user-d'),{...valid,uid:'user-d'}));
+  await assertFails(setDoc(doc(adminAttempt,'users','user-d'),{
+    ...valid,
+    uid:'user-d',
+    email:'user-d@example.test',
+    role:'ADMIN'
+  }));
+  await assertFails(setDoc(doc(subscriptionAttempt,'users','user-e'),{
+    ...valid,
+    uid:'user-e',
+    email:'user-e@example.test',
+    subscriptionActive:true
+  }));
+});
+
+test('Public profile exposes only the dedicated safe public record', async () => {
+  const owner=env.authenticatedContext('user-a').firestore();
+  const other=env.authenticatedContext('user-b').firestore();
+  const anon=env.unauthenticatedContext().firestore();
+
+  await assertSucceeds(getDoc(doc(owner,'public_profiles','user-a')));
+  await assertSucceeds(getDoc(doc(other,'public_profiles','user-a')));
+  await assertSucceeds(getDoc(doc(anon,'public_profiles','user-a')));
+
+  const valid={
+    uid:'user-b',
+    schemaVersion:1,
+    fullName:'Daniel Lee',
+    username:'daniel',
+    bio:'Physics student',
+    profileImageUrl:'',
+    photoURL:'',
+    updatedAt:123
+  };
+  await assertSucceeds(setDoc(doc(other,'public_profiles','user-b'),valid));
+  await assertFails(setDoc(doc(owner,'public_profiles','user-b'),valid));
+  await assertFails(setDoc(doc(owner,'public_profiles','user-a'),{
+    uid:'user-a',
+    schemaVersion:1,
+    fullName:'Amina Rahman',
+    username:'amina',
+    bio:'Student',
+    profileImageUrl:'',
+    photoURL:'',
+    email:'private-a@example.test',
+    updatedAt:123
+  }));
+  await assertFails(updateDoc(doc(owner,'public_profiles','user-a'),{ role:'ADMIN' }));
+  await assertFails(updateDoc(doc(owner,'public_profiles','user-a'),{ verified:true }));
+  await assertFails(updateDoc(doc(owner,'public_profiles','user-a'),{ subscriptionPlan:'Premium' }));
+  await assertFails(deleteDoc(doc(owner,'public_profiles','user-a')));
 });
 
 test('Student Passport is owner-only', async () => {
