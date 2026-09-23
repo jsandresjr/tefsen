@@ -629,13 +629,20 @@ export async function createPost(mode, user, profile, payload) {
 
   const postRef = doc(collection(db, C.posts));
   const imageUrls = [];
-  for (const file of imageFiles) {
-    const cleanName = String(file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+  for (const [index,file] of imageFiles.entries()) {
+    const slot=String(index+1);
     const objectRef = ref(
       storage,
-      `post_images/${user.uid}/${postRef.id}/${Date.now()}-${uid('img')}-${cleanName}`
+      `post_images/${user.uid}/${postRef.id}/${slot}`
     );
-    const upload = await uploadBytes(objectRef, file, { contentType: file.type });
+    const upload = await uploadBytes(objectRef, file, {
+      contentType:file.type,
+      customMetadata:{
+        ownerUid:String(user.uid),
+        postId:String(postRef.id),
+        slot
+      }
+    });
     imageUrls.push(await getDownloadURL(upload.ref));
   }
 
@@ -715,6 +722,17 @@ export async function deletePost(mode, userId, postId) {
     return true;
   }
   await deleteDoc(doc(db, C.posts, String(postId)));
+
+  // New Web uploads use two deterministic owner slots. Delete both after the
+  // public post disappears; legacy random-name objects are left for trusted
+  // backend cleanup rather than broad client-side listing/deletion.
+  await Promise.allSettled(['1','2'].map(async slot => {
+    try {
+      await deleteObject(ref(storage,`post_images/${userId}/${postId}/${slot}`));
+    } catch (error) {
+      if (error?.code !== 'storage/object-not-found') throw error;
+    }
+  }));
   return true;
 }
 
