@@ -1,4 +1,4 @@
-import { initFirebase } from './firebase-client.js';
+import { initFirebase, appCheck } from './firebase-client.js';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
@@ -31,6 +31,7 @@ import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/jo
 import { buildGlobalSearchModel, mergeSearchPublicPosts } from './services/global-search-service.js';
 import { buildNotificationCenterModel } from './services/notification-service.js';
 import { buildSavedCommunityModel } from './services/saved-community-service.js';
+import { buildAppCheckReadiness } from './services/app-check-readiness-service.js';
 import {
   defaultUserSettings, normalizeUserSettings, buildSettingsModel,
   applyNotificationPreferences, applyRuntimeSettings
@@ -4067,14 +4068,20 @@ async function renderAdmin() {
       ${moderationModel.resolved.length?`<section class="moderation27-history"><header><span class="opportunity-kicker">RECENT OUTCOMES</span><h2>Reviewed reports</h2></header><div class="admin-list">${moderationModel.resolved.slice(0,30).map(adminReportCard).join('')}</div></section>`:''}
     </div>`;
 
-    const appCheckConfigured = Boolean(window.TEFSEN_APPCHECK_SITE_KEY);
+    const appCheckReadiness=buildAppCheckReadiness({
+      mode:state.mode,
+      siteKey:window.TEFSEN_APPCHECK_SITE_KEY,
+      initialized:Boolean(appCheck)
+    });
     const reportStats=buildModerationQueue(currentAdminReports);
     const hero=adminTab==='reports'
       ? `<section class="admin-hero moderation27-hero"><div><span class="opportunity-kicker">TRUST & SAFETY</span><h1>Community moderation</h1><p>Review private student reports, inspect the reported public post, and record every admin action in an append-only audit trail.</p></div><div class="admin-stat"><strong>${reportStats.counts.open}</strong><span>open reports</span></div><div class="admin-stat"><strong>${reportStats.counts.inReview}</strong><span>in review</span></div><div class="admin-stat"><strong>${reportStats.counts.legacy}</strong><span>legacy reports</span></div></section>`
       : `<section class="admin-hero"><div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div><div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div><div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div><div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div></section>`;
 
     const content = `${demoBanner()}<div class="admin-shell">
-      ${state.mode === 'firebase' && !appCheckConfigured ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check is not configured yet. Add the Web reCAPTCHA/App Check site key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='missing-key' ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check site key is missing. Configure the reCAPTCHA v3 App Check key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='initialization-failed' ? '<div class="community-banner"><b>Launch blocker:</b> An App Check key is configured, but App Check did not initialize in this session. Fix initialization before considering enforcement.</div>' : ''}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='client-ready' ? '<div class="community-banner"><b>App Check client initialized.</b> This does not prove enforcement is enabled. Verify valid traffic first, then confirm enforcement separately for Firestore, Storage and other protected Firebase services in Firebase Console.</div>' : ''}
       ${hero}
       <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Opportunity review</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Opportunity import</button><button class="btn ${adminTab==='reports'?'btn-primary':'btn-secondary'}" data-admin-tab="reports">Community reports</button></div>
       ${adminTab==='reports'?reportsPanel:adminTab==='import'?importPanel:reviewPanel}
