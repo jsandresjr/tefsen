@@ -2006,3 +2006,29 @@
     grid-template-columns:1fr;
   }
 }
+
+
+/* Passed stored deadline state — do not imply late submission or recurrence */
+.journey-attention-banner.expired{
+  border-color:rgba(255,143,156,.13);
+  background:linear-gradient(90deg,rgba(255,143,156,.045),rgba(7,28,31,.78));
+}
+.journey-attention-banner.expired .journey-attention-icon{
+  color:#d8939b;
+  background:rgba(255,143,156,.06);
+}
+.journey-priority-card.expired,
+.journey-detail-hero.expired{
+  border-color:rgba(255,143,156,.11);
+}
+.journey-attention-label.expired{
+  color:#cf9299;
+}
+.journey-attention-label.expired>span{
+  background:#cf9299;
+}
+.journey-stage-status.expired{
+  color:#d3979e;
+  border-color:rgba(255,143,156,.10);
+  background:rgba(255,143,156,.03);
+}
