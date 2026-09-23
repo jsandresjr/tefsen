@@ -4,6 +4,14 @@ on:
   pull_request:
     paths:
       - 'firebase-tests/**'
+      - 'README.md'
+      - 'docs/WEB_SURFACE_OWNERSHIP.md'
+      - 'app.js'
+      - 'script.js'
+      - 'style.css'
+      - 'js/main.js'
+      - 'services/**'
+      - 'tefsen-web-signup-like-fix/**'
       - 'app/index.html'
       - 'app/sw.js'
       - '.github/workflows/web-v1-firestore-rules.yml'
