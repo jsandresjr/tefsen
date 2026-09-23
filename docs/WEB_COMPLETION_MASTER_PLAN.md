@@ -440,4 +440,30 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now watches the Global Search service
 - service-worker cache bumped to V47 and Global Search service added to offline shell
 
-**Next: Step 21 — Notifications with real data and useful events**
+**Step 21: Notifications with real data and useful events — complete on branch `tefsen-web-completion-21-notifications`**
+- replaced the empty notifications stub experience with a deterministic notification center built from real user-owned Tefsen data
+- notification center derives useful alerts from saved opportunities, active Journeys, private preparation targets and accepted-offer planning dates
+- saved opportunities can surface approaching official deadlines without requiring a Journey to be started
+- pre-submission Journeys can surface official deadline warnings, private preparation-target alerts and useful next unfinished tasks
+- ready-to-apply Journeys surface an official-source verification reminder instead of implying Tefsen submits applications
+- accepted Journeys can surface stored offer-response and enrollment dates plus the next post-acceptance planning action
+- declined offers do not create irrelevant enrollment reminders
+- rejected/withdrawn/final non-accepted Journeys do not keep producing stale application-deadline alerts
+- official deadline messages consistently tell students to verify the provider source and exact deadline/time zone
+- existing top-level `notifications` collection is now read when available, using canonical `userId` with a `recipientId` compatibility fallback
+- supported persisted activity notifications are normalized into safe routes derived from known post/opportunity/profile IDs rather than trusting arbitrary route strings
+- derived alerts use stable deterministic IDs and local read-state persistence so acknowledged alerts do not immediately reappear unread after refresh
+- activity notifications attempt to persist read state back to Firestore while keeping a local read fallback when current legacy rules block the update
+- nav unread count is now built from the same notification model during authenticated startup
+- opening Notifications refreshes current activity notifications, Journeys and opportunity data before rendering
+- notification center separates Needs attention, Journey planning and Community activity instead of one undifferentiated list
+- Mark all as read now works across derived and supported persisted activity notifications
+- notification actions route directly to the relevant Journey, opportunity, post or public profile
+- the page explicitly states that Journey-derived notifications are private planning aids and not public Community content
+- no fake engagement notifications are generated in demo mode; useful demo alerts come only from the user’s actual demo Journey/saved state
+- deterministic Notification-center regression tests added for deadlines, targets, accepted-offer dates, final-outcome suppression, activity routing, read persistence and priority ordering
+- desktop/tablet/mobile Notification-center redesign added
+- CI now watches the notification service
+- service-worker cache bumped to V48 and notification service added to offline shell
+
+**Next: Step 22 — Private messaging decision: implement or remove**
