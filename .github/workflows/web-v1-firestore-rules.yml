@@ -6,6 +6,7 @@ on:
       - 'firebase-tests/**'
       - 'README.md'
       - 'docs/WEB_SURFACE_OWNERSHIP.md'
+      - 'docs/PWA_DOCUMENT_SECURITY.md'
       - 'app.js'
       - 'script.js'
       - 'style.css'
@@ -90,6 +91,7 @@ jobs:
       - name: Validate Web JavaScript syntax
         run: |
           node --check ../app/js/app.js
+          node --check ../app/js/trial-ui.js
           node --check ../app/js/services/data-service.js
           node --check ../app/js/services/notification-service.js
           node --check ../app/js/services/notification-state-service.js
