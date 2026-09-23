@@ -7,7 +7,7 @@ import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
-  onSnapshot, query, where, limit, serverTimestamp,
+  onSnapshot, query, where, limit, serverTimestamp, documentId,
   getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
@@ -620,6 +620,31 @@ export async function getPost(mode, postId) {
   return snap.exists() ? enrichPostAuthor(mode, normalizePost(snap.data(), snap.id)) : null;
 }
 
+async function getPublicPostById(mode, postId) {
+  const canonicalPostId=String(postId || '');
+  if(!canonicalPostId) return null;
+
+  if(mode === 'demo'){
+    const post=demoPosts.find(row=>String(row.id)===canonicalPostId);
+    if(!post) return null;
+    const normalized=normalizePost(post,canonicalPostId);
+    return isSaveablePublicPost(mode,normalized)
+      ? enrichPostAuthor(mode,normalized)
+      : null;
+  }
+
+  const snap=await getDocs(query(
+    collection(db,C.posts),
+    where(documentId(),'==',canonicalPostId),
+    where('status','==','published'),
+    where('visibility','==','public'),
+    limit(1)
+  ));
+  if(snap.empty) return null;
+  const row=snap.docs[0];
+  return enrichPostAuthor(mode,normalizePost(row.data(),row.id));
+}
+
 export async function deletePost(mode, userId, postId) {
   if (!userId || !postId) throw new Error('Missing user or post ID.');
   if (mode === 'demo') {
@@ -636,7 +661,7 @@ export async function getReactionIds(mode, userId) {
   const refs = await getSavedPostReferences(mode,userId);
   return {
     saved:new Set(refs.map(row=>row.postId)),
-    liked:mode === 'demo' ? readLikedCache(userId) : readLikedCache(userId)
+    liked:readLikedCache(userId)
   };
 }
 
@@ -656,7 +681,7 @@ export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
 
     let post=known.get(postId)||null;
     if(!post){
-      post=await getPost(mode,postId).catch(()=>null);
+      post=await getPublicPostById(mode,postId).catch(()=>null);
     }
     if(!post || !isSaveablePublicPost(mode,post)) return null;
 
@@ -753,7 +778,7 @@ export async function toggleSave(mode, userId, postId) {
     return false;
   }
 
-  const post=await getPost(mode,canonicalPostId).catch(()=>null);
+  const post=await getPublicPostById(mode,canonicalPostId).catch(()=>null);
   if(!post || !isSaveablePublicPost(mode,post)) throw new Error('Only public Community posts can be saved.');
 
   const savedAtMillis=Date.now();
