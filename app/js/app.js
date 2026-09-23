@@ -5,7 +5,7 @@ import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, getSyncedNotificationReadIds, markNotificationRead, markNotificationsRead,
   getUserSettings, saveUserSettings,
-  getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto,
+  searchAll, updateUserProfile, removeProfilePhoto,
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   hydratePostLikeState
 } from './services/data-service.js';
@@ -99,7 +99,6 @@ const navItems = [
   ['journeys', 'Journey', 'check'],
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
-  ['leaderboard', 'Leaderboard', 'trophy'],
   ['saved', 'Saved community', 'bookmark'],
   ['subscription', 'Subscription', 'info'],
   ['profile', 'Profile', 'user'],
@@ -3570,18 +3569,37 @@ function renderPrivateMessagingUnavailable() {
   renderShell(content,{wide:true,right:false});
 }
 
-async function renderLeaderboard() {
-  if (!state.leaderboard.length) setState({ leaderboard: await getLeaderboard(state.mode).catch(()=>[]) });
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Leaderboard</h1><p>Recognising useful contributions across the community.</p></div></header>
-    <section class="panel">${state.leaderboard.length ? state.leaderboard.map((u,i)=>`<button class="leaderboard-row" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}"><span class="rank ${i<3?'top':''}">${i+1}</span><span class="user-inline">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small>${escapeHTML(normalizeRole(u.role))}</small></span></span><span class="points">${formatCount(u.points)} pts</span></button>`).join('') : emptyState('trophy','Leaderboard is empty','Points will appear as members contribute.')}</section>`;
-  renderShell(content);
+function renderLeaderboardRetired() {
+  const content=`${demoBanner()}<div class="recognition28-page">
+    <section class="recognition28-hero">
+      <div class="recognition28-mark">${icon('trophy',22)}</div>
+      <span class="opportunity-kicker">COMMUNITY RECOGNITION</span>
+      <h1>Tefsen does not rank students with unverified points.</h1>
+      <p>The old leaderboard used a client-side points field and a limited user sample, which could not guarantee a fair or globally correct ranking. That surface has been retired until Tefsen has server-authoritative scoring, anti-abuse controls and a transparent contribution model.</p>
+    </section>
+    <section class="recognition28-grid">
+      <article class="recognition28-card"><span>DISCUSSIONS</span><strong>Help with useful questions and answers</strong><p>Community value should come from helpful learning contributions, not from chasing a score.</p><button class="btn btn-secondary" type="button" data-route="explore">Open Community</button></article>
+      <article class="recognition28-card"><span>STUDENT OUTCOMES</span><strong>Share real success or Journey context</strong><p>Publish only experiences you intentionally want public and that could help another student.</p><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></article>
+      <article class="recognition28-card"><span>YOUR IDENTITY</span><strong>Build a useful public profile</strong><p>Your public profile can show what you study and contribute without assigning you a reputation score.</p><button class="btn btn-secondary" type="button" data-route="profile">Open profile</button></article>
+    </section>
+    <section class="recognition28-principles">
+      <h2>What a future recognition system must guarantee</h2>
+      <ul>
+        <li>Scores are calculated by trusted backend logic, not editable client profile fields.</li>
+        <li>Ranking uses the complete eligible population or a clearly defined cohort—not an arbitrary first-page sample.</li>
+        <li>Students can understand what actions count and how abuse, spam and deleted content affect recognition.</li>
+        <li>Recognition does not expose private Student Passport, Journey, saved-content or account data.</li>
+      </ul>
+    </section>
+  </div>`;
+  renderShell(content,{wide:true,right:false});
 }
 
 async function renderProfile(userId = '') {
   let profile = state.profile;
   if (userId && userId !== state.user.uid) {
     profile = await getUserById(state.mode, userId).catch(() => null);
-    profile = profile || state.leaderboard.find(u => u.uid === userId) || { uid:userId, fullName:'Tefsen User', role:'Student' };
+    profile = profile || { uid:userId, fullName:'Tefsen User', role:'Student' };
   }
 
   const own = !userId || userId === state.user.uid;
@@ -4231,7 +4249,7 @@ function renderRoute() {
     case 'saved': renderSavedCommunity(); break;
     case 'notifications': renderNotifications(); break;
     case 'messages': renderPrivateMessagingUnavailable(); break;
-    case 'leaderboard': renderLeaderboard(); break;
+    case 'leaderboard': renderLeaderboardRetired(); break;
     case 'profile': renderProfile(param || ''); break;
     case 'settings': {
       const allowedSettingsTabs = new Set(['overview','preferences','notifications','privacy','security']);
