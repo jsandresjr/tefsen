@@ -146,3 +146,13 @@ test('terminal outcome keeps checklist as record context',()=>{
   assert.equal(model.progress.total,3);
   assert.equal(model.tasks.incomplete.length,2);
 });
+
+
+test('accepted detail exposes a separate post-acceptance plan',()=>{
+  const model=buildJourneyDetailModel(journey({status:'accepted',postAcceptance:null}),opportunity(),now);
+  assert.equal(model.terminal,true);
+  assert.equal(model.postAcceptance.active,true);
+  assert.equal(model.postAcceptance.progress.total,6);
+  assert.equal(model.postAcceptance.tasks.next.id,'post_offer_review');
+  assert.match(model.guidance.title,/organized next-step plan/i);
+});

@@ -14,14 +14,17 @@ import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibili
 import {
   listJourneyStates, getJourneyState, setOpportunitySaved, removeSavedOpportunity, startJourney,
   updateJourneyStage, updateJourneyPlanning, toggleJourneyTask,
-  addCustomJourneyTask, deleteCustomJourneyTask, journeyProgress,
-  allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
+  addCustomJourneyTask, deleteCustomJourneyTask,
+  updatePostAcceptancePlanning, togglePostAcceptanceTask, addPostAcceptanceTask, deletePostAcceptanceTask,
+  journeyProgress, allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
+import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
+import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -2410,6 +2413,7 @@ async function renderJourneyDetail(opportunityId) {
     currentJourneyStates.set(opportunityId, journey);
 
     const model = buildJourneyDetailModel(journey, opportunity);
+    const postAcceptance = model.postAcceptance;
     const nextStatuses = allowedJourneyTransitions(journey.status);
     const official = deadlineInfo(opportunity?.deadline || '');
     const personal = deadlineInfo(journey.personalTargetDate || '');
@@ -2426,7 +2430,7 @@ async function renderJourneyDetail(opportunityId) {
     const completedTasks = model.tasks.completed;
     const nextTask = model.tasks.next;
 
-    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask ? 'next' : ''} ${model.terminal ? 'readonly' : ''}">
+    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask && !model.terminal ? 'next' : ''} ${model.terminal ? 'readonly' : ''}">
       ${model.terminal
         ? `<span class="journey-task-check static" aria-hidden="true">${task.completed ? '✓' : '○'}</span>`
         : `<button class="journey-task-check" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : ''}</button>`}
@@ -2476,7 +2480,7 @@ async function renderJourneyDetail(opportunityId) {
         </div>
         <button class="btn btn-primary" type="submit">Update stage</button>
       </form>`
-      : `<div class="journey-final-stage-note">${icon('info',16)}<span>This Journey is in a final outcome stage. Its history remains private and available for reference.</span></div>`}
+      : `${journey.status === "accepted" ? `<div class="journey-final-stage-note accepted">${icon("check",16)}<span>The application outcome is final. The application record stays read-only while the separate post-acceptance plan remains editable.</span></div>` : `<div class="journey-final-stage-note">${icon("info",16)}<span>This Journey is in a final outcome stage. Its history remains private and available for reference.</span></div>`}`}
     </section>`;
 
     const content = `${demoBanner()}
@@ -2499,8 +2503,8 @@ async function renderJourneyDetail(opportunityId) {
           </div>
           <aside class="journey-detail-summary">
             <div><span>Stage</span><strong>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</strong></div>
-            <div><span>Checklist</span><strong>${model.progress.completed}/${model.progress.total}</strong><small>${model.progress.percent}% complete</small></div>
-            <div><span>Next task</span><strong>${nextTask ? escapeHTML(nextTask.label) : model.terminal ? 'Outcome recorded' : 'No open task'}</strong></div>
+            <div><span>${postAcceptance?.active ? "Next-stage plan" : "Checklist"}</span><strong>${postAcceptance?.active ? `${postAcceptance.progress.completed}/${postAcceptance.progress.total}` : `${model.progress.completed}/${model.progress.total}`}</strong><small>${postAcceptance?.active ? `${postAcceptance.progress.percent}% complete` : `${model.progress.percent}% complete`}</small></div>
+            <div><span>Next task</span><strong>${postAcceptance?.active ? (postAcceptance.tasks.next ? escapeHTML(postAcceptance.tasks.next.label) : "Review official next steps") : (nextTask ? escapeHTML(nextTask.label) : model.terminal ? "Outcome recorded" : "No open task")}</strong></div>
           </aside>
         </section>
 
@@ -2511,15 +2515,15 @@ async function renderJourneyDetail(opportunityId) {
             <section class="journey-detail-card">
               <header class="journey-detail-card-head checklist">
                 <div>
-                  <span>PREPARATION CHECKLIST</span>
-                  <h2>${model.progress.remaining ? `${model.progress.remaining} task${model.progress.remaining === 1 ? '' : 's'} remaining` : 'No unfinished tasks'}</h2>
-                  <p>System tasks come from structured opportunity requirements. Custom tasks are private to you.</p>
+                  <span>${model.terminal ? 'APPLICATION CHECKLIST RECORD' : 'PREPARATION CHECKLIST'}</span>
+                  <h2>${model.terminal ? 'Read-only application preparation history' : model.progress.remaining ? `${model.progress.remaining} task${model.progress.remaining === 1 ? '' : 's'} remaining` : 'No unfinished tasks'}</h2>
+                  <p>${model.terminal ? 'This checklist is preserved as part of the application record and no longer drives next-stage work.' : 'System tasks come from structured opportunity requirements. Custom tasks are private to you.'}</p>
                 </div>
                 <strong>${model.progress.percent}%</strong>
               </header>
               <div class="journey-progress-bar journey-detail-progress"><i style="width:${model.progress.percent}%"></i></div>
 
-              ${nextTask ? `<section class="journey-next-task">
+              ${nextTask && !model.terminal ? `<section class="journey-next-task">
                 <span>NEXT UNFINISHED TASK</span>
                 <h3>${escapeHTML(nextTask.label)}</h3>
                 <p>${nextTask.source === 'system' ? 'This task came from the structured opportunity requirements.' : 'This is a private task you added to your Journey.'}</p>
@@ -2541,6 +2545,8 @@ async function renderJourneyDetail(opportunityId) {
                 <div>${completedTasks.map(taskMarkup).join('')}</div>
               </details>` : ''}
             </section>
+
+            ${postAcceptancePanelMarkup(postAcceptance, opportunityId)}
 
             <section class="journey-detail-card">
               <header class="journey-detail-card-head">
@@ -3300,6 +3306,10 @@ async function handleClick(event) {
   if (taskToggle) { await handleJourneyTaskToggle(taskToggle); return; }
   const taskDelete = event.target.closest('[data-journey-task-delete]');
   if (taskDelete) { await handleJourneyTaskDelete(taskDelete); return; }
+  const postAcceptanceToggle = event.target.closest('[data-post-acceptance-task-toggle]');
+  if (postAcceptanceToggle) { await handlePostAcceptanceTaskToggle(postAcceptanceToggle); return; }
+  const postAcceptanceDelete = event.target.closest('[data-post-acceptance-task-delete]');
+  if (postAcceptanceDelete) { await handlePostAcceptanceTaskDelete(postAcceptanceDelete); return; }
   const share = event.target.closest('[data-share]');
   if (share) { await copyText(`${location.origin}${location.pathname}#/post/${share.dataset.share}`); modalRoot.innerHTML=''; return; }
   const postMenu = event.target.closest('[data-post-menu]');
@@ -3359,6 +3369,8 @@ async function handleSubmit(event) {
   if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
+  if (form.matches('[data-post-acceptance-plan-form]')) { event.preventDefault(); await handlePostAcceptancePlanningSave(form); return; }
+  if (form.matches('[data-post-acceptance-task-form]')) { event.preventDefault(); await handlePostAcceptanceTaskAdd(form); return; }
   if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
   if (form.matches('[data-admin-import-preview-form]')) { event.preventDefault(); await handleAdminImportPreview(form); return; }
 }
@@ -3708,6 +3720,116 @@ async function handleJourneyTaskAdd(form) {
     try {
       await addCustomJourneyTask(state.mode, state.user.uid, opportunityId, label);
       toast('Task added.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+function updatePostAcceptanceValidation(form) {
+  const fd = new FormData(form);
+  const draft = {
+    offerDecision: String(fd.get('offerDecision') || 'reviewing'),
+    offerResponseDate: String(fd.get('offerResponseDate') || ''),
+    enrollmentDate: String(fd.get('enrollmentDate') || '')
+  };
+  const validation = validatePostAcceptanceDraft(draft);
+
+  form.querySelectorAll('[data-post-acceptance-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector('[data-post-acceptance-error="' + error.field + '"]');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const summary = form.querySelector('[data-post-acceptance-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  return { draft, validation };
+}
+
+async function handlePostAcceptancePlanningSave(form) {
+  const opportunityId = form.dataset.postAcceptancePlanForm || '';
+  const { draft, validation } = updatePostAcceptanceValidation(form);
+  if (!opportunityId) return;
+
+  if (!validation.valid) {
+    const firstError = validation.errors[0];
+    const field = form.elements.namedItem(firstError?.field || '');
+    if (field instanceof HTMLElement) field.focus();
+    toast('Check the highlighted next-stage planning field before saving.', 'error');
+    return;
+  }
+
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await updatePostAcceptancePlanning(state.mode, state.user.uid, opportunityId, draft);
+      toast('Post-acceptance plan saved.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handlePostAcceptanceTaskToggle(button) {
+  const opportunityId = String(button?.dataset?.opportunityId || '');
+  const taskId = String(button?.dataset?.postAcceptanceTaskToggle || '');
+  if (!opportunityId || !taskId) return;
+
+  try {
+    await togglePostAcceptanceTask(state.mode, state.user.uid, opportunityId, taskId);
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handlePostAcceptanceTaskDelete(button) {
+  const opportunityId = String(button?.dataset?.opportunityId || '');
+  const taskId = String(button?.dataset?.postAcceptanceTaskDelete || '');
+  if (!opportunityId || !taskId) return;
+
+  try {
+    await deletePostAcceptanceTask(state.mode, state.user.uid, opportunityId, taskId);
+    toast('Next-stage task removed.', 'success');
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handlePostAcceptanceTaskAdd(form) {
+  const opportunityId = form.dataset.postAcceptanceTaskForm || '';
+  const fd = new FormData(form);
+  const label = String(fd.get('label') || '').trim();
+  const category = String(fd.get('category') || 'custom');
+  if (!opportunityId || !label) return;
+
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await addPostAcceptanceTask(state.mode, state.user.uid, opportunityId, label, category);
+      toast('Next-stage task added.', 'success');
       await renderJourneyDetail(opportunityId);
     } catch (error) {
       toast(humanError(error), 'error');
@@ -4082,7 +4204,10 @@ document.addEventListener('input', event => {
   const journeyPlanningForm = event.target.closest?.('[data-journey-planning-form]');
   if (journeyPlanningForm) {
     updateJourneyPlanningValidation(journeyPlanningForm);
+    return;
   }
+  const postAcceptanceForm = event.target.closest?.('[data-post-acceptance-plan-form]');
+  if (postAcceptanceForm) updatePostAcceptanceValidation(postAcceptanceForm);
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }

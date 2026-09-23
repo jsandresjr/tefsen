@@ -2032,3 +2032,211 @@
   border-color:rgba(255,143,156,.10);
   background:rgba(255,143,156,.03);
 }
+
+
+/* Completion step 12 — post-acceptance Journey foundation */
+.post-acceptance-card{
+  border-color:rgba(124,224,165,.14);
+  background:
+    radial-gradient(circle at 0 0,rgba(124,224,165,.045),transparent 24rem),
+    rgba(5,25,28,.72);
+}
+.post-acceptance-attention{
+  margin:12px 0 16px;
+  padding:12px 14px;
+  border:1px solid rgba(177,222,217,.08);
+  border-radius:14px;
+  background:rgba(255,255,255,.016);
+}
+.post-acceptance-attention span{
+  display:block;
+  color:#8ab0aa;
+  font-size:.56rem;
+  font-weight:850;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+.post-acceptance-attention p{
+  margin:4px 0 0!important;
+  color:#77908d!important;
+  font-size:.63rem!important;
+  line-height:1.5!important;
+}
+.post-acceptance-attention.urgent{
+  border-color:rgba(255,143,156,.16);
+  background:rgba(255,143,156,.025);
+}
+.post-acceptance-attention.urgent span{color:#e0a0a7}
+.post-acceptance-attention.soon,
+.post-acceptance-attention.warning{
+  border-color:rgba(240,200,109,.14);
+  background:rgba(240,200,109,.02);
+}
+.post-acceptance-attention.soon span,
+.post-acceptance-attention.warning span{color:#d8bd7d}
+.post-acceptance-attention.accepted{
+  border-color:rgba(124,224,165,.15);
+  background:rgba(124,224,165,.025);
+}
+.post-acceptance-attention.accepted span{color:#8fd7ad}
+.post-acceptance-fields{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px 12px;
+}
+.post-acceptance-fields>.field:first-child{
+  grid-column:1/-1;
+}
+.post-acceptance-plan-form{
+  display:grid;
+  gap:11px;
+  margin-bottom:17px;
+}
+.post-acceptance-plan-form>.btn{
+  justify-self:start;
+}
+.post-acceptance-progress{
+  display:grid;
+  gap:7px;
+  padding-top:14px;
+  border-top:1px solid rgba(177,222,217,.065);
+}
+.post-acceptance-progress>div:first-child{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  color:#708986;
+  font-size:.56rem;
+  letter-spacing:.04em;
+}
+.post-acceptance-progress b{color:#a7bbb8}
+.journey-next-task.post{
+  border-color:rgba(124,224,165,.12);
+  background:rgba(124,224,165,.025);
+}
+.post-acceptance-task-list{
+  display:grid;
+  margin-top:10px;
+}
+.post-acceptance-task{
+  min-height:58px;
+  padding:9px 0;
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  border-bottom:1px solid rgba(177,222,217,.055);
+}
+.post-acceptance-task:last-child{border-bottom:0}
+.post-acceptance-task.next b{color:#d9e8e5}
+.post-acceptance-task.done b{
+  color:#667c79;
+  text-decoration:line-through;
+}
+.post-acceptance-task>div b,
+.post-acceptance-task>div small{display:block}
+.post-acceptance-task>div b{
+  color:#b8c9c6;
+  font-size:.66rem;
+  line-height:1.4;
+}
+.post-acceptance-task>div small{
+  margin-top:3px;
+  color:#617875;
+  font-size:.54rem;
+  line-height:1.4;
+}
+.post-acceptance-check{
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(124,224,165,.20);
+  border-radius:9px;
+  color:#98d9b2;
+  background:rgba(124,224,165,.035);
+  cursor:pointer;
+}
+.post-acceptance-task.done .post-acceptance-check{
+  color:#071d1f;
+  background:#82cfa1;
+}
+.post-acceptance-add-task{
+  margin-top:12px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 170px auto;
+  gap:8px;
+}
+.post-acceptance-completed{
+  margin-top:10px;
+}
+.post-acceptance-safety{
+  margin-top:15px;
+  padding:11px 12px;
+  display:grid;
+  grid-template-columns:24px 1fr;
+  gap:9px;
+  border:1px solid rgba(177,222,217,.075);
+  border-radius:13px;
+  background:rgba(0,0,0,.10);
+}
+.post-acceptance-safety>span{
+  width:22px;
+  height:22px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  color:#8aa39f;
+  background:rgba(255,255,255,.04);
+  font-size:.65rem;
+  font-weight:900;
+}
+.post-acceptance-safety p{
+  margin:0!important;
+  color:#6f8784!important;
+  font-size:.57rem!important;
+  line-height:1.5!important;
+}
+.post-acceptance-safety b{color:#9db2af}
+.post-acceptance-done-mark{
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  border-radius:9px;
+  color:#8fd7ad;
+  background:rgba(124,224,165,.04);
+}
+.journey-final-stage-note.accepted{
+  border-color:rgba(124,224,165,.12);
+  color:#8fc5a5;
+  background:rgba(124,224,165,.025);
+}
+
+@media(max-width:760px){
+  .post-acceptance-fields{
+    grid-template-columns:1fr;
+  }
+  .post-acceptance-fields>.field:first-child{
+    grid-column:auto;
+  }
+  .post-acceptance-add-task{
+    grid-template-columns:1fr;
+  }
+  .post-acceptance-add-task .btn{
+    justify-self:start;
+  }
+}
+@media(max-width:520px){
+  .post-acceptance-task{
+    grid-template-columns:28px minmax(0,1fr);
+  }
+  .post-acceptance-task .journey-task-remove{
+    grid-column:2;
+    justify-self:start;
+  }
+  .post-acceptance-progress>div:first-child{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}

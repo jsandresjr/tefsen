@@ -132,5 +132,5 @@ test('passed official deadline is explicit before submission', () => {
   assert.equal(row.officialDays,-2);
   assert.equal(row.attention.key,'deadline_expired');
   assert.equal(row.attention.tone,'expired');
-  assert.equal(row.priority,0);
+  assert.equal(row.priority,-1);
 });

@@ -249,4 +249,25 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile Journey detail experience added
 - service-worker cache bumped for the Journey detail workflow
 
-**Next: Step 12 — Deadline reminders and notification experience**
+**Step 12: Post-acceptance journey foundation — complete on branch `tefsen-web-completion-12-post-acceptance`**
+- accepted Journeys now continue into a separate private next-stage workspace instead of ending as a dead-end outcome
+- the original application checklist becomes read-only after accepted / rejected / withdrawn outcomes
+- accepted Journeys keep the completed application record separate from post-acceptance planning
+- post-acceptance planning tracks a private offer decision without pretending to be provider status
+- optional offer-response and enrollment dates can be stored only when the student has real provider dates
+- missing dates are never invented by Tefsen
+- stored offer-response dates receive deterministic attention states for passed / today / within 3 / within 7 days
+- the default next-stage plan covers offer conditions, funding/fees, enrollment, visa/immigration verification when applicable, and arrival preparation
+- all suggested next-stage tasks explicitly require provider or official-authority verification
+- custom next-stage tasks can be added and removed privately
+- suggested system next-stage tasks cannot be deleted accidentally; they can be completed when verified or no longer relevant
+- offer accepted / offer declined remain private student planning decisions and do not rewrite the provider acceptance history
+- Tefsen explicitly states that it is not an admissions authority and does not provide visa, immigration or legal advice
+- provider and relevant government sources remain authoritative
+- deterministic post-acceptance model and validation tests added
+- accepted Journey detail regression test confirms the separate next-stage plan
+- CI now runs when post-acceptance service/view files change
+- responsive desktop/tablet/mobile post-acceptance workspace added
+- service-worker cache bumped to V39 and includes the post-acceptance model/view
+
+**Next: Step 13 — Public profile final design and photo management**

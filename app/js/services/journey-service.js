@@ -3,6 +3,9 @@ import { SCHEMA } from '../config/schema.js';
 import {
   collection, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
+import {
+  createDefaultPostAcceptancePlan, normalizePostAcceptancePlan, validatePostAcceptanceDraft
+} from './post-acceptance-service.js';
 
 const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
@@ -63,6 +66,32 @@ function taskId(prefix = 'task') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function initializedPostAcceptancePlan() {
+  const now = Date.now();
+  const plan = createDefaultPostAcceptancePlan();
+  return {
+    ...plan,
+    initializedAtMillis: now,
+    updatedAtMillis: now,
+    tasks: plan.tasks.map(task => ({ ...task, createdAtMillis: now }))
+  };
+}
+
+function requireAcceptedJourney(journey) {
+  if (!journey) throw new Error('Journey not found.');
+  if (journey.status !== 'accepted') {
+    throw new Error('Post-acceptance planning is available only after an accepted outcome is recorded.');
+  }
+}
+
+function ensurePostAcceptancePlan(journey) {
+  const existing = journey?.postAcceptance
+    ? normalizePostAcceptancePlan(journey.postAcceptance)
+    : initializedPostAcceptancePlan();
+  if (!existing.initializedAtMillis) existing.initializedAtMillis = Date.now();
+  return existing;
+}
+
 function journeyCollection(userId) {
   return collection(db, C.journeys, String(userId), S.opportunityJourneys);
 }
@@ -116,7 +145,8 @@ export function normalizeJourney(raw = {}, opportunityId = '', userId = '') {
     personalTargetDate: clean(raw.personalTargetDate, 20),
     notes: clean(raw.notes, 3000),
     checklist,
-    history
+    history,
+    postAcceptance: raw.postAcceptance ? normalizePostAcceptancePlan(raw.postAcceptance) : null
   };
 }
 
@@ -284,6 +314,9 @@ export async function updateJourneyStage(mode, userId, opportunityId, nextStatus
   journey.saved = true;
   journey.started = true;
   journey.history = [...(journey.history || []), { status: next, atMillis: Date.now() }].slice(-30);
+  if (next === 'accepted' && !journey.postAcceptance) {
+    journey.postAcceptance = initializedPostAcceptancePlan();
+  }
   return persistJourney(mode, userId, opportunityId, journey);
 }
 
@@ -311,6 +344,9 @@ export async function updateJourneyPlanning(mode, userId, opportunityId, { perso
 export async function toggleJourneyTask(mode, userId, opportunityId, taskIdValue) {
   const journey = await getJourneyState(mode, userId, opportunityId);
   if (!journey) throw new Error('Journey not found.');
+  if (['accepted','rejected','withdrawn'].includes(journey.status)) {
+    throw new Error('Application checklist is read-only after a final outcome is recorded.');
+  }
   const index = journey.checklist.findIndex(task => task.id === taskIdValue);
   if (index < 0) throw new Error('Checklist task not found.');
   journey.checklist[index] = { ...journey.checklist[index], completed: !journey.checklist[index].completed };
@@ -320,6 +356,9 @@ export async function toggleJourneyTask(mode, userId, opportunityId, taskIdValue
 export async function addCustomJourneyTask(mode, userId, opportunityId, label) {
   const journey = await getJourneyState(mode, userId, opportunityId);
   if (!journey) throw new Error('Start the journey before adding tasks.');
+  if (['accepted','rejected','withdrawn'].includes(journey.status)) {
+    throw new Error('Application checklist is read-only after a final outcome is recorded.');
+  }
   const cleanLabel = clean(label, 240);
   if (!cleanLabel) throw new Error('Task cannot be empty.');
   if (journey.checklist.length >= 40) throw new Error('Checklist limit reached.');
@@ -337,9 +376,93 @@ export async function addCustomJourneyTask(mode, userId, opportunityId, label) {
 export async function deleteCustomJourneyTask(mode, userId, opportunityId, taskIdValue) {
   const journey = await getJourneyState(mode, userId, opportunityId);
   if (!journey) throw new Error('Journey not found.');
+  if (['accepted','rejected','withdrawn'].includes(journey.status)) {
+    throw new Error('Application checklist is read-only after a final outcome is recorded.');
+  }
   const task = journey.checklist.find(item => item.id === taskIdValue);
   if (!task) return journey;
   if (task.source !== 'custom') throw new Error('System-generated requirement tasks cannot be deleted here.');
   journey.checklist = journey.checklist.filter(item => item.id !== taskIdValue);
+  return persistJourney(mode, userId, opportunityId, journey);
+}
+
+
+export async function updatePostAcceptancePlanning(
+  mode,
+  userId,
+  opportunityId,
+  { offerDecision = 'reviewing', offerResponseDate = '', enrollmentDate = '' } = {}
+) {
+  const journey = await getJourneyState(mode, userId, opportunityId);
+  requireAcceptedJourney(journey);
+
+  const validation = validatePostAcceptanceDraft({ offerDecision, offerResponseDate, enrollmentDate });
+  if (!validation.valid) throw new Error(validation.errors[0]?.message || 'Review the post-acceptance plan.');
+
+  const plan = ensurePostAcceptancePlan(journey);
+  journey.postAcceptance = {
+    ...plan,
+    offerDecision,
+    offerResponseDate: clean(offerResponseDate, 20),
+    enrollmentDate: clean(enrollmentDate, 20),
+    updatedAtMillis: Date.now()
+  };
+  return persistJourney(mode, userId, opportunityId, journey);
+}
+
+export async function togglePostAcceptanceTask(mode, userId, opportunityId, taskIdValue) {
+  const journey = await getJourneyState(mode, userId, opportunityId);
+  requireAcceptedJourney(journey);
+
+  const plan = ensurePostAcceptancePlan(journey);
+  const index = plan.tasks.findIndex(task => task.id === taskIdValue);
+  if (index < 0) throw new Error('Post-acceptance task not found.');
+
+  plan.tasks[index] = { ...plan.tasks[index], completed: !plan.tasks[index].completed };
+  plan.updatedAtMillis = Date.now();
+  journey.postAcceptance = plan;
+  return persistJourney(mode, userId, opportunityId, journey);
+}
+
+export async function addPostAcceptanceTask(mode, userId, opportunityId, label, category = 'custom') {
+  const journey = await getJourneyState(mode, userId, opportunityId);
+  requireAcceptedJourney(journey);
+
+  const plan = ensurePostAcceptancePlan(journey);
+  const cleanLabel = clean(label, 240);
+  if (!cleanLabel) throw new Error('Task cannot be empty.');
+  if (plan.tasks.length >= 40) throw new Error('Post-acceptance task limit reached.');
+
+  const safeCategory = ['offer','finance','enrollment','immigration','arrival','custom'].includes(category)
+    ? category
+    : 'custom';
+
+  plan.tasks = [...plan.tasks, {
+    id: taskId('post'),
+    label: cleanLabel,
+    category: safeCategory,
+    source: 'custom',
+    completed: false,
+    createdAtMillis: Date.now()
+  }];
+  plan.updatedAtMillis = Date.now();
+  journey.postAcceptance = plan;
+  return persistJourney(mode, userId, opportunityId, journey);
+}
+
+export async function deletePostAcceptanceTask(mode, userId, opportunityId, taskIdValue) {
+  const journey = await getJourneyState(mode, userId, opportunityId);
+  requireAcceptedJourney(journey);
+
+  const plan = ensurePostAcceptancePlan(journey);
+  const task = plan.tasks.find(item => item.id === taskIdValue);
+  if (!task) return journey;
+  if (task.source !== 'custom') {
+    throw new Error('Suggested post-acceptance tasks cannot be deleted. Mark them complete when they no longer need attention.');
+  }
+
+  plan.tasks = plan.tasks.filter(item => item.id !== taskIdValue);
+  plan.updatedAtMillis = Date.now();
+  journey.postAcceptance = plan;
   return persistJourney(mode, userId, opportunityId, journey);
 }
