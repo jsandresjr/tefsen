@@ -57,6 +57,7 @@ import {
 
 const root = document.getElementById('app-root');
 const modalRoot = document.getElementById('modal-root');
+const skipLink = document.querySelector('.skip-link');
 const DIALOG_FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 let modalReturnFocus = null;
 let modalActive = false;
@@ -64,6 +65,26 @@ let modalHeadingCounter = 0;
 
 function currentDialog() {
   return modalRoot.querySelector('.modal');
+}
+
+let accessibleFieldCounter = 0;
+
+function normalizeRenderedAccessibility(scope) {
+  if (!scope?.querySelectorAll) return;
+
+  scope.querySelectorAll('.field').forEach(field => {
+    const label = field.querySelector('label');
+    const control = field.querySelector('input:not([type="hidden"]), select, textarea');
+    if (!label || !control) return;
+
+    if (!control.id) control.id = `tefsen-field-${++accessibleFieldCounter}`;
+    if (!label.hasAttribute('for')) label.setAttribute('for', control.id);
+  });
+
+  scope.querySelectorAll('.form-error, .field-error').forEach(error => {
+    if (!error.hasAttribute('role')) error.setAttribute('role','status');
+    if (!error.hasAttribute('aria-live')) error.setAttribute('aria-live','polite');
+  });
 }
 
 function dialogFocusableElements(dialog = currentDialog()) {
@@ -101,7 +122,9 @@ function activateModalAccessibility() {
     modalActive = true;
   }
   root.inert = true;
+  if (skipLink) skipLink.inert = true;
   normalizeDialogAccessibility(dialog);
+  normalizeRenderedAccessibility(dialog);
 
   queueMicrotask(() => {
     const activeDialog = currentDialog();
@@ -115,6 +138,7 @@ function deactivateModalAccessibility() {
   if (!modalActive) return;
   modalActive = false;
   root.inert = false;
+  if (skipLink) skipLink.inert = false;
   const returnTarget = modalReturnFocus;
   modalReturnFocus = null;
   queueMicrotask(() => {
@@ -403,6 +427,7 @@ function renderAuth(mode = 'login') {
         </div>
       </section>
     </main>`;
+  normalizeRenderedAccessibility(root);
 }
 
 function demoBanner() {
@@ -422,8 +447,8 @@ function renderShell(content, options = {}) {
           <form class="global-search" data-global-search-form>
             <span class="mobile-top-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></span>
             <span class="search-icon">${icon('search',18)}</span>
-            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen">
-            <span class="search-kbd">Ctrl K</span>
+            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen" aria-keyshortcuts="Control+K Meta+K">
+            <span class="search-kbd" aria-hidden="true">Ctrl/⌘ K</span>
           </form>
         </div>
         <div class="topbar-actions">
@@ -460,15 +485,17 @@ function renderShell(content, options = {}) {
       </nav>
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
+  normalizeRenderedAccessibility(root);
 }
 
 function navButton(id, label, ic, route) {
   const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
-  return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
+  return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"${active ? ' aria-current="page"' : ''}><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
 }
 
 function mobileNavButton(id, ic, route, label) {
-  return `<button class="${route === id ? 'active' : ''}" type="button" data-route="${id}" aria-label="${label}">${icon(ic,21)}</button>`;
+  const active = route === id;
+  return `<button class="${active ? 'active' : ''}" type="button" data-route="${id}" aria-label="${label}"${active ? ' aria-current="page"' : ''}>${icon(ic,21)}</button>`;
 }
 
 function renderProfileDropdown() {
