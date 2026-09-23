@@ -448,8 +448,8 @@ test('Settings preferences are owner-only, validated, and cannot spoof identity'
     uid:'user-a',
     userId:'user-a',
     documentType:'preferences',
-    schemaVersion:1,
-    theme:'dark',
+    schemaVersion:2,
+    theme:'light',
     compactFeed:false,
     reducedMotion:true,
     language:'en',
@@ -462,12 +462,18 @@ test('Settings preferences are owner-only, validated, and cannot spoof identity'
   };
 
   await assertSucceeds(setDoc(ref, valid));
+  await assertSucceeds(setDoc(ref, { ...valid, theme:'dark' }));
+  await assertSucceeds(setDoc(ref, { ...valid, theme:'system' }));
+  await assertSucceeds(setDoc(ref, { ...valid, schemaVersion:1, theme:'dark' }));
+  await assertSucceeds(setDoc(ref, valid));
   await assertSucceeds(getDoc(ref));
   await assertFails(getDoc(doc(other, 'users', 'user-a', 'settings', 'preferences')));
   await assertFails(getDoc(doc(anon, 'users', 'user-a', 'settings', 'preferences')));
   await assertFails(setDoc(doc(other, 'users', 'user-a', 'settings', 'preferences'), valid));
   await assertFails(setDoc(ref, { ...valid, uid:'user-b', userId:'user-b' }));
-  await assertFails(setDoc(ref, { ...valid, theme:'light' }));
+  await assertFails(setDoc(ref, { ...valid, theme:'sepia' }));
+  await assertFails(setDoc(ref, { ...valid, schemaVersion:1, theme:'light' }));
+  await assertFails(setDoc(ref, { ...valid, schemaVersion:3 }));
   await assertFails(setDoc(ref, { ...valid, unexpectedField:true }));
   await assertSucceeds(updateDoc(ref, { region:'Canada', timeZone:'America/Toronto' }));
   await assertSucceeds(deleteDoc(ref));
