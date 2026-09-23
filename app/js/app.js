@@ -3159,30 +3159,60 @@ function openEditProfile() {
   const p = state.profile || {};
   const hasPhoto = Boolean(safeUrl(p.photoUrl || p.profileImageUrl || p.photoURL || ''));
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
-    <section class="modal v4-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
-      <header class="modal-head"><h2 id="edit-profile-title">Edit profile</h2><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
+    <section class="modal v4-profile-modal profile13-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+      <header class="modal-head"><div><span class="profile13-modal-kicker">PUBLIC PROFILE</span><h2 id="edit-profile-title">Edit how students see you</h2></div><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
       <div class="modal-body">
-        <form class="form-grid" data-profile-form data-profile-modal>
-          <section class="v4-photo-editor">
+        <form class="form-grid profile13-editor-form" data-profile-form data-profile-modal>
+          <section class="v4-photo-editor profile13-photo-editor">
             <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
             <div class="v4-photo-editor-copy">
               <b>Profile photo</b>
-              <p>Use a clear photo that represents you. JPG, PNG or WebP, up to 5 MB.</p>
+              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. A selected image stays a preview until you save.</p>
               <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
               <div class="v4-photo-editor-actions">
-                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Change photo' : 'Add photo'}</button>
-                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove photo</button>' : ''}
+                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Choose a new photo' : 'Choose photo'}</button>
+                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove current photo</button>' : ''}
               </div>
+              <small class="profile13-photo-state" data-profile-photo-state>${hasPhoto ? 'Current public photo' : 'No public photo yet'}</small>
             </div>
           </section>
-          <div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div>
-          <div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div>
-          <div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div>
-          <div class="v4-profile-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div>
+
+          <section class="profile13-public-fields">
+            <div class="profile13-editor-note">${icon('info',16)}<p><b>These fields are public.</b> Your Student Passport, saved opportunities and Journey planning are not edited here and remain private.</p></div>
+
+            <div class="field">
+              <label>Public name</label>
+              <input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80" autocomplete="name">
+              <small>The name shown on posts and your profile.</small>
+              <span class="field-error" data-profile-error="fullName" hidden></span>
+            </div>
+
+            <div class="field">
+              <label>Username <small>Optional</small></label>
+              <div class="profile13-username-input"><span>@</span><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40" autocomplete="off" placeholder="yourname"></div>
+              <small>Letters, numbers, dots, underscores and hyphens only.</small>
+              <span class="field-error" data-profile-error="username" hidden></span>
+            </div>
+
+            <div class="field">
+              <div class="profile13-field-label"><label>Bio <small>Optional</small></label><small><span data-profile-bio-count>${String(p.bio || '').length}</span>/500</small></div>
+              <textarea class="textarea" name="bio" maxlength="500" placeholder="What do you study, care about, or share with the community?">${escapeHTML(p.bio || '')}</textarea>
+              <span class="field-error" data-profile-error="bio" hidden></span>
+            </div>
+
+            <div class="journey-planning-summary profile13-editor-summary" data-profile-summary hidden></div>
+          </section>
+
+          <div class="v4-profile-modal-footer">
+            <button class="btn btn-ghost" type="button" data-close-modal>Cancel</button>
+            <button class="btn btn-primary" type="submit">Save public profile</button>
+          </div>
         </form>
       </div>
     </section>
   </div>`;
+  const form = modalRoot.querySelector('[data-profile-form]');
+  if (form) updatePublicProfileValidation(form);
 }
 
 function openRemoveProfilePhotoModal() {
