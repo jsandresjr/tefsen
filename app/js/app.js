@@ -5,7 +5,7 @@ import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, getSyncedNotificationReadIds, markNotificationRead, markNotificationsRead,
   getUserSettings, saveUserSettings,
-  getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
+  getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto,
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   hydratePostLikeState
 } from './services/data-service.js';
@@ -46,6 +46,8 @@ import {
   markImportDuplicates, listAdminOpportunities, reviewOpportunity,
   importOpportunityRecords
 } from './services/opportunity-admin-service.js';
+import { REPORT_REASONS, buildModerationQueue } from './services/moderation-model.js';
+import { submitPostReport, listAdminReports, reviewReport } from './services/moderation-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
@@ -77,6 +79,7 @@ const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
 let opportunityDiscoveryFilters = { ...DEFAULT_OPPORTUNITY_FILTERS };
 let adminCapability = false;
 let currentAdminOpportunities = [];
+let currentAdminReports = [];
 let adminPreviewRows = [];
 let adminImportSource = '';
 let adminTab = 'review';
@@ -176,6 +179,7 @@ async function handleAuthChange(user) {
   savedOpportunityCompareIds = new Set();
   adminCapability = false;
   currentAdminOpportunities = [];
+  currentAdminReports = [];
   adminPreviewRows = [];
   adminImportSource = '';
   currentUserSettings = defaultUserSettings({ timeZone: browserTimeZone() });
@@ -3963,15 +3967,45 @@ function adminPreviewTable(rows = []) {
   }).join('')}</tbody></table></div>`;
 }
 
+function adminReportCard(report) {
+  const active=['open','in_review'].includes(report.status);
+  const sourceLabel=report.source==='support_requests'?'Legacy report':'Canonical report';
+  const created=report.createdAt ? relativeTime(report.createdAt) : '';
+  return `<article class="admin-row moderation27-row">
+    <div>
+      <div class="moderation27-meta">
+        <span class="admin-status ${report.status==='open'?'pending':report.status==='in_review'?'stale':'fresh'}">${escapeHTML(report.status.replace('_',' '))}</span>
+        <span class="opportunity-chip">${escapeHTML(sourceLabel)}</span>
+        <span class="opportunity-chip">${escapeHTML(report.reason)}</span>
+        ${created?`<small>${escapeHTML(created)}</small>`:''}
+      </div>
+      <h3>${escapeHTML(report.targetTitle||'Reported Community post')}</h3>
+      ${report.targetExcerpt?`<p class="moderation27-excerpt">${escapeHTML(report.targetExcerpt)}</p>`:''}
+      ${report.details?`<div class="moderation27-details"><b>Reporter context</b><span>${escapeHTML(report.details)}</span></div>`:''}
+      ${!active&&report.resolution?`<p class="moderation27-resolution">Outcome: ${escapeHTML(report.resolution.replaceAll('_',' '))}</p>`:''}
+    </div>
+    <div class="admin-row-actions">
+      <button class="btn btn-secondary" type="button" data-route="post/${encodeURIComponent(report.postId)}">Review post</button>
+      ${active?`<button class="btn btn-danger" type="button" data-admin-moderation-action="hide_post" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Hide post</button>
+      <button class="btn btn-secondary" type="button" data-admin-moderation-action="resolve" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Resolve</button>
+      <button class="btn btn-ghost" type="button" data-admin-moderation-action="dismiss" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Dismiss</button>`:''}
+    </div>
+  </article>`;
+}
+
 async function renderAdmin() {
   if (!adminCapability) {
     renderShell(`${emptyState('info','Admin authorization required','This area requires a Firebase Auth admin custom claim. A profile label alone is not enough.')}`, { wide:true, right:false });
     return;
   }
 
-  renderShell(`<header class="page-head"><div><h1>Opportunity Admin</h1><p>Loading verification and freshness data…</p></div></header><div class="loading-card"></div>`, { wide:true, right:false });
+  renderShell(`<header class="page-head"><div><h1>Admin review</h1><p>Loading authorized review queues…</p></div></header><div class="loading-card"></div>`, { wide:true, right:false });
   try {
     currentAdminOpportunities = await listAdminOpportunities(state.mode, state.user, state.profile);
+    if(adminTab==='reports'){
+      currentAdminReports = await listAdminReports(state.mode,state.user,state.profile);
+    }
+
     const withFreshness = currentAdminOpportunities.map(item => ({ item, freshness: opportunityFreshness(item) }));
     const pending = withFreshness.filter(x => ['pending','unverified'].includes(x.freshness.state)).length;
     const needsReview = withFreshness.filter(x => x.freshness.needsReview).length;
@@ -3980,7 +4014,7 @@ async function renderAdmin() {
       .filter(x => x.freshness.needsReview || x.item.verificationStatus !== 'verified')
       .sort((x,y) => Number(y.freshness.needsReview) - Number(x.freshness.needsReview));
 
-    const reviewPanel = `<section class="admin-list">${reviewRows.length ? reviewRows.map(({item,freshness}) => `<article class="admin-row">
+    const reviewPanel = `<section class="admin-list">${reviewRows.length ? reviewRows.map(({item}) => `<article class="admin-row">
       <div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${adminStatusMarkup(item)}<span class="opportunity-chip">${escapeHTML(item.verificationStatus||'unverified')}</span><span class="opportunity-chip">${escapeHTML(item.status||'draft')}</span></div>
         <h3>${escapeHTML(item.title)}</h3>
@@ -4008,17 +4042,24 @@ async function renderAdmin() {
       ${preview.length ? `<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" type="button" data-admin-import-confirm ${readyCount ? '' : 'disabled'}>Import ${readyCount} ready record${readyCount===1?'':'s'} as pending</button></div>` : ''}
     </section>`;
 
+    const moderationModel=buildModerationQueue(currentAdminReports);
+    const reportsPanel=`<div class="moderation27-panel">
+      <section class="moderation27-note">${icon('info',16)}<span>Reports are private moderation signals, not proof that content violates policy. Review the post and context before taking action.</span></section>
+      <section class="admin-list">${moderationModel.active.length?moderationModel.active.map(adminReportCard).join(''):'<div class="panel opportunity-empty">No active Community reports need review.</div>'}</section>
+      ${moderationModel.resolved.length?`<section class="moderation27-history"><header><span class="opportunity-kicker">RECENT OUTCOMES</span><h2>Reviewed reports</h2></header><div class="admin-list">${moderationModel.resolved.slice(0,30).map(adminReportCard).join('')}</div></section>`:''}
+    </div>`;
+
     const appCheckConfigured = Boolean(window.TEFSEN_APPCHECK_SITE_KEY);
+    const reportStats=buildModerationQueue(currentAdminReports);
+    const hero=adminTab==='reports'
+      ? `<section class="admin-hero moderation27-hero"><div><span class="opportunity-kicker">TRUST & SAFETY</span><h1>Community moderation</h1><p>Review private student reports, inspect the reported public post, and record every admin action in an append-only audit trail.</p></div><div class="admin-stat"><strong>${reportStats.counts.open}</strong><span>open reports</span></div><div class="admin-stat"><strong>${reportStats.counts.inReview}</strong><span>in review</span></div><div class="admin-stat"><strong>${reportStats.counts.legacy}</strong><span>legacy reports</span></div></section>`
+      : `<section class="admin-hero"><div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div><div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div><div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div><div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div></section>`;
+
     const content = `${demoBanner()}<div class="admin-shell">
       ${state.mode === 'firebase' && !appCheckConfigured ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check is not configured yet. Add the Web reCAPTCHA/App Check site key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
-      <section class="admin-hero">
-        <div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div>
-        <div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div>
-        <div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div>
-        <div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div>
-      </section>
-      <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Review queue</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Import</button></div>
-      ${adminTab === 'import' ? importPanel : reviewPanel}
+      ${hero}
+      <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Opportunity review</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Opportunity import</button><button class="btn ${adminTab==='reports'?'btn-primary':'btn-secondary'}" data-admin-tab="reports">Community reports</button></div>
+      ${adminTab==='reports'?reportsPanel:adminTab==='import'?importPanel:reviewPanel}
     </div>`;
     renderShell(content,{wide:true,right:false});
   } catch (error) {
@@ -4292,7 +4333,8 @@ function openComposer() {
 }
 
 function openReportModal(postId) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Harmful or unsafe content</option><option>Misinformation concern</option><option>Copyright concern</option><option>Other</option></select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000"></textarea></div><button class="btn btn-danger" type="submit">Submit report</button></form></div></section></div>`;
+  const options=REPORT_REASONS.map(reason=>`<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`).join('');
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="community-banner"><b>Reports are private.</b> They go to authorized Tefsen moderation review and are not shown to the post author or Community.</div><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option>${options}</select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000" placeholder="Add only information needed to explain the concern."></textarea></div><button class="btn btn-danger" type="submit">Submit private report</button></form></div></section></div>`;
 }
 
 function canDeletePost(post) {
@@ -4487,11 +4529,13 @@ async function handleClick(event) {
   const tab = event.target.closest('[data-feed-tab]');
   if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
   const adminTabButton = event.target.closest('[data-admin-tab]');
-  if (adminTabButton) { adminTab = adminTabButton.dataset.adminTab === 'import' ? 'import' : 'review'; await renderAdmin(); return; }
+  if (adminTabButton) { const next=adminTabButton.dataset.adminTab; adminTab=['review','import','reports'].includes(next)?next:'review'; await renderAdmin(); return; }
   const adminReview = event.target.closest('[data-admin-review-action]');
   if (adminReview) { await handleAdminReview(adminReview); return; }
   const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
   if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
+  const adminModeration = event.target.closest('[data-admin-moderation-action]');
+  if (adminModeration) { await handleAdminModeration(adminModeration); return; }
   const savedCompare = event.target.closest('[data-saved-compare]');
   if (savedCompare) { toggleSavedComparison(savedCompare); return; }
   if (event.target.closest('[data-saved-compare-clear]')) {
@@ -5404,6 +5448,21 @@ async function handleAdminReview(button) {
   await withButton(button,async()=>{try{await reviewOpportunity(state.mode,state.user,state.profile,opportunity,action);toast(action==='verify'?'Opportunity verified and published.':'Opportunity review state updated.','success');await renderAdmin();}catch(error){toast(humanError(error),'error');}});
 }
 
+async function handleAdminModeration(button) {
+  if(!adminCapability)return;
+  const id=button.dataset.adminReportId||'', source=button.dataset.adminReportSource||'reports', action=button.dataset.adminModerationAction||'';
+  const report=currentAdminReports.find(row=>row.id===id&&row.source===source);
+  if(!report){toast('Moderation report not found.','error');return;}
+  await withButton(button,async()=>{
+    try{
+      await reviewReport(state.mode,state.user,state.profile,report,action);
+      toast(action==='hide_post'?'Reported post hidden and action audited.':action==='dismiss'?'Report dismissed and audited.':'Report resolved and audited.','success');
+      adminTab='reports';
+      await renderAdmin();
+    }catch(error){toast(humanError(error),'error');}
+  });
+}
+
 async function handleAdminImportPreview(form) {
   if (!adminCapability) return;
   const fd=new FormData(form);
@@ -5421,7 +5480,7 @@ async function handleAdminImportConfirm(button) {
 }
 
 async function handleReport(form) {
-  const fd=new FormData(form); try { await reportPost(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Report submitted. Thank you.','success'); } catch(e){toast(humanError(e),'error');}
+  const fd=new FormData(form); try { await submitPostReport(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Private report submitted for moderation review.','success'); } catch(e){toast(humanError(e),'error');}
 }
 async function handleNotification(el) {
   try{
