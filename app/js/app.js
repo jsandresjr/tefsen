@@ -20,6 +20,7 @@ import {
 import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
+import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
@@ -2164,29 +2165,89 @@ async function handleSavedDecisionNote(form) {
   });
 }
 
-function journeyCardMarkup(journey, opportunity) {
-  const progress = journeyProgress(journey);
-  const official = deadlineInfo(opportunity?.deadline || '');
+function journeyPriorityCardMarkup(row) {
+  const journey = row.journey || {};
+  const opportunity = row.opportunity || null;
   const title = opportunity?.title || 'Opportunity unavailable';
-  const provider = opportunity?.provider || 'The original opportunity is not currently public.';
-  return `<article class="journey-card">
-    <div>
+  const provider = opportunity?.provider || opportunity?.university || 'The original opportunity is not currently public.';
+  const attention = row.attention || { tone:'active', label:'Active Journey', title:'Continue your Journey', detail:'' };
+  const progress = row.progress || { completed:0,total:0,percent:0,nextTask:'' };
+  const official = row.preSubmission ? deadlineInfo(opportunity?.deadline || '') : null;
+  const personal = row.preSubmission ? deadlineInfo(journey.personalTargetDate || '') : null;
+  const lastUpdated = row.updatedAtMillis ? formatHistoryTime(row.updatedAtMillis) : 'Recently';
+
+  return `<article class="journey-priority-card ${escapeHTML(attention.tone)}">
+    <div class="journey-priority-card-head">
+      <div class="journey-attention-label ${escapeHTML(attention.tone)}"><span></span>${escapeHTML(attention.label)}</div>
+      <span class="journey-stage-label">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</span>
+    </div>
+
+    <div class="journey-priority-heading">
       <h3>${escapeHTML(title)}</h3>
       <p>${escapeHTML(provider)}</p>
-      <div class="journey-card-meta">
-        <span class="opportunity-chip">${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</span>
-        <span class="opportunity-chip">${progress.completed}/${progress.total} tasks</span>
-        ${journey.saved ? '<span class="opportunity-chip">Saved</span>' : ''}
-      </div>
-      <div style="margin-top:10px">
-        <span class="journey-deadline ${deadlineUrgencyClass(official)}">${escapeHTML(official.label)}</span>
-        ${journey.personalTargetDate ? `<span style="color:var(--muted)"> · Personal target ${escapeHTML(journey.personalTargetDate)}</span>` : ''}
-      </div>
     </div>
-    ${journey.started
-      ? `<button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open Journey</button>`
-      : `<button class="btn btn-primary" type="button" data-start-journey="${escapeHTML(journey.opportunityId)}">Start Journey</button>`}
+
+    <section class="journey-priority-action">
+      <span>WHAT NEEDS ATTENTION</span>
+      <h4>${escapeHTML(attention.title)}</h4>
+      <p>${escapeHTML(attention.detail)}</p>
+    </section>
+
+    <div class="journey-priority-progress">
+      <div><span>Preparation checklist</span><strong>${progress.completed}/${progress.total}</strong></div>
+      <div class="journey-progress-bar"><i style="width:${progress.percent}%"></i></div>
+      <small>${progress.total ? `${progress.percent}% complete` : 'No structured checklist tasks yet'}${progress.nextTask ? ` · Next: ${escapeHTML(progress.nextTask)}` : ''}</small>
+    </div>
+
+    <div class="journey-priority-dates">
+      ${row.preSubmission
+        ? `<div class="${official?.valid ? deadlineUrgencyClass(official) : ''}"><span>Official deadline</span><b>${escapeHTML(official?.label || 'Deadline not listed')}</b><small>Provider source remains authoritative</small></div>
+           <div class="${row.targetAfterOfficial || (personal?.valid && personal.daysRemaining < 0) ? 'warning' : ''}"><span>Personal target</span><b>${personal?.valid ? escapeHTML(personal.label) : 'Not set'}</b><small>${row.targetAfterOfficial ? 'Move this before the official deadline' : 'Your private preparation target'}</small></div>`
+        : `<div class="submitted"><span>Application timing</span><b>${journey.status === 'interview' ? 'Review stage' : 'Submitted'}</b><small>The original application deadline is no longer treated as an action alert</small></div>
+           <div><span>Last updated</span><b>${escapeHTML(lastUpdated)}</b><small>Update the stage when the provider responds</small></div>`}
+    </div>
+
+    <div class="journey-priority-card-foot">
+      <span>Private Journey · stage, tasks, targets and notes stay private by default</span>
+      <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open Journey</button>
+    </div>
   </article>`;
+}
+
+function journeyOutcomeCardMarkup(row) {
+  const journey = row.journey || {};
+  const opportunity = row.opportunity || null;
+  const title = opportunity?.title || 'Opportunity unavailable';
+  const provider = opportunity?.provider || opportunity?.university || 'Opportunity provider unavailable.';
+  const attention = row.attention || {};
+  const updated = row.updatedAtMillis ? formatHistoryTime(row.updatedAtMillis) : 'Recently';
+  const tone = journey.status === 'accepted' ? 'accepted' : journey.status === 'rejected' ? 'rejected' : 'withdrawn';
+
+  return `<article class="journey-outcome-card ${tone}">
+    <div class="journey-outcome-mark">${journey.status === 'accepted' ? '✓' : journey.status === 'rejected' ? '×' : '—'}</div>
+    <div class="journey-outcome-copy">
+      <span>${escapeHTML(attention.label || JOURNEY_LABELS[journey.status] || journey.status)}</span>
+      <h3>${escapeHTML(title)}</h3>
+      <p>${escapeHTML(provider)}</p>
+      <small>${escapeHTML(attention.detail || '')} · Updated ${escapeHTML(updated)}</small>
+    </div>
+    <button class="btn btn-secondary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open record</button>
+  </article>`;
+}
+
+function journeyAttentionBannerMarkup(row) {
+  if (!row) return '';
+  const journey = row.journey || {};
+  const attention = row.attention || {};
+  return `<section class="journey-attention-banner ${escapeHTML(attention.tone || 'active')}">
+    <div class="journey-attention-icon">${attention.tone === 'urgent' ? '!' : icon('check',19)}</div>
+    <div>
+      <span>ATTENTION FIRST</span>
+      <h3>${escapeHTML(attention.title || 'Continue your application Journey')}</h3>
+      <p>${escapeHTML(attention.detail || '')}</p>
+    </div>
+    <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(journey.opportunityId)}">Open priority Journey</button>
+  </section>`;
 }
 
 async function renderJourneys() {
@@ -2225,6 +2286,10 @@ async function renderJourneys() {
       profileScores
     });
     currentSavedWorkspace = workspace;
+    const journeyPriority = buildJourneyPriorityWorkspace([
+      ...workspace.active,
+      ...workspace.completed
+    ]);
 
     const validSavedIds = new Set(workspace.savedReview.map(row => String(row.journey?.opportunityId || '')));
     savedOpportunityCompareIds = new Set([...savedOpportunityCompareIds].filter(id => validSavedIds.has(id)));
@@ -2244,8 +2309,8 @@ async function renderJourneys() {
           </div>
           <div class="saved-workspace-stats">
             <div><strong>${workspace.counts.savedReview || '—'}</strong><span>saved for review</span></div>
-            <div><strong>${workspace.counts.active || '—'}</strong><span>active applications</span></div>
-            <div><strong>${workspace.counts.closingSaved || '—'}</strong><span>saved closing within 30 days</span></div>
+            <div><strong>${journeyPriority.counts.active || '—'}</strong><span>active applications</span></div>
+            <div><strong>${journeyPriority.counts.needsAttention || '—'}</strong><span>applications needing attention</span></div>
           </div>
         </section>
 
@@ -2284,32 +2349,39 @@ async function renderJourneys() {
           ${workspace.counts.expiredSaved ? `<div class="saved-expired-summary">${icon('info',16)}<span>${workspace.counts.expiredSaved} saved opportunit${workspace.counts.expiredSaved === 1 ? 'y has' : 'ies have'} a passed stored deadline. They remain visible so you can verify a new cycle or remove them manually.</span></div>` : ''}
         </section>
 
-        <section class="saved-active-foundation">
-          <header class="saved-section-head compact">
+        <section class="journey-active-section">
+          <header class="saved-section-head">
             <div>
               <span class="opportunity-kicker">ACTIVE APPLICATIONS</span>
-              <h2>Journeys you already started.</h2>
-              <p>These are no longer simple bookmarks. Stage, checklist, notes and deadlines stay in the private Journey workspace.</p>
+              <h2>Work on what needs attention first.</h2>
+              <p>Journeys are ordered by actionable deadline, planning conflicts and current stage—not by a hidden success score.</p>
             </div>
-            <span class="saved-count-chip">${workspace.counts.active}</span>
+            <div class="journey-active-counts">
+              <span><b>${journeyPriority.counts.active}</b> active</span>
+              <span class="${journeyPriority.counts.needsAttention ? 'attention' : ''}"><b>${journeyPriority.counts.needsAttention}</b> attention</span>
+              <span><b>${journeyPriority.counts.submitted}</b> submitted / review</span>
+            </div>
           </header>
-          <div class="journey-list">
-            ${workspace.active.length
-              ? workspace.active.map(row => journeyCardMarkup(row.journey, row.opportunity)).join('')
+
+          ${journeyPriority.counts.needsAttention ? journeyAttentionBannerMarkup(journeyPriority.primary) : ''}
+
+          <div class="journey-priority-list">
+            ${journeyPriority.active.length
+              ? journeyPriority.active.map(journeyPriorityCardMarkup).join('')
               : `<section class="saved-section-empty compact"><h3>No active application Journey.</h3><p>When you start preparing a saved opportunity, it will move here automatically.</p></section>`}
           </div>
         </section>
 
-        ${workspace.completed.length ? `<section class="saved-completed-foundation">
+        ${journeyPriority.outcomes.length ? `<section class="journey-outcomes-section">
           <header class="saved-section-head compact">
             <div>
               <span class="opportunity-kicker">OUTCOMES</span>
               <h2>Completed application decisions.</h2>
-              <p>Accepted, rejected and withdrawn Journeys stay separate from opportunities you are still deciding about.</p>
+              <p>Accepted, rejected and withdrawn records stay separate from active deadline priority.</p>
             </div>
-            <span class="saved-count-chip">${workspace.counts.completed}</span>
+            <span class="saved-count-chip">${journeyPriority.counts.outcomes}</span>
           </header>
-          <div class="journey-list">${workspace.completed.map(row => journeyCardMarkup(row.journey, row.opportunity)).join('')}</div>
+          <div class="journey-outcome-list">${journeyPriority.outcomes.map(journeyOutcomeCardMarkup).join('')}</div>
         </section>` : ''}
       </div>`;
 
