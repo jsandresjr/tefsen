@@ -2,7 +2,7 @@ import { initFirebase } from './firebase-client.js';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
-  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
+  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead,
   getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
@@ -29,6 +29,7 @@ import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/su
 import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
 import { buildGlobalSearchModel } from './services/global-search-service.js';
 import { buildNotificationCenterModel } from './services/notification-service.js';
+import { buildSavedCommunityModel } from './services/saved-community-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -90,7 +91,7 @@ const navItems = [
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
   ['leaderboard', 'Leaderboard', 'trophy'],
-  ['saved', 'Saved', 'bookmark'],
+  ['saved', 'Saved community', 'bookmark'],
   ['subscription', 'Subscription', 'info'],
   ['profile', 'Profile', 'user'],
   ['settings', 'Settings', 'settings']
@@ -310,7 +311,7 @@ function renderShell(content, options = {}) {
         <div class="nav-divider"></div>
         <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
         <nav class="nav-list">
-          ${navItems.filter(([id]) => ['notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
+          ${navItems.filter(([id]) => ['saved','notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
           ${avatar(p,'sm')}
@@ -685,10 +686,71 @@ async function renderHome() {
   }
 }
 
-function renderSavedCommunity() {
-  const posts = getFilteredPosts('saved');
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Saved community posts</h1><p>Your saved discussions and student stories.</p></div><button class="btn btn-secondary" type="button" data-route="explore">Community</button></header><div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('bookmark','No saved community posts','Save useful discussions or student stories and they will appear here.')}</div>`;
-  renderShell(content);
+async function renderSavedCommunity() {
+  renderShell(`<div class="saved24-page"><section class="saved24-hero loading"><span class="opportunity-kicker">SAVED COMMUNITY</span><h1>Loading your saved posts…</h1><p>Checking your private saved list independently of the current Community feed.</p></section></div>`,{wide:true,right:false});
+
+  try{
+    const loaded=await getSavedCommunityPosts(state.mode,state.user.uid,state.posts);
+    reactionState.saved=new Set(loaded.savedIds||[]);
+    const model=buildSavedCommunityModel({
+      posts:loaded.posts,
+      referenceCount:loaded.referenceCount,
+      staleCount:loaded.staleCount
+    });
+
+    const section=(title,eyebrow,posts,description)=>posts.length ? `<section class="saved24-section">
+      <header class="saved24-section-head">
+        <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p></div>
+        <span>${posts.length}</span>
+      </header>
+      <div class="saved24-list">${posts.map(postCard).join('')}</div>
+    </section>` : '';
+
+    const content=`${demoBanner()}
+      <div class="saved24-page">
+        <section class="saved24-hero">
+          <div>
+            <span class="opportunity-kicker">PRIVATE COMMUNITY LIBRARY</span>
+            <h1>Keep useful Community posts without losing them in the feed.</h1>
+            <p>Save public discussions, Success stories and Journey stories for your own later review. Your saved list is private account data and is separate from saved opportunities.</p>
+            <div class="saved24-hero-actions">
+              <button class="btn btn-primary" type="button" data-route="explore">${icon('compass',17)} Explore Community</button>
+              <button class="btn btn-secondary" type="button" data-route="journeys">Saved opportunities & Journeys</button>
+            </div>
+          </div>
+          <aside class="saved24-scope">
+            <span>WHAT SAVING MEANS</span>
+            <div><b>Private to your account</b><small>${escapeHTML(model.privacyNote)}</small></div>
+            <div><b>Separate from applications</b><small>${escapeHTML(model.distinctionNote)}</small></div>
+            <div><b>Public content can change</b><small>If a post is hidden or deleted later, Tefsen will not expose it just because you saved it earlier.</small></div>
+          </aside>
+        </section>
+
+        <section class="saved24-stats" aria-label="Saved Community summary">
+          <article><strong>${model.counts.saved}</strong><span>Available saved posts</span></article>
+          <article><strong>${model.counts.discussions}</strong><span>Discussions</span></article>
+          <article><strong>${model.counts.successStories}</strong><span>Success stories</span></article>
+          <article><strong>${model.counts.journeyStories}</strong><span>Journey stories</span></article>
+        </section>
+
+        ${model.staleCount ? `<section class="saved24-unavailable">${icon('info',16)}<span>${model.staleCount} saved reference${model.staleCount===1?' is':'s are'} unavailable because the post no longer resolves as public content.</span></section>` : ''}
+
+        ${model.empty ? `<section class="saved24-empty">
+          <div>${icon('bookmark',25)}</div>
+          <h2>No saved Community posts yet</h2>
+          <p>Use Save on a useful public discussion, Success story or Journey story. Saved Opportunities remain in your separate Journey workspace.</p>
+          <button class="btn btn-primary" type="button" data-route="explore">Find useful Community posts</button>
+        </section>` : `
+          ${section('Saved discussions','LEARNING & QUESTIONS',model.discussions,'Public discussions you chose to keep for later review.')}
+          ${section('Saved student outcomes','STUDENT EXPERIENCES',model.outcomes,'Success and Journey stories add context, but they do not replace official provider information.')}
+        `}
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Saved Community unavailable','Please try again.')}`,{wide:true,right:false});
+  }
 }
 
 async function renderExplore() {
@@ -3091,6 +3153,7 @@ function success18ContextLinks(model) {
 
 function success18DetailMarkup(post, model, comments) {
   const liked=reactionState.liked.has(post.id);
+  const saved=reactionState.saved.has(post.id);
   const facts=model.facts.length
     ? model.facts.map(([label,value])=>`<div class="success18-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')
     : '<div class="success18-fact empty"><small>Outcome details</small><b>No structured facts were provided.</b></div>';
@@ -3151,6 +3214,7 @@ function success18DetailMarkup(post, model, comments) {
       <footer class="post-actions success18-actions">
         <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like success story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
         <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
         <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
         <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
       </footer>
@@ -3184,6 +3248,7 @@ function journey19MonthLabel(value) {
 
 function journey19DetailMarkup(post,model,comments) {
   const liked=reactionState.liked.has(post.id);
+  const saved=reactionState.saved.has(post.id);
   const contextLinks=journey19ContextLinks(model);
 
   const timeline=model.milestones.length
@@ -3265,6 +3330,7 @@ function journey19DetailMarkup(post,model,comments) {
       <footer class="post-actions journey19-actions">
         <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like Journey story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
         <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
         <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
         <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
       </footer>
