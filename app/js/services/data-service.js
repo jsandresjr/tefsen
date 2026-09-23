@@ -1270,24 +1270,23 @@ export async function removeProfilePhoto(mode, userId) {
   }
 
   const userRef = doc(db, C.users, userId);
+  const currentSnap=await getDoc(userRef);
+  const current=currentSnap.exists() ? currentSnap.data() : {};
   const batch=writeBatch(db);
   batch.set(userRef,{
     profileImageUrl:'',
     photoURL:'',
     updatedAt:serverTimestamp()
   },{ merge:true });
-  batch.set(publicProfileDocument(userId),{
-    uid:String(userId),
-    schemaVersion:1,
-    profileImageUrl:'',
-    photoURL:'',
-    updatedAt:serverTimestamp()
-  },{ merge:true });
+  batch.set(
+    publicProfileDocument(userId),
+    publicProfileWritePayload(userId,{ ...current, profileImageUrl:'', photoURL:'', photoUrl:'' }),
+    { merge:true }
+  );
   await batch.commit();
 
   userProfileCache.delete(`${mode}:${userId}`);
-  const snap = await getDoc(userRef);
-  return snap.exists() ? normalizeUser(snap.data(), userId) : null;
+  return normalizeUser({ ...current, profileImageUrl:'', photoURL:'' }, userId);
 }
 
 
