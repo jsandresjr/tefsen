@@ -717,11 +717,106 @@ export async function addComment(mode, user, profile, postId, text) {
   return { ...item, createdAt: new Date(nowMillis).toISOString() };
 }
 
-export async function getNotifications() {
-  return [];
+function notificationReadKey(userId) {
+  return `tefsen_notification_reads_${String(userId || 'guest')}`;
 }
 
-export async function markNotificationRead() {
+export function getNotificationReadIds(userId) {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(notificationReadKey(userId)) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberNotificationRead(userId, notificationId) {
+  if (!userId || !notificationId) return;
+  const ids = getNotificationReadIds(userId);
+  ids.add(String(notificationId));
+  try {
+    localStorage.setItem(notificationReadKey(userId), JSON.stringify([...ids].slice(-600)));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
+}
+
+function normalizeNotificationRecord(raw = {}, id = '') {
+  return {
+    ...raw,
+    id:String(id || raw.id || ''),
+    type:String(raw.type || raw.notificationType || 'update'),
+    actorName:String(raw.actorName || raw.fromUserName || raw.senderName || ''),
+    text:String(raw.text || raw.message || raw.body || ''),
+    postId:String(raw.postId || raw.questionId || raw.parentPostId || ''),
+    opportunityId:String(raw.opportunityId || ''),
+    actorId:String(raw.actorId || raw.fromUserId || raw.senderId || ''),
+    read:Boolean(raw.read || raw.isRead),
+    createdAt:raw.createdAt || raw.timestamp || raw.updatedAt || null,
+    source:'activity'
+  };
+}
+
+async function notificationQueryByField(userId, fieldName) {
+  const snap = await getDocs(query(
+    collection(db, C.notifications),
+    where(fieldName, '==', String(userId)),
+    limit(80)
+  ));
+  return snap.docs.map(row => normalizeNotificationRecord(row.data(), row.id));
+}
+
+export async function getNotifications(mode, userId) {
+  if (!userId || mode === 'demo') return [];
+
+  // The Android/web schema historically used userId. Some older records may
+  // use recipientId, so try that only when the canonical query is empty.
+  try {
+    const canonical = await notificationQueryByField(userId, 'userId');
+    if (canonical.length) return canonical.sort((a,b) =>
+      (timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0) -
+      (timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0)
+    );
+  } catch {
+    // Fall through to the compatibility field. Callers still get [] if both
+    // shapes are unavailable or blocked by current rules.
+  }
+
+  try {
+    const legacy = await notificationQueryByField(userId, 'recipientId');
+    return legacy.sort((a,b) =>
+      (timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0) -
+      (timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0)
+    );
+  } catch {
+    return [];
+  }
+}
+
+export async function markNotificationRead(mode, userId, notification = {}) {
+  const id = String(notification?.id || '');
+  if (!userId || !id) return false;
+
+  rememberNotificationRead(userId, id);
+
+  if (notification?.source !== 'activity' || mode === 'demo') return true;
+
+  const serverId = id.startsWith('activity:') ? id.slice('activity:'.length) : id;
+  if (!serverId) return true;
+
+  try {
+    const ref = doc(db, C.notifications, serverId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return true;
+    await setDoc(ref, {
+      read:true,
+      isRead:true,
+      readAt:serverTimestamp(),
+      updatedAt:serverTimestamp()
+    }, { merge:true });
+  } catch {
+    // Local read state still prevents the notification from repeatedly
+    // appearing unread when legacy Firestore rules do not allow updates.
+  }
   return true;
 }
 

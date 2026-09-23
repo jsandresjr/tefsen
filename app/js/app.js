@@ -3,7 +3,7 @@ import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
-  subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
+  subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead, getConversations,
   subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
   startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   getFollowState, toggleFollow, hydratePostLikeState
@@ -28,6 +28,7 @@ import { validatePostAcceptanceDraft } from './services/post-acceptance-service.
 import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
 import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
 import { buildGlobalSearchModel } from './services/global-search-service.js';
+import { buildNotificationCenterModel } from './services/notification-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -178,20 +179,29 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, reactions, notifications, conversations, passport] = await Promise.all([
+    const [profile, reactions, activityNotifications, conversations, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
       getConversations(state.mode, user.uid).catch(() => []),
-      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid))
+      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid)),
+      listJourneyStates(state.mode, user.uid).catch(() => []),
+      getOpportunities(state.mode).catch(() => [])
     ]);
+    const notificationModel = buildNotificationCenterModel({
+      activityNotifications,
+      journeys:notificationJourneys,
+      opportunities:notificationOpportunities,
+      readIds:getNotificationReadIds(user.uid),
+      now:new Date()
+    });
     currentStudentPassport = passport;
     reactionState = reactions;
     setState({
       profile,
-      notifications,
+      notifications:notificationModel.items,
       conversations,
-      unreadCount: notifications.filter(n => !n.read).length
+      unreadCount:notificationModel.unreadCount
     });
     adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
     stopPosts = subscribePosts(state.mode, posts => {
@@ -3358,16 +3368,104 @@ function answerCard(answer) {
   return `<article class="panel answer-card"><header class="post-head">${avatarHtml}<div class="post-head-main">${nameHtml}<small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
 }
 
-async function renderNotifications() {
-  const rows = state.notifications;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Notifications</h1><p>Updates from your questions, answers and community.</p></div></header>
-    <section class="panel">${rows.length ? rows.map(notificationItem).join('') : emptyState('bell','You are all caught up','New activity will appear here.')}</section>`;
-  renderShell(content);
+async function refreshNotificationCenterData() {
+  if(!state.user?.uid) return buildNotificationCenterModel();
+  const [activityNotifications,journeys,opportunities]=await Promise.all([
+    getNotifications(state.mode,state.user.uid).catch(()=>[]),
+    listJourneyStates(state.mode,state.user.uid).catch(()=>[]),
+    getOpportunities(state.mode).catch(()=>[])
+  ]);
+  const model=buildNotificationCenterModel({
+    activityNotifications,
+    journeys,
+    opportunities,
+    readIds:getNotificationReadIds(state.user.uid),
+    now:new Date()
+  });
+  setState({notifications:model.items,unreadCount:model.unreadCount});
+  return model;
 }
 
-function notificationItem(n) {
-  const typeIcon = n.type === 'like' ? 'heart' : n.type === 'answer' ? 'comment' : 'bell';
-  return `<button class="notification-item ${n.read ? '' : 'unread'}" type="button" style="width:100%;text-align:left;color:inherit;background:${n.read?'transparent':'rgba(22,173,239,.045)'};border-left:0;border-right:0;border-top:0" data-notification="${escapeHTML(n.id)}" data-post="${escapeHTML(n.postId || '')}"><span class="notification-icon">${icon(typeIcon,18)}</span><span><p><b>${escapeHTML(n.actorName || 'Tefsen')}</b> ${escapeHTML(n.text || n.message || 'sent you an update')}</p><small>${relativeTime(n.createdAt)}</small></span></button>`;
+function notificationIconName(n) {
+  if(n.type==='deadline') return 'clock';
+  if(n.type==='post_acceptance') return 'check';
+  if(n.type==='journey') return 'compass';
+  if(n.type==='reply') return 'comment';
+  if(n.type==='like') return 'heart';
+  return 'bell';
+}
+
+function notification21Item(n) {
+  const time=n.timeLabel || (n.createdAt ? relativeTime(n.createdAt) : '');
+  return `<button class="notification21-item ${n.read?'read':'unread'} priority-${escapeHTML(n.priority||'info')}" type="button"
+    data-notification="${escapeHTML(n.id)}" data-notification-route="${escapeHTML(n.route||'')}">
+    <span class="notification21-icon">${icon(notificationIconName(n),18)}</span>
+    <span class="notification21-copy">
+      <span class="notification21-meta"><b>${escapeHTML(n.category==='attention'?'Needs attention':n.category==='planning'?'Your plan':'Community update')}</b>${time?`<small>${escapeHTML(time)}</small>`:''}</span>
+      <strong>${escapeHTML(n.title||'Tefsen update')}</strong>
+      <p>${escapeHTML(n.message||'')}</p>
+      <small class="notification21-action">${escapeHTML(n.actionLabel||'Open')} →</small>
+    </span>
+    ${n.read?'':'<span class="notification21-dot" aria-label="Unread"></span>'}
+  </button>`;
+}
+
+function notification21Section(title,eyebrow,rows,description='') {
+  if(!rows?.length) return '';
+  return `<section class="notification21-section">
+    <header class="notification21-section-head">
+      <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2>${description?`<p>${escapeHTML(description)}</p>`:''}</div>
+      <span>${rows.filter(row=>!row.read).length} unread</span>
+    </header>
+    <div class="notification21-list">${rows.map(notification21Item).join('')}</div>
+  </section>`;
+}
+
+async function renderNotifications() {
+  renderShell(`<div class="notification21-page"><section class="notification21-hero loading"><span class="opportunity-kicker">NOTIFICATIONS</span><h1>Loading what needs your attention…</h1><p>Checking your Journey dates, opportunity deadlines and Community activity.</p></section></div>`,{wide:true,right:false});
+
+  try{
+    const model=await refreshNotificationCenterData();
+    const content=`${demoBanner()}
+      <div class="notification21-page">
+        <section class="notification21-hero">
+          <div>
+            <span class="opportunity-kicker">YOUR NEXT ACTIONS</span>
+            <h1>Notifications that help you move forward</h1>
+            <p>Tefsen prioritizes deadlines, private Journey planning dates, accepted-offer actions and useful Community activity instead of filling this page with generic engagement noise.</p>
+            <div class="notification21-hero-actions">
+              ${model.unreadCount ? '<button class="btn btn-secondary" type="button" data-notifications-mark-all>Mark all as read</button>' : '<span class="notification21-calm">✓ No unread notifications</span>'}
+              <button class="btn btn-ghost" type="button" data-route="journeys">Open Journey workspace</button>
+            </div>
+          </div>
+          <aside class="notification21-scope">
+            <span>HOW THIS WORKS</span>
+            <div><b>Private planning stays private</b><small>Journey-derived alerts are calculated for you; they are not public Community posts.</small></div>
+            <div><b>Official sources still control dates</b><small>A stored deadline is a planning aid. Verify current dates and requirements on the provider source.</small></div>
+            <div><b>Read state survives refresh</b><small>Derived alerts use stable IDs so acknowledged items do not immediately reappear as unread.</small></div>
+          </aside>
+        </section>
+
+        <section class="notification21-stats" aria-label="Notification summary">
+          <article><strong>${model.counts.unread}</strong><span>Unread</span></article>
+          <article><strong>${model.counts.attention}</strong><span>Needs attention</span></article>
+          <article><strong>${model.counts.planning}</strong><span>Planning</span></article>
+          <article><strong>${model.counts.activity}</strong><span>Community updates</span></article>
+        </section>
+
+        <section class="notification21-source-note">${icon('info',16)}<span>${escapeHTML(model.sourceNote)}</span></section>
+
+        ${model.empty ? `<section class="notification21-empty"><div>${icon('bell',24)}</div><h2>Nothing needs your attention right now</h2><p>Deadline, Journey and supported Community activity notifications will appear here when there is something useful to review.</p><div><button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button><button class="btn btn-secondary" type="button" data-route="journeys">Open Journeys</button></div></section>` : `
+          ${notification21Section('Deadlines and time-sensitive actions','NEEDS ATTENTION',model.sections.attention,'Stored dates that are close, today or overdue. Verify official deadlines before acting.')}
+          ${notification21Section('Continue your plan','JOURNEY PLANNING',model.sections.planning,'Useful next actions from your private Journey and accepted-offer workspace.')}
+          ${notification21Section('Community activity','PUBLIC ACTIVITY',model.sections.activity,'Replies and supported activity records from the Community notification collection.')}
+        `}
+      </div>`;
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Notifications unavailable','Please try again.')}`,{wide:true,right:false});
+  }
 }
 
 async function renderMessages(conversationId = '') {
@@ -4250,6 +4348,7 @@ async function handleClick(event) {
   if (confirmDeletePost) { await handleDeletePost(confirmDeletePost.dataset.confirmDeletePost, confirmDeletePost); return; }
   const report = event.target.closest('[data-report]');
   if (report) { openReportModal(report.dataset.report); return; }
+  if (event.target.closest('[data-notifications-mark-all]')) { await handleNotificationsMarkAll(event.target.closest('[data-notifications-mark-all]')); return; }
   const notification = event.target.closest('[data-notification]');
   if (notification) { await handleNotification(notification); return; }
   const conv = event.target.closest('[data-conversation]');
@@ -5162,7 +5261,30 @@ async function handleReport(form) {
   const fd=new FormData(form); try { await reportPost(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Report submitted. Thank you.','success'); } catch(e){toast(humanError(e),'error');}
 }
 async function handleNotification(el) {
-  try { await markNotificationRead(state.mode,el.dataset.notification); const n=state.notifications.find(x=>x.id===el.dataset.notification); if(n)n.read=true; state.unreadCount=state.notifications.filter(n=>!n.read).length; if(el.dataset.post)go(`post/${el.dataset.post}`);else renderNotifications(); }catch(e){toast(humanError(e),'error');}
+  try{
+    const n=state.notifications.find(x=>x.id===el.dataset.notification);
+    if(!n)return;
+    await markNotificationRead(state.mode,state.user.uid,n);
+    n.read=true;
+    setState({
+      notifications:[...state.notifications],
+      unreadCount:state.notifications.filter(row=>!row.read).length
+    });
+    const route=el.dataset.notificationRoute || n.route || '';
+    if(route) go(route); else renderNotifications();
+  }catch(e){
+    toast(humanError(e),'error');
+  }
+}
+
+async function handleNotificationsMarkAll(button) {
+  const unread=state.notifications.filter(row=>!row.read);
+  await withButton(button,async()=>{
+    await Promise.all(unread.map(row=>markNotificationRead(state.mode,state.user.uid,row)));
+    for(const row of unread) row.read=true;
+    setState({notifications:[...state.notifications],unreadCount:0});
+    await renderNotifications();
+  });
 }
 async function handleStartConversation(profile) {
   if(!profile?.uid)return;
