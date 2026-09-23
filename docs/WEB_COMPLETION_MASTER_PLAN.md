@@ -417,4 +417,27 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now watches the Journey-story service
 - service-worker cache bumped to V46
 
-**Next: Step 20 — Global search**
+**Step 20: Global search — complete on branch `tefsen-web-completion-20-global-search`**
+- global search rebuilt as one discovery surface across public students, Community content, opportunities, subjects, universities and intakes
+- deterministic global-search service added instead of relying on a generic mixed string filter
+- ranking uses explicit text-field weighting and is clearly described as not a quality, eligibility or recommendation score
+- public student results are reduced to lightweight public fields only; email/subscription/private profile data do not enter search-result objects
+- Community search filters to published/public content before ranking
+- demo search now applies the same public-only post boundary instead of allowing hidden/private demo posts into search candidates
+- search candidate matching now uses normalized token matching so multi-field queries such as student + subject or scholarship + country can match across public fields
+- Community matching covers discussion titles/content/subjects/tags plus public Success/Journey context
+- opportunity search covers title, provider, university, country, intake, type, funding, subjects, study levels, benefits and summary
+- public opportunity results exclude non-published/private opportunity records
+- subject communities are searchable from public Community/opportunity data
+- university search includes known public country and intake context
+- intake spaces are searchable by intake, university and country context
+- no-query Search page now provides subject, university and opportunity discovery instead of a blank search screen
+- searched state includes a mixed Top Matches section plus separate People, Community, Opportunities, Subjects, Universities and Intakes sections
+- empty-search-result state suggests broader public discovery terms without fabricating matches
+- verified opportunity records can display a trust indicator, while official provider sources remain authoritative
+- responsive desktop/tablet/mobile Global Search redesign added
+- deterministic Global Search regression tests added
+- CI now watches the Global Search service
+- service-worker cache bumped to V47 and Global Search service added to offline shell
+
+**Next: Step 21 — Notifications with real data and useful events**
