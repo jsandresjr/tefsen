@@ -752,6 +752,19 @@ export async function getLeaderboard(mode) {
     .slice(0, 30);
 }
 
+function searchCandidateMatches(term, values = []) {
+  const normalizeSearch = value => String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const queryTokens = [...new Set(
+    normalizeSearch(term).split(/[^a-z0-9]+/).filter(Boolean)
+  )].slice(0, 8);
+  if (!queryTokens.length) return false;
+  const haystack = normalizeSearch(values.filter(Boolean).join(' '));
+  return queryTokens.every(token => haystack.includes(token));
+}
+
 export async function searchAll(mode, term) {
   const qText = String(term || '').trim().toLowerCase();
   if (!qText) return { users: [], posts: [] };
@@ -759,11 +772,11 @@ export async function searchAll(mode, term) {
   if (mode === 'demo') {
     const users = DEMO_USERS
       .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id))
-      .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText));
+      .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]));
     const posts = demoPosts
       .map(post => normalizePost(post, post.id))
       .filter(isPublicProfileActivity)
-      .filter(post => `${post.title} ${post.content} ${post.subject} ${post.communitySubject || ''} ${post.communityUniversity || ''} ${post.communityIntake || ''} ${post.successData?.opportunityName || ''} ${post.successData?.university || ''} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText));
+      .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]));
     return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
   }
 
@@ -779,13 +792,13 @@ export async function searchAll(mode, term) {
 
   const users = usersSnap.docs
     .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
-    .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText))
+    .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]))
     .slice(0, 20);
 
   const posts = postsSnap.docs
     .map(row => normalizePost(row.data(), row.id))
     .filter(isPublicProfileActivity)
-    .filter(post => `${post.title} ${post.content} ${post.subject} ${post.communitySubject || ''} ${post.communityUniversity || ''} ${post.communityIntake || ''} ${post.successData?.opportunityName || ''} ${post.successData?.university || ''} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText))
+    .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]))
     .slice(0, 30);
 
   return { users, posts: await enrichPostAuthors(mode, posts) };
