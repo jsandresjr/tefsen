@@ -165,6 +165,56 @@ Tefsen Web must never infer enforcement merely because a site key exists or `ini
 
 The Admin review surface reports only client readiness and explicitly states that enforcement must still be verified service-by-service in Firebase Console.
 
+## Authentication account bootstrap integrity
+
+The Web authentication flow must stay compatible with the strict private `users/{uid}` account rule.
+
+For a brand-new Firebase Auth user, the browser may create only the canonical private account document with this exact non-privileged shape:
+
+- uid
+- email
+- fullName
+- displayName
+- username
+- bio
+- role
+- profileImageUrl
+- photoURL
+- verified
+- createdAt
+- updatedAt
+
+New browser-created accounts must always begin with:
+
+- `role = "student"`
+- `verified = false`
+- empty public username unless the student explicitly chooses one later
+- no subscription/billing/admin fields
+
+The browser must never derive admin authorization from an email address.
+
+Trusted admin authorization comes from Firebase Auth custom claims and is checked separately by admin services and Firestore rules.
+
+For an existing private account document, auth bootstrap may update only owner-safe presentation fields:
+
+- fullName
+- displayName
+- profileImageUrl
+- photoURL
+- updatedAt
+
+It must not rewrite:
+
+- email
+- role
+- verified status
+- subscription state
+- billing/admin fields
+
+Every Firebase auth session should retry account bootstrap so an account can recover from a prior transient Firestore/network failure.
+
+The auth bootstrap payload and Firestore rules are tested together in the emulator suite. If either schema changes, update both sides in one reviewed change.
+
 ## Required Student Passport rule
 
 Student Passport data is stored separately from the public user profile:
