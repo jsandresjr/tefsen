@@ -3228,8 +3228,8 @@ async function handleClick(event) {
   if (shareJourneyStory) { openJourneyStoryModal({ subject:shareJourneyStory.dataset.prefillSubject||'', university:shareJourneyStory.dataset.prefillUniversity||'', intake:shareJourneyStory.dataset.prefillIntake||'' }); return; }
   const communityDiscussion = event.target.closest('[data-community-discussion]');
   if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
-  if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
-  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
+  if (event.target.closest('[data-close-modal]')) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; return; }
+  if (event.target.matches('[data-modal-backdrop]')) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; return; }
   const tab = event.target.closest('[data-feed-tab]');
   if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
   const adminTabButton = event.target.closest('[data-admin-tab]');
@@ -3322,7 +3322,7 @@ async function handleClick(event) {
     clearSelectedProfilePhoto();
     return;
   }
-  if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
+  if (event.target.closest('[data-profile-photo-remove]')) { cleanupProfilePhotoPreview(); openRemoveProfilePhotoModal(); return; }
   const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
   if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
   const editProfile = event.target.closest('[data-edit-profile]');
@@ -3897,6 +3897,14 @@ function updatePublicProfileValidation(form) {
   return { draft, validation };
 }
 
+function cleanupProfilePhotoPreview() {
+  const input = modalRoot.querySelector('[data-profile-photo-input]');
+  if (input?.dataset?.previewUrl) {
+    URL.revokeObjectURL(input.dataset.previewUrl);
+    delete input.dataset.previewUrl;
+  }
+}
+
 function clearSelectedProfilePhoto() {
   const form = modalRoot.querySelector('[data-profile-form][data-profile-modal]');
   const input = form?.querySelector('[data-profile-photo-input]');
@@ -4191,13 +4199,13 @@ function handleInput(event) {
 
     const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
     if (!allowed.has(String(file.type || '').toLowerCase())) {
+      clearSelectedProfilePhoto();
       toast('Profile photo must be JPG, PNG or WebP.', 'error');
-      input.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
+      clearSelectedProfilePhoto();
       toast('Profile photo must be 5 MB or smaller.', 'error');
-      input.value = '';
       return;
     }
 
@@ -4289,7 +4297,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
-  if (event.key==='Escape' && modalRoot.innerHTML) modalRoot.innerHTML='';
+  if (event.key==='Escape' && modalRoot.innerHTML) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; }
   if (event.key==='Escape' && state.ui.profileMenu) { state.ui.profileMenu = false; syncProfileMenu(); }
 });
 
