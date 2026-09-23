@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v62-entitlement-authority';
+const CACHE = 'tefsen-web-shell-v63-account-privacy';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
