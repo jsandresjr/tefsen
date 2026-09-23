@@ -2430,7 +2430,7 @@ async function renderJourneyDetail(opportunityId) {
     const completedTasks = model.tasks.completed;
     const nextTask = model.tasks.next;
 
-    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask ? 'next' : ''} ${model.terminal ? 'readonly' : ''}">
+    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask && !model.terminal ? 'next' : ''} ${model.terminal ? 'readonly' : ''}">
       ${model.terminal
         ? `<span class="journey-task-check static" aria-hidden="true">${task.completed ? '✓' : '○'}</span>`
         : `<button class="journey-task-check" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : ''}</button>`}
@@ -2515,15 +2515,15 @@ async function renderJourneyDetail(opportunityId) {
             <section class="journey-detail-card">
               <header class="journey-detail-card-head checklist">
                 <div>
-                  <span>PREPARATION CHECKLIST</span>
-                  <h2>${model.progress.remaining ? `${model.progress.remaining} task${model.progress.remaining === 1 ? '' : 's'} remaining` : 'No unfinished tasks'}</h2>
-                  <p>System tasks come from structured opportunity requirements. Custom tasks are private to you.</p>
+                  <span>${model.terminal ? 'APPLICATION CHECKLIST RECORD' : 'PREPARATION CHECKLIST'}</span>
+                  <h2>${model.terminal ? 'Read-only application preparation history' : model.progress.remaining ? `${model.progress.remaining} task${model.progress.remaining === 1 ? '' : 's'} remaining` : 'No unfinished tasks'}</h2>
+                  <p>${model.terminal ? 'This checklist is preserved as part of the application record and no longer drives next-stage work.' : 'System tasks come from structured opportunity requirements. Custom tasks are private to you.'}</p>
                 </div>
                 <strong>${model.progress.percent}%</strong>
               </header>
               <div class="journey-progress-bar journey-detail-progress"><i style="width:${model.progress.percent}%"></i></div>
 
-              ${nextTask ? `<section class="journey-next-task">
+              ${nextTask && !model.terminal ? `<section class="journey-next-task">
                 <span>NEXT UNFINISHED TASK</span>
                 <h3>${escapeHTML(nextTask.label)}</h3>
                 <p>${nextTask.source === 'system' ? 'This task came from the structured opportunity requirements.' : 'This is a private task you added to your Journey.'}</p>
