@@ -1,185 +1,146 @@
 # Tefsen Web V1 — Production Launch Checklist
 
-## Current code status
+## Repository status
 
-Implemented in the Web V1 branches and merged progressively into the product:
+The 40-step Web completion program is source-complete after Step 40 is reviewed and merged.
 
-- opportunity discovery and detail pages
-- Student Passport
-- rule-based eligibility matching
-- saved opportunities
-- deadline tracking
-- private application journey
-- preparation checklists
-- success stories
-- public journey stories
-- subject communities
-- university and intake communities
-- claim-gated opportunity admin review
-- JSON/CSV import preview
-- duplicate source detection
-- stale/expired opportunity review states
-- opportunity audit-log writes
-- accessibility focus/reduced-motion hardening
-- expanded offline shell cache
+The repository now contains automated checks for the authenticated Web app, public website, isolated Firestore security contract, isolated Cloud Storage contract, PWA behavior, privacy/account flows, accessibility, and public release routing.
 
-## Production blockers
+The Step 39 PR head passed **363/363 tests with 0 failures**. Step 40 reruns the full suite and adds final handoff-consistency tests.
 
-Do not call Web V1 production-ready until all of these are completed.
+## Completed in source / CI
 
-### 1. Firestore rules
+- [x] Opportunity discovery/detail/trust/eligibility experience
+- [x] Student Passport onboarding/editor
+- [x] Saved opportunities and private Journey workflow
+- [x] Post-acceptance planning
+- [x] Public profile / private account separation
+- [x] Community + subject + university + intake experiences
+- [x] Success/Journey story publishing and readers
+- [x] Public/global search integrity
+- [x] Notifications and Saved Community
+- [x] Settings/account/subscription presentation
+- [x] Reports/moderation center
+- [x] Claim-gated admin opportunity workflow
+- [x] Unsupported messaging/following removed cleanly
+- [x] Untrusted leaderboard retired
+- [x] Firestore isolated emulator security tests
+- [x] Cloud Storage isolated emulator security tests
+- [x] Community interaction rules/tests
+- [x] Auth account bootstrap/rule compatibility tests
+- [x] App Check readiness model
+- [x] PWA/document security
+- [x] Account deletion/privacy request integrity
+- [x] Keyboard/dialog accessibility baseline
+- [x] Canonical public routes/sitemap/static-release checks
+- [x] Production Firebase Web client config populated
+- [x] Production Web not forced into demo mode
 
-The production Firestore rules are not stored in this repository, so they could not be emulator-tested from this repo.
+## External production gates
 
-Merge and test owner-only rules for:
+Do not describe these as complete until verified in the authoritative external systems.
 
-- `student_passports/{uid}`
-- `journeys/{uid}/opportunities/{opportunityId}`
+### A. Production Firestore + Storage rule deployment
 
-Add admin-only write rules for:
+- [ ] Obtain the current complete production rules used by Android/backend.
+- [ ] Merge the tested Web clauses from `firebase-tests/`.
+- [ ] Preserve all Android/backend requirements.
+- [ ] Run Android/backend security tests.
+- [ ] Run this Web emulator suite again against the merged rule set when practical.
+- [ ] Review the final production diff.
+- [ ] Deploy only the merged complete production rules.
 
-- `opportunities/{opportunityId}`
-- `opportunity_audit/{auditId}`
+The isolated Web test rules must **not** overwrite the complete production rules.
 
-Preserve existing secure behavior for:
+### B. Web App Check
 
-- users
-- posts
-- comments/answers
-- likes
-- notifications
-- conversations/messages
-- reports
+- [ ] Register/configure Web reCAPTCHA v3 App Check provider.
+- [ ] Add the public site key to the Web config.
+- [ ] Deploy with monitoring first.
+- [ ] Confirm legitimate Web requests receive valid App Check signals.
+- [ ] Enable enforcement gradually per supported Firebase service.
 
-Required negative tests:
+### C. Admin custom claim
 
-- user A cannot read user B Student Passport
-- user A cannot read user B Journey
-- ordinary user cannot publish/verify an opportunity
-- ordinary user cannot write an audit log
-- unauthenticated user cannot read private profile/journey data
-- ordinary user cannot forge admin/moderation fields on public posts
+- [ ] Confirm the intended production admin account has a trusted Auth custom claim.
+- [ ] Refresh the ID token/sign out-in.
+- [ ] Confirm Admin review is available to the claimed admin.
+- [ ] Confirm Admin review is denied to an ordinary student.
 
-### 2. Firebase Auth admin custom claim
+### D. Real-domain authentication smoke test
 
-Create admin authorization only through a trusted Admin SDK/server environment.
+- [ ] Existing email/password login
+- [ ] New email/password registration
+- [ ] Google sign-in
+- [ ] Password reset
+- [ ] Sign-out/sign-in persistence
+- [ ] Old-account bootstrap recovery
+- [ ] New-account bootstrap creation
 
-Recommended claim:
+### E. Real production data smoke test
 
-`admin: true`
+- [ ] Student Passport create/update
+- [ ] Opportunity save/unsave
+- [ ] Journey start/update
+- [ ] Notification/read-state behavior
+- [ ] Profile photo upload/remove
+- [ ] Community post create/delete
+- [ ] Post image upload/delete
+- [ ] Saved Community
+- [ ] Success story
+- [ ] Journey story
+- [ ] Report/moderation flow
+- [ ] Admin opportunity review/import
 
-or:
+### F. Opportunity freshness operations
 
-`role: "ADMIN"`
+- [ ] Curate a small real official-source opportunity set.
+- [ ] Verify deadlines/funding/study fields.
+- [ ] Verify stale/review states.
+- [ ] Confirm imports begin non-public and require trusted review.
+- [ ] Expand catalogue only after review workflow is proven.
 
-After changing the claim, sign out/in or refresh the Firebase ID token before testing the Admin page.
+### G. Browser/device QA
 
-Never use a client-editable profile field as the real authorization boundary.
+- [ ] Android Chrome
+- [ ] desktop Chrome
+- [ ] desktop Safari
+- [ ] mobile Safari when available
+- [ ] keyboard-only navigation
+- [ ] larger text/browser zoom
+- [ ] reduced motion
+- [ ] slow network
+- [ ] temporary offline
+- [ ] service-worker upgrade from an older cache
 
-### 3. Web App Check
+## Post-merge route checks
 
-The current repository has:
+After GitHub Pages deploys the final merge:
 
-`window.TEFSEN_APPCHECK_SITE_KEY = ""`
-
-Before launch:
-
-1. configure Firebase App Check for the Tefsen Web app
-2. add the public reCAPTCHA v3/App Check site key
-3. deploy with monitoring first
-4. verify valid requests in App Check metrics
-5. then enable enforcement gradually
-
-Do not enable enforcement blindly.
-
-### 4. Real opportunity data
-
-Before public launch, replace preview-only/demo entries with curated real opportunity records.
-
-Every public verified record should have:
-
-- official provider URL
-- provider/university
-- country
-- opportunity type
-- funding type when known
-- structured study level/subject where known
-- real deadline when known
-- verification timestamp
-
-Never invent missing deadlines or carry an old deadline into a new year automatically.
-
-### 5. Admin import workflow test
-
-Use a non-production/test project first.
-
-Verify:
-
-- JSON import preview
-- CSV import preview
-- duplicate URL detection
-- invalid URL rejection
-- maximum batch limits
-- imports remain pending/draft/private
-- admin verifies one record manually
-- published record becomes visible in Opportunities
-- audit record is created
-
-### 6. Authentication and release smoke test
-
-Test on the real domain:
-
-- email sign-in
-- Google sign-in
-- sign-out/sign-in
-- old Tefsen user account
-- new user
-- Student Passport persistence
-- opportunity save
-- journey persistence
-- public success story
-- subject/university community navigation
-- admin access with claim
-- admin denial without claim
-
-### 7. Accessibility smoke test
-
-Check at minimum:
-
-- keyboard-only navigation
-- visible focus
-- large text/browser zoom
-- reduced-motion preference
-- screen-reader labels on icon buttons
-- form labels and error states
-- deadline/eligibility meaning without relying only on color
-
-### 8. Mobile and poor-network test
-
-Test:
-
-- Android Chrome
-- mobile Safari if available
-- desktop Chrome/Safari
-- slow network
-- temporary offline mode
-- service-worker update after deployment
-
-The service-worker cache version was bumped for Web V1 so old shell files are removed after activation.
+- [ ] `/`
+- [ ] `/app/`
+- [ ] `/founder.html`
+- [ ] `/privacy-policy/`
+- [ ] `/terms.html`
+- [ ] `/delete-account/`
+- [ ] `/robots.txt`
+- [ ] `/sitemap.xml`
+- [ ] `/privacy.html` redirects to `/privacy-policy/`
+- [ ] `/delete-account.html` redirects to `/delete-account/`
 
 ## Release sequence
 
-1. Merge the launch PR.
-2. Merge/test production Firestore rules.
-3. Configure admin custom claim.
-4. Configure Web App Check site key.
-5. Deploy Web app with App Check monitoring but without new enforcement.
-6. Add a small curated set of real opportunities.
-7. Complete smoke tests on `tefsen.com`.
-8. Review App Check traffic.
-9. Enable enforcement gradually when valid traffic is confirmed.
-10. Expand opportunity data only after the review workflow is proven.
+1. Merge Step 40 after green CI.
+2. Allow GitHub Pages to deploy.
+3. Complete post-merge public-route smoke checks.
+4. Merge/test the Web security clauses into the authoritative production Firebase rules.
+5. Verify trusted admin claim.
+6. Configure App Check Web provider and deploy the site key.
+7. Run real-domain auth/data smoke tests.
+8. Observe App Check traffic.
+9. Enable enforcement gradually only after valid traffic is confirmed.
+10. Expand curated opportunity data after the admin freshness/review workflow is proven.
 
 ## Rollback principle
 
-If authentication, private-data access, or opportunity verification behaves incorrectly after launch, revert the Web release or disable the affected feature before weakening security rules.
+If authentication, private-data access, Storage ownership, admin authorization, or service-worker behavior is wrong after deployment, revert/disable the affected release or feature before considering any security-rule relaxation.

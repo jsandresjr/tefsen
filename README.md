@@ -77,3 +77,12 @@ For App Check, validate real Web traffic before enabling enforcement service-by-
 Do not publish fake usage statistics, fake availability claims, unverified security claims, or duplicate application implementations.
 
 The public website and authenticated `/app/` experience should describe only functionality that actually exists.
+
+
+## Final Web release handoff
+
+The completed 40-step Web source audit and the remaining external production gates are documented in:
+
+`docs/WEB_FINAL_RELEASE_HANDOFF.md`
+
+Do not treat isolated Web security-rule tests as proof that the complete Android/backend production rules are already deployed, and do not claim App Check enforcement until Firebase Console configuration and live traffic validation are complete.
