@@ -4,6 +4,7 @@ import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } fr
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead,
+  getUserSettings, saveUserSettings,
   getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   hydratePostLikeState
@@ -30,6 +31,10 @@ import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/jo
 import { buildGlobalSearchModel } from './services/global-search-service.js';
 import { buildNotificationCenterModel } from './services/notification-service.js';
 import { buildSavedCommunityModel } from './services/saved-community-service.js';
+import {
+  defaultUserSettings, normalizeUserSettings, buildSettingsModel,
+  applyNotificationPreferences, applyRuntimeSettings
+} from './services/settings-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -75,7 +80,8 @@ let currentAdminOpportunities = [];
 let adminPreviewRows = [];
 let adminImportSource = '';
 let adminTab = 'review';
-let settingsTab = 'profile';
+let settingsTab = 'overview';
+let currentUserSettings = defaultUserSettings();
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
@@ -123,6 +129,11 @@ function verifiedMark(value, role = 'Student') {
 
 function currentRoute() { return routeParts()[0] || 'home'; }
 
+function browserTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+  catch { return ''; }
+}
+
 function humanError(error) {
   const code = error?.code || '';
   const map = {
@@ -167,6 +178,8 @@ async function handleAuthChange(user) {
   currentAdminOpportunities = [];
   adminPreviewRows = [];
   adminImportSource = '';
+  currentUserSettings = defaultUserSettings({ timeZone: browserTimeZone() });
+  applyRuntimeSettings(currentUserSettings);
   setState({ user, profile: null, posts: [], notifications: [], unreadCount: 0 });
 
   if (!user) {
@@ -176,21 +189,24 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, reactions, activityNotifications, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
+    const [profile, userSettings, reactions, activityNotifications, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
+      getUserSettings(state.mode, user.uid).catch(() => defaultUserSettings({ timeZone: browserTimeZone() })),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
       getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid)),
       listJourneyStates(state.mode, user.uid).catch(() => []),
       getOpportunities(state.mode).catch(() => [])
     ]);
-    const notificationModel = buildNotificationCenterModel({
+    currentUserSettings = normalizeUserSettings(userSettings, { timeZone: browserTimeZone() });
+    applyRuntimeSettings(currentUserSettings);
+    const notificationModel = applyNotificationPreferences(buildNotificationCenterModel({
       activityNotifications,
       journeys:notificationJourneys,
       opportunities:notificationOpportunities,
       readIds:getNotificationReadIds(user.uid),
       now:new Date()
-    });
+    }), currentUserSettings);
     currentStudentPassport = passport;
     reactionState = reactions;
     setState({
@@ -362,7 +378,7 @@ function renderProfileDropdown() {
       <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved community posts</span><small>Discussions and student stories you saved</small></button>
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
-      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
+      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Account, privacy and preferences</small></button>
       ${adminCapability ? `<button type="button" data-route="admin" role="menuitem">${icon('check',17)} <span>Admin review</span><small>Verify and manage opportunities</small></button>` : ''}
       <div class="dropdown-separator"></div>
       <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
@@ -3434,13 +3450,13 @@ async function refreshNotificationCenterData() {
     listJourneyStates(state.mode,state.user.uid).catch(()=>[]),
     getOpportunities(state.mode).catch(()=>[])
   ]);
-  const model=buildNotificationCenterModel({
+  const model=applyNotificationPreferences(buildNotificationCenterModel({
     activityNotifications,
     journeys,
     opportunities,
     readIds:getNotificationReadIds(state.user.uid),
     now:new Date()
-  });
+  }), currentUserSettings);
   setState({notifications:model.items,unreadCount:model.unreadCount});
   return model;
 }
@@ -3788,22 +3804,146 @@ async function renderSubscription() {
   renderShell(content, { wide: true });
 }
 
-function renderSettings() {
-  const p = state.profile || {};
-  const compact = localStorage.getItem('tefsen_pref_compact') === '1';
-  const motion = localStorage.getItem('tefsen_pref_motion') === '1';
-  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" aria-selected="${settingsTab === id}">${label}</button>`;
-  const panelClass = id => `settings-panel ${settingsTab === id ? 'active' : ''}`;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Settings</h1><p>Manage your profile and web experience.</p></div></header>
-    <div class="settings-grid"><aside class="panel settings-nav" role="tablist">${tabButton('profile','Profile')}${tabButton('preferences','Preferences')}${tabButton('account','Account')}</aside>
-    <section class="panel settings-section">
-      <div class="${panelClass('profile')}" data-settings-panel="profile"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>
-      <div class="${panelClass('preferences')}" data-settings-panel="preferences"><h2 style="margin-top:0">Preferences</h2><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle ${compact ? 'active' : ''}" type="button" data-pref="compact" aria-pressed="${compact}"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle ${motion ? 'active' : ''}" type="button" data-pref="motion" aria-pressed="${motion}"></button></div></div>
-      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (p.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><p>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Administrative web access with no daily posting quota.' : 'Web posting limits sync with your Tefsen account.'}</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
-    </section></div>`;
-  renderShell(content,{wide:true});
+function settingsToggleMarkup(key, checked, label) {
+  return `<button class="settings25-toggle ${checked ? 'active' : ''}" type="button" data-settings-toggle="${key}" aria-label="${escapeHTML(label)}" aria-pressed="${checked}"></button>`;
 }
 
+async function persistCurrentSettings(patch = {}) {
+  const next = normalizeUserSettings(
+    { ...currentUserSettings, ...patch },
+    { timeZone: browserTimeZone() }
+  );
+  currentUserSettings = await saveUserSettings(state.mode, state.user.uid, next);
+  currentUserSettings = normalizeUserSettings(currentUserSettings, { timeZone: browserTimeZone() });
+  applyRuntimeSettings(currentUserSettings);
+  return currentUserSettings;
+}
+
+async function handleSettingsPreferencesSave(form) {
+  const fd = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('[data-settings-save-state]');
+  if (status) status.textContent = 'Saving…';
+  await withButton(submit, async () => {
+    try {
+      await persistCurrentSettings({
+        region:String(fd.get('region') || '').trim(),
+        timeZone:String(fd.get('timeZone') || browserTimeZone()).trim()
+      });
+      if (status) status.textContent = 'Saved';
+      toast('Preferences saved.', 'success');
+      renderSettings();
+    } catch (error) {
+      if (status) status.textContent = 'Couldn’t save';
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+function renderSettings() {
+  const p = state.profile || {};
+  const model = buildSettingsModel({ profile:p, user:state.user || {}, settings:currentUserSettings });
+  const s = model.settings;
+  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" role="tab" aria-selected="${settingsTab === id}">${label}</button>`;
+  const panelClass = id => `settings25-panel ${settingsTab === id ? 'active' : ''}`;
+  const providerIsPassword = model.identity.provider === 'Email and password';
+
+  const overview = `
+    <section class="${panelClass('overview')}" data-settings-panel="overview" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Account overview</h2><p>Your private account controls are kept separate from your public student profile.</p></div><button class="btn btn-secondary" type="button" data-route="profile">Open public profile</button></div>
+        <div class="settings25-identity">
+          <div class="settings25-fact"><small>Primary email</small><strong>${escapeHTML(model.identity.email || 'No email available')}</strong></div>
+          <div class="settings25-fact"><small>Sign-in provider</small><strong>${escapeHTML(model.identity.provider)}</strong></div>
+          <div class="settings25-fact"><small>Email status</small><strong>${model.identity.emailVerified ? 'Verified' : 'Not verified / provider managed'}</strong></div>
+          <div class="settings25-fact"><small>Current plan</small><strong>${escapeHTML(model.plan.label)}</strong></div>
+        </div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-plan"><div><span class="opportunity-kicker">PLAN & BILLING</span><strong>${escapeHTML(model.plan.label)}</strong><p>${model.plan.admin ? 'Administrative access is controlled by Tefsen authorization.' : model.plan.subscribed ? 'Your existing Tefsen subscription is active on this account.' : 'Your account currently uses the free student plan.'}</p></div><button class="btn btn-secondary" type="button" data-route="subscription">View subscription</button></div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Public profile is edited separately</h2><p>Name, username, bio and profile photo belong to your public identity. Student Passport, Journeys, saved content and these settings remain private.</p></div><button class="btn btn-primary" type="button" data-edit-profile>Edit public profile</button></div>
+      </article>
+    </section>`;
+
+  const preferences = `
+    <section class="${panelClass('preferences')}" data-settings-panel="preferences" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Web experience</h2><p>These preferences are saved to your private Tefsen account and restored only for you.</p></div></div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Compact Community cards</b><p>Reduce vertical spacing in public Community discussions.</p></div>${settingsToggleMarkup('compactFeed',s.compactFeed,'Compact Community cards')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Reduced motion</b><p>Minimize nonessential animations and transitions across Tefsen Web.</p></div>${settingsToggleMarkup('reducedMotion',s.reducedMotion,'Reduced motion')}</div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Appearance & language</h2><p>Only options that Tefsen fully supports are shown.</p></div></div>
+        <div class="settings25-identity">
+          <div class="settings25-fact"><small>Appearance</small><strong>Dark</strong></div>
+          <div class="settings25-fact"><small>Interface language</small><strong>English</strong></div>
+        </div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Region & time zone</h2><p>Tefsen is global. Region context is optional; deadline dates still need verification on each official provider source.</p></div></div>
+        <form class="settings25-form" data-settings-preferences-form>
+          <div class="settings25-form-grid">
+            <div class="field"><label for="settings-region">Country / region</label><input id="settings-region" class="input" name="region" maxlength="80" value="${escapeHTML(s.region)}" placeholder="Optional"><small>Used only as your private preference context.</small></div>
+            <div class="field"><label for="settings-timezone">Time zone</label><input id="settings-timezone" class="input" name="timeZone" maxlength="100" value="${escapeHTML(s.timeZone || browserTimeZone())}"><small>Example: Asia/Colombo, Europe/London, America/New_York.</small></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button class="btn btn-primary" type="submit">Save region settings</button><span class="settings25-saved" data-settings-save-state></span></div>
+        </form>
+      </article>
+    </section>`;
+
+  const notifications = `
+    <section class="${panelClass('notifications')}" data-settings-panel="notifications" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Notification preferences</h2><p>These controls affect the real Tefsen notification center. Turning a category off removes those supported alerts from your notification view.</p></div><button class="btn btn-secondary" type="button" data-route="notifications">Open Notifications</button></div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Opportunity deadline alerts</b><p>Stored public opportunity deadlines that are close enough to need attention.</p></div>${settingsToggleMarkup('notificationOpportunityDeadlines',s.notificationOpportunityDeadlines,'Opportunity deadline alerts')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Journey planning reminders</b><p>Private preparation targets, next Journey tasks and accepted-offer planning reminders.</p></div>${settingsToggleMarkup('notificationJourneyReminders',s.notificationJourneyReminders,'Journey planning reminders')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Community activity</b><p>Supported replies, likes and public Community activity records for your posts.</p></div>${settingsToggleMarkup('notificationCommunityActivity',s.notificationCommunityActivity,'Community activity notifications')}</div>
+      </article>
+      <article class="settings25-card"><div class="settings25-security-note"><b>Essential account and security messages are not disabled here.</b> If Tefsen needs to communicate an important account or safety issue, it should not be hidden behind an engagement preference.</div></article>
+    </section>`;
+
+  const privacy = `
+    <section class="${panelClass('privacy')}" data-settings-panel="privacy" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Privacy boundaries</h2><p>A simple view of what stays in your account and what can be visible when you deliberately publish it.</p></div></div>
+        <div class="settings25-privacy-grid">
+          <div class="settings25-privacy-box"><span>PRIVATE TO YOUR ACCOUNT</span><ul class="settings25-list">${model.privacy.privateItems.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul></div>
+          <div class="settings25-privacy-box"><span>POTENTIALLY PUBLIC</span><ul class="settings25-list">${model.privacy.publicItems.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul></div>
+        </div>
+      </article>
+      <article class="settings25-card"><div class="settings25-card-head"><div><h2>Privacy documents</h2><p>Read Tefsen’s published privacy information or manage account deletion from the dedicated account page.</p></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Account deletion information</a></div></div></article>
+    </section>`;
+
+  const security = `
+    <section class="${panelClass('security')}" data-settings-panel="security" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Sign-in & security</h2><p>Tefsen shows the authentication method attached to this session without exposing internal Firebase identifiers.</p></div></div>
+        <div class="settings25-identity">
+          <div class="settings25-fact"><small>Provider</small><strong>${escapeHTML(model.identity.provider)}</strong></div>
+          <div class="settings25-fact"><small>Email</small><strong>${escapeHTML(model.identity.email || 'Unavailable')}</strong></div>
+        </div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Password management</b><p>${providerIsPassword ? 'This account uses email/password authentication. Tefsen can send a secure password-reset email.' : `Your password is managed by ${escapeHTML(model.identity.provider)}. Tefsen does not have access to that provider password.`}</p></div>${providerIsPassword ? '<button class="btn btn-secondary" type="button" data-settings-reset-password>Send reset email</button>' : '<span class="settings25-status good">Provider managed</span>'}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Current session</b><p>Signing out removes this authenticated session. Private caches are keyed by account so another signed-in student does not inherit your settings.</p></div><button class="btn btn-secondary" type="button" data-logout>Sign out</button></div>
+      </article>
+      <article class="settings25-card settings25-danger">
+        <div class="settings25-card-head"><div><h2>Account deletion</h2><p>Deletion is intentionally handled on the dedicated account-deletion flow rather than as a one-click Settings action.</p></div><a class="btn btn-danger" href="../delete-account/">Review delete-account steps</a></div>
+      </article>
+    </section>`;
+
+  const content = `${demoBanner()}<div class="settings25-page">
+    <section class="settings25-hero">
+      <div class="settings25-hero-main">${avatar(p,'lg')}<div class="settings25-hero-copy"><span>ACCOUNT CONTROL CENTER</span><h1>${escapeHTML(model.identity.name)}</h1><p>Manage private preferences, notifications, privacy, security and your Tefsen plan from one place.</p></div></div>
+      <div class="settings25-hero-actions"><button class="btn btn-secondary" type="button" data-route="profile">Public profile</button><button class="btn btn-primary" type="button" data-route="subscription">Plan & billing</button></div>
+    </section>
+    <div class="settings25-grid">
+      <aside class="settings25-nav" role="tablist" aria-label="Settings sections">${tabButton('overview','Overview')}${tabButton('preferences','Preferences')}${tabButton('notifications','Notifications')}${tabButton('privacy','Privacy')}${tabButton('security','Security')}</aside>
+      <div>${overview}${preferences}${notifications}${privacy}${security}</div>
+    </div>
+  </div>`;
+  renderShell(content,{wide:true,right:false});
+}
 
 function adminStatusMarkup(opportunity) {
   const fresh = opportunityFreshness(opportunity);
@@ -4245,15 +4385,32 @@ function openDemoInfo() {
 
 async function handleClick(event) {
   const settingsTabEl = event.target.closest('[data-settings-tab]');
-  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'profile'; renderSettings(); return; }
-  const prefEl = event.target.closest('[data-pref]');
-  if (prefEl) {
-    const key = prefEl.dataset.pref;
-    const storageKey = key === 'compact' ? 'tefsen_pref_compact' : 'tefsen_pref_motion';
-    const next = localStorage.getItem(storageKey) !== '1';
-    localStorage.setItem(storageKey, next ? '1' : '0');
-    document.documentElement.classList.toggle(key === 'compact' ? 'pref-compact' : 'pref-reduced-motion', next);
-    renderSettings();
+  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'overview'; renderSettings(); return; }
+  const settingsToggle = event.target.closest('[data-settings-toggle]');
+  if (settingsToggle) {
+    const key = settingsToggle.dataset.settingsToggle;
+    const allowed = new Set(['compactFeed','reducedMotion','notificationOpportunityDeadlines','notificationJourneyReminders','notificationCommunityActivity']);
+    if (!allowed.has(key)) return;
+    settingsToggle.disabled = true;
+    try {
+      await persistCurrentSettings({ [key]: !Boolean(currentUserSettings[key]) });
+      toast('Setting saved.', 'success');
+      renderSettings();
+    } catch (error) {
+      settingsToggle.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+  if (event.target.closest('[data-settings-reset-password]')) {
+    const email = state.user?.email || state.profile?.email || '';
+    if (!email) { toast('No account email is available for password reset.', 'error'); return; }
+    try {
+      await resetPassword(state.mode, email);
+      toast('Password reset email sent.', 'success');
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
     return;
   }
   const passportJump = event.target.closest('[data-passport-jump]');
@@ -4422,6 +4579,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-global-search-form]')) { event.preventDefault(); const term = new FormData(form).get('q')?.trim(); if (term) go(`search/${encodeURIComponent(term)}`); return; }
   if (form.matches('[data-compose-form]')) { event.preventDefault(); await handleCompose(form); return; }
   if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
+  if (form.matches('[data-settings-preferences-form]')) { event.preventDefault(); await handleSettingsPreferencesSave(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
   if (form.matches('[data-passport-onboarding-form]')) { event.preventDefault(); await handlePassportOnboardingSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
