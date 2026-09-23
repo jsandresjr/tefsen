@@ -3,9 +3,9 @@ import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
-  subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead, getConversations,
-  subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
-  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
+  subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead,
+  getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
+  normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   getFollowState, toggleFollow, hydratePostLikeState
 } from './services/data-service.js';
 import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
@@ -50,7 +50,6 @@ const modalRoot = document.getElementById('modal-root');
 let stopAuth = null;
 let stopPosts = null;
 let stopComments = null;
-let stopMessages = null;
 let reactionState = { saved: new Set(), liked: new Set() };
 let currentComments = [];
 let currentSearch = { users: [], posts: [] };
@@ -91,7 +90,6 @@ const navItems = [
   ['journeys', 'Journey', 'check'],
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
-  ['messages', 'Messages', 'message'],
   ['leaderboard', 'Leaderboard', 'trophy'],
   ['saved', 'Saved', 'bookmark'],
   ['subscription', 'Subscription', 'info'],
@@ -160,7 +158,6 @@ async function boot() {
 async function handleAuthChange(user) {
   stopPosts?.(); stopPosts = null;
   stopComments?.(); stopComments = null;
-  stopMessages?.(); stopMessages = null;
   reactionState = { saved: new Set(), liked: new Set() };
   currentStudentPassport = null;
   passportOnboardingJustCompleted = false;
@@ -170,7 +167,7 @@ async function handleAuthChange(user) {
   currentAdminOpportunities = [];
   adminPreviewRows = [];
   adminImportSource = '';
-  setState({ user, profile: null, posts: [], notifications: [], conversations: [], messages: [], unreadCount: 0 });
+  setState({ user, profile: null, posts: [], notifications: [], unreadCount: 0 });
 
   if (!user) {
     renderAuth('login');
@@ -179,11 +176,10 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, reactions, activityNotifications, conversations, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
+    const [profile, reactions, activityNotifications, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
-      getConversations(state.mode, user.uid).catch(() => []),
       getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid)),
       listJourneyStates(state.mode, user.uid).catch(() => []),
       getOpportunities(state.mode).catch(() => [])
@@ -200,7 +196,6 @@ async function handleAuthChange(user) {
     setState({
       profile,
       notifications:notificationModel.items,
-      conversations,
       unreadCount:notificationModel.unreadCount
     });
     adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
@@ -304,7 +299,6 @@ function renderShell(content, options = {}) {
           </form>
         </div>
         <div class="topbar-actions">
-          <button class="icon-button desktop-only" type="button" data-route="messages" aria-label="Messages">${icon('message',19)}</button>
           <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
           <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
         </div>
@@ -317,7 +311,7 @@ function renderShell(content, options = {}) {
         <div class="nav-divider"></div>
         <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
         <nav class="nav-list">
-          ${navItems.filter(([id]) => ['notifications','messages','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
+          ${navItems.filter(([id]) => ['notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
           ${avatar(p,'sm')}
@@ -3468,43 +3462,24 @@ async function renderNotifications() {
   }
 }
 
-async function renderMessages(conversationId = '') {
-  if (!state.conversations.length) {
-    const conversations = await getConversations(state.mode, state.user.uid).catch(() => []);
-    setState({ conversations });
-  }
-  const selected = state.conversations.find(c => c.id === conversationId) || state.conversations[0] || null;
-  if (selected) {
-    state.selectedConversation = selected;
-    stopMessages?.();
-    stopMessages = subscribeMessages(state.mode, selected.id, messages => {
-      state.messages = messages;
-      drawMessages(selected);
-      requestAnimationFrame(() => document.querySelector('.chat-messages')?.scrollTo(0, 999999));
-    }, e => toast(humanError(e),'error'));
-  } else drawMessages(null);
-}
-
-function drawMessages(selected) {
-  const convs = state.conversations;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Messages</h1><p>Continue learning conversations privately.</p></div></header>
-    <section class="panel messages-layout ${selected ? 'chat-open' : ''}">
-      <div class="conversation-list"><div class="conversation-list-head"><b>Conversations</b></div>${convs.length ? convs.map(c => conversationItem(c,selected)).join('') : `<div class="empty-state"><h3>No conversations</h3><p>Open a user profile and start a conversation.</p></div>`}</div>
-      <div class="chat-pane">${selected ? `<div class="chat-head"><button class="btn btn-icon btn-ghost" data-messages-back>${icon('back',18)}</button>${avatar({fullName:conversationTitle(selected)},'sm')}<b>${escapeHTML(conversationTitle(selected))}</b></div><div class="chat-messages">${state.messages.map(messageBubble).join('') || '<div class="empty-state"><p>Start the conversation.</p></div>'}</div><form class="chat-form" data-message-form="${escapeHTML(selected.id)}"><input class="input" name="text" maxlength="3000" placeholder="Write a message…" required><button class="btn btn-primary btn-icon" type="submit" aria-label="Send">${icon('send',18)}</button></form>` : `<div class="empty-state"><div class="empty-icon">${icon('message',25)}</div><h3>Select a conversation</h3><p>Your messages will appear here.</p></div>`}</div>
+function renderPrivateMessagingUnavailable() {
+  const content=`${demoBanner()}
+    <section class="messages22-retired">
+      <div class="messages22-icon">${icon('message',24)}</div>
+      <span class="opportunity-kicker">PRIVATE MESSAGING</span>
+      <h1>Private messages are not available on Tefsen Web</h1>
+      <p>The unfinished chat screen was removed rather than presenting a feature that cannot securely send or receive messages. Use Community for public learning discussions and keep application, identity, financial, visa and travel details private.</p>
+      <div class="messages22-actions">
+        <button class="btn btn-primary" type="button" data-route="explore">Open Community</button>
+        <button class="btn btn-secondary" type="button" data-route="notifications">Open Notifications</button>
+      </div>
+      <aside>
+        <b>Why this route still exists</b>
+        <span>Old bookmarks may still point to <code>#/messages</code>. This compatibility page prevents a broken route without exposing a fake chat feature.</span>
+      </aside>
     </section>`;
   renderShell(content,{wide:true,right:false});
 }
-
-function conversationTitle(c) {
-  if (c.title) return c.title;
-  if (c.participantNames) {
-    const keys = Object.keys(c.participantNames).filter(k => k !== state.user.uid);
-    if (keys[0]) return c.participantNames[keys[0]] || 'Conversation';
-  }
-  return 'Conversation';
-}
-function conversationItem(c,selected) { return `<button class="conversation-item ${selected?.id===c.id?'active':''}" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;color:inherit;text-align:left" data-conversation="${escapeHTML(c.id)}">${avatar({fullName:conversationTitle(c)},'sm')}<div><b>${escapeHTML(conversationTitle(c))}</b><small>${escapeHTML(c.lastMessage || 'Start a conversation')} · ${relativeTime(c.updatedAt)}</small></div></button>`; }
-function messageBubble(m) { return `<div class="bubble ${m.senderId === state.user.uid ? 'mine' : ''}">${nl2br(m.text || m.content || '')}<small>${relativeTime(m.createdAt)}</small></div>`; }
 
 async function renderLeaderboard() {
   if (!state.leaderboard.length) setState({ leaderboard: await getLeaderboard(state.mode).catch(()=>[]) });
@@ -3993,7 +3968,6 @@ function renderRoute() {
   document.documentElement.classList.remove('profile-menu-open');
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
   if (stopComments && route !== 'post') { stopComments(); stopComments = null; }
-  if (stopMessages && route !== 'messages') { stopMessages(); stopMessages = null; }
   switch (route || 'home') {
     case 'home': renderHome(); break;
     case 'opportunities': renderOpportunities(); break;
@@ -4007,7 +3981,7 @@ function renderRoute() {
     case 'intake': renderIntakeCommunity(param || '', param2 || ''); break;
     case 'saved': renderSavedCommunity(); break;
     case 'notifications': renderNotifications(); break;
-    case 'messages': renderMessages(param || ''); break;
+    case 'messages': renderPrivateMessagingUnavailable(); break;
     case 'leaderboard': renderLeaderboard(); break;
     case 'profile': renderProfile(param || ''); break;
     case 'settings': renderSettings(); break;
@@ -4351,9 +4325,6 @@ async function handleClick(event) {
   if (event.target.closest('[data-notifications-mark-all]')) { await handleNotificationsMarkAll(event.target.closest('[data-notifications-mark-all]')); return; }
   const notification = event.target.closest('[data-notification]');
   if (notification) { await handleNotification(notification); return; }
-  const conv = event.target.closest('[data-conversation]');
-  if (conv) { go(`messages/${conv.dataset.conversation}`); return; }
-  if (event.target.closest('[data-messages-back]')) { drawMessages(null); return; }
   if (event.target.closest('[data-back]')) { history.length > 1 ? history.back() : go('home'); return; }
   if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; syncProfileMenu(); return; }
   if (event.target.closest('[data-profile-menu-dismiss]')) { state.ui.profileMenu = false; syncProfileMenu(); return; }
@@ -4379,8 +4350,6 @@ async function handleClick(event) {
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
   const followUser = event.target.closest('[data-follow-user]');
   if (followUser) { await handleFollow(followUser); return; }
-  const messageUser = event.target.closest('[data-message-user]');
-  if (messageUser) { await handleStartConversation(currentProfileView); return; }
   const subject = event.target.closest('[data-subject]');
   if (subject) { state.searchQuery = subject.dataset.subject; go(`search/${encodeURIComponent(subject.dataset.subject)}`); return; }
 }
@@ -4391,7 +4360,6 @@ async function handleSubmit(event) {
   if (form.matches('[data-global-search-form]')) { event.preventDefault(); const term = new FormData(form).get('q')?.trim(); if (term) go(`search/${encodeURIComponent(term)}`); return; }
   if (form.matches('[data-compose-form]')) { event.preventDefault(); await handleCompose(form); return; }
   if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
-  if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
   if (form.matches('[data-passport-onboarding-form]')) { event.preventDefault(); await handlePassportOnboardingSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
@@ -4898,12 +4866,6 @@ async function handleComment(form) {
   const submit=form.querySelector('button[type="submit"]');
   await withButton(submit,async()=>{ try { const item=await addComment(state.mode,state.user,state.profile,form.dataset.commentForm,text); if(state.mode==='demo'){currentComments=[...currentComments,item]; renderPostDetail(form.dataset.commentForm);} form.reset(); toast('Answer published','success'); } catch(e){toast(humanError(e),'error');} });
 }
-async function handleMessage(form) {
-  const text=String(new FormData(form).get('text')||'').trim(); if(!text)return;
-  const input=form.elements.text; input.value='';
-  try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
-  catch(e){ input.value=text; toast(humanError(e),'error'); }
-}
 function updatePublicProfileValidation(form) {
   const fd = new FormData(form);
   const draft = {
@@ -5285,11 +5247,6 @@ async function handleNotificationsMarkAll(button) {
     setState({notifications:[...state.notifications],unreadCount:0});
     await renderNotifications();
   });
-}
-async function handleStartConversation(profile) {
-  if(!profile?.uid)return;
-  try { const conv=await startConversation(state.mode,state.user.uid,profile); if(!state.conversations.some(c=>c.id===conv.id))state.conversations.unshift(conv); go(`messages/${conv.id}`); }
-  catch(e){toast(humanError(e),'error');}
 }
 async function withButton(button, task) {
   if (!button) return task();
