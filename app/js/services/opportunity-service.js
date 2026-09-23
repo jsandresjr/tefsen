@@ -24,6 +24,40 @@ function currentStarterOpportunities() {
     .map(item => normalizeOpportunity(item, item.id));
 }
 
+function normalizedSourceKey(item) {
+  return String(item?.officialSourceUrl || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\/$/, '');
+}
+
+function normalizedTitleProviderKey(item) {
+  return [
+    String(item?.title || '').trim().toLowerCase(),
+    String(item?.provider || '').trim().toLowerCase()
+  ].join('|');
+}
+
+function mergePublishedWithStarters(liveItems = [], starterItems = currentStarterOpportunities()) {
+  const live = liveItems.map(item => normalizeOpportunity(item, item.id));
+  const liveIds = new Set(live.map(item => String(item.id || '').trim()).filter(Boolean));
+  const liveSources = new Set(live.map(normalizedSourceKey).filter(Boolean));
+  const liveTitleProviders = new Set(live.map(normalizedTitleProviderKey).filter(key => key !== '|'));
+
+  const starterOnly = starterItems.filter(item => {
+    const id = String(item.id || '').trim();
+    const source = normalizedSourceKey(item);
+    const titleProvider = normalizedTitleProviderKey(item);
+
+    if (id && liveIds.has(id)) return false;
+    if (source && liveSources.has(source)) return false;
+    if (titleProvider !== '|' && liveTitleProviders.has(titleProvider)) return false;
+    return true;
+  });
+
+  return [...live, ...starterOnly];
+}
+
 function stringArray(value) {
   if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
   if (!value) return [];
@@ -79,9 +113,7 @@ export async function getOpportunities(mode) {
     .map(row => normalizeOpportunity(row.data(), row.id))
     .filter(item => item.visibility === 'public');
 
-  if (live.length) return live;
-
-  return currentStarterOpportunities();
+  return mergePublishedWithStarters(live);
 }
 
 export async function getOpportunitySearchCorpus(mode) {
@@ -105,21 +137,15 @@ export async function getOpportunitySearchCorpus(mode) {
     .map(row => normalizeOpportunity(row.data(), row.id))
     .filter(item => item.status === 'published' && item.visibility === 'public');
 
-  if (items.length) {
-    return {
-      items,
-      coverage:{
-        scanned:docs.length,
-        limit:SEARCH_OPPORTUNITY_SCAN_LIMIT,
-        complete:snap.docs.length <= SEARCH_OPPORTUNITY_SCAN_LIMIT
-      }
-    };
-  }
-
-  const starter = currentStarterOpportunities();
+  const merged = mergePublishedWithStarters(items);
   return {
-    items:starter,
-    coverage:{ scanned:starter.length, limit:SEARCH_OPPORTUNITY_SCAN_LIMIT, complete:true }
+    items:merged,
+    coverage:{
+      scanned:docs.length,
+      limit:SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      complete:snap.docs.length <= SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      starterIncluded:true
+    }
   };
 }
 
