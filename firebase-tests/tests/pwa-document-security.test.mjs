@@ -17,7 +17,7 @@ test('document defines a restrictive CSP for the actual Firebase dependency set'
   assert.match(index,/default-src 'self'/);
   assert.match(index,/base-uri 'self'/);
   assert.match(index,/object-src 'none'/);
-  assert.match(index,/script-src 'self' https:\/\/www\.gstatic\.com https:\/\/www\.google\.com https:\/\/www\.recaptcha\.net/);
+  assert.match(index,/script-src 'self' https:\/\/www\.gstatic\.com https:\/\/apis\.google\.com https:\/\/www\.google\.com https:\/\/www\.recaptcha\.net/);
   assert.match(index,/connect-src 'self' https:\/\/\*\.googleapis\.com/);
   assert.match(index,/https:\/\/\*\.firebaseapp\.com/);
   assert.match(index,/wss:\/\/\*\.firebaseio\.com/);
