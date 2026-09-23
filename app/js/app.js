@@ -3306,6 +3306,10 @@ async function handleClick(event) {
   if (taskToggle) { await handleJourneyTaskToggle(taskToggle); return; }
   const taskDelete = event.target.closest('[data-journey-task-delete]');
   if (taskDelete) { await handleJourneyTaskDelete(taskDelete); return; }
+  const postAcceptanceToggle = event.target.closest('[data-post-acceptance-task-toggle]');
+  if (postAcceptanceToggle) { await handlePostAcceptanceTaskToggle(postAcceptanceToggle); return; }
+  const postAcceptanceDelete = event.target.closest('[data-post-acceptance-task-delete]');
+  if (postAcceptanceDelete) { await handlePostAcceptanceTaskDelete(postAcceptanceDelete); return; }
   const share = event.target.closest('[data-share]');
   if (share) { await copyText(`${location.origin}${location.pathname}#/post/${share.dataset.share}`); modalRoot.innerHTML=''; return; }
   const postMenu = event.target.closest('[data-post-menu]');
@@ -3365,6 +3369,8 @@ async function handleSubmit(event) {
   if (form.matches('[data-journey-stage-form]')) { event.preventDefault(); await handleJourneyStageSave(form); return; }
   if (form.matches('[data-journey-planning-form]')) { event.preventDefault(); await handleJourneyPlanningSave(form); return; }
   if (form.matches('[data-journey-task-form]')) { event.preventDefault(); await handleJourneyTaskAdd(form); return; }
+  if (form.matches('[data-post-acceptance-plan-form]')) { event.preventDefault(); await handlePostAcceptancePlanningSave(form); return; }
+  if (form.matches('[data-post-acceptance-task-form]')) { event.preventDefault(); await handlePostAcceptanceTaskAdd(form); return; }
   if (form.matches('[data-report-form]')) { event.preventDefault(); await handleReport(form); return; }
   if (form.matches('[data-admin-import-preview-form]')) { event.preventDefault(); await handleAdminImportPreview(form); return; }
 }
@@ -4088,7 +4094,10 @@ document.addEventListener('input', event => {
   const journeyPlanningForm = event.target.closest?.('[data-journey-planning-form]');
   if (journeyPlanningForm) {
     updateJourneyPlanningValidation(journeyPlanningForm);
+    return;
   }
+  const postAcceptanceForm = event.target.closest?.('[data-post-acceptance-plan-form]');
+  if (postAcceptanceForm) updatePostAcceptanceValidation(postAcceptanceForm);
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
