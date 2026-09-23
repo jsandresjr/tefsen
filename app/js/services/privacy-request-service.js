@@ -28,7 +28,8 @@ export function buildPrivacyRequestMailto(type='deletion',{
   username='',
   fullName=''
 }={}){
-  const definition=privacyRequestDefinition(type);
+  const canonicalType=REQUESTS[type] ? type : 'deletion';
+  const definition=privacyRequestDefinition(canonicalType);
   const identity=[
     clean(fullName,80) ? `Name: ${clean(fullName,80)}` : '',
     clean(email,180) ? `Account email: ${clean(email,180)}` : '',
@@ -41,8 +42,10 @@ export function buildPrivacyRequestMailto(type='deletion',{
     ...identity,
     '',
     'Please let me know if you need additional information to verify my identity.',
-    '',
-    'I understand that Google Play subscriptions must be cancelled separately in Google Play if I no longer want to be charged.',
+    ...(canonicalType === 'deletion' ? [
+      '',
+      'I understand that Google Play subscriptions must be cancelled separately in Google Play if I no longer want to be charged.'
+    ] : []),
     '',
     'For security, I have not included my password or authentication codes.'
   ].join('\n');
