@@ -16,6 +16,73 @@ service cloud.firestore {
           || request.auth.token.role == "ADMIN");
     }
 
+    match /users/{uid} {
+      function safeOwnerAccountUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ]);
+      }
+
+      function validOwnerAccountCreate() {
+        return request.resource.data.uid == uid
+          && request.resource.data.role == "student"
+          && request.resource.data.verified == false;
+      }
+
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() || (isOwner(uid) && validOwnerAccountCreate());
+      allow update: if isAdmin() || (isOwner(uid) && safeOwnerAccountUpdate());
+      allow delete: if false;
+    }
+
+    match /public_profiles/{uid} {
+      function validPublicProfile() {
+        return request.resource.data.keys().hasAll([
+          "uid",
+          "schemaVersion",
+          "fullName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "uid",
+          "schemaVersion",
+          "fullName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 80
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 40
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 500
+        && request.resource.data.profileImageUrl is string
+        && request.resource.data.profileImageUrl.size() <= 1200
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 1200;
+      }
+
+      allow read: if true;
+      allow create, update: if (isOwner(uid) || isAdmin()) && validPublicProfile();
+      allow delete: if false;
+    }
+
     match /student_passports/{uid} {
       allow read, create, update, delete: if isOwner(uid);
     }
