@@ -62,9 +62,12 @@ export function buildExistingAccountProfilePatch(user={}, existing={}, {
   const existingName=safeDisplayName(existing.fullName || existing.displayName || '');
   const authName=safeDisplayName(fullNameOverride || user.displayName || '');
   const fullName=existingName !== 'Tefsen User' ? existingName : authName;
+  const hasStoredPhotoField=
+    Object.prototype.hasOwnProperty.call(existing,'profileImageUrl')
+    || Object.prototype.hasOwnProperty.call(existing,'photoURL');
   const existingPhoto=safePhoto(existing.profileImageUrl || existing.photoURL || '');
   const authPhoto=safePhoto(user.photoURL || '');
-  const photo=existingPhoto || authPhoto;
+  const photo=hasStoredPhotoField ? existingPhoto : authPhoto;
 
   return {
     fullName,
