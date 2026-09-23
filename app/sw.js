@@ -1,7 +1,7 @@
 const CACHE = 'tefsen-web-shell-v61-pwa-document-security';
 
 const SHELL = [
-  './', './index.html',
+  './', './index.html', './manifest.webmanifest',
   './css/app.css', './css/premium.css', './css/premium-v2.css', './css/social-cleanup.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css', './css/v2.css', './css/v3-polish.css', './css/v4-profile.css', './css/home-dashboard.css', './css/v25-settings.css', './css/v27-moderation.css', './css/v28-recognition.css', './css/v29-search-integrity.css',
   './js/app.js', './js/trial-ui.js', './js/config/schema.js', './js/firebase-client.js', './js/store.js', './js/utils.js',
   './js/services/auth-service.js', './js/services/account-bootstrap-service.js', './js/services/data-service.js', './js/services/demo-data.js',
