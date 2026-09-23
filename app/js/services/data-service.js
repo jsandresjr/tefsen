@@ -1243,33 +1243,4 @@ export async function removeProfilePhoto(mode, userId) {
   return snap.exists() ? normalizeUser(snap.data(), userId) : null;
 }
 
-export async function reportPost(mode, userId, postId, reason, details = '') {
-  const allowedReasons = new Set([
-    'Spam',
-    'Harassment',
-    'Harmful or unsafe content',
-    'Misinformation concern',
-    'Copyright concern',
-    'Other'
-  ]);
-  const cleanReason = String(reason || '').trim();
-  const cleanDetails = String(details || '').trim().slice(0, 1000);
-  if (!allowedReasons.has(cleanReason)) throw new Error('Choose a valid report reason.');
-  if (mode === 'demo') return { id: uid('report') };
-
-  const requestRef = doc(collection(db, 'support_requests'));
-  await setDoc(requestRef, {
-    type: 'post_report',
-    status: 'open',
-    requesterId: String(userId),
-    userId: String(userId),
-    postId: String(postId),
-    reason: cleanReason,
-    details: cleanDetails,
-    sourcePlatform: 'web',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  return { id: requestRef.id };
-}
 

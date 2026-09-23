@@ -49,7 +49,6 @@ test('notification Firestore rules enforce recipient-only reads and safe acknowl
   assert.match(rules, /match \/users\/\{uid\}\/notificationState\/\{stateId\}/);
 });
 
-test('PWA cache includes notification-state service under V53', () => {
-  assert.match(sw, /tefsen-web-shell-v53-notification-center/);
+test('notification-state service stays cached after later cache-version bumps', () => {
   assert.match(sw, /notification-state-service\.js/);
 });

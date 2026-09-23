@@ -9,6 +9,8 @@ export const SCHEMA = Object.freeze({
     notifications: 'notifications',
     conversations: 'conversations',
     reports: 'reports',
+    supportRequests: 'support_requests',
+    moderationAudit: 'moderation_audit',
     opportunities: 'opportunities',
     opportunityAudit: 'opportunity_audit',
     studentPassports: 'student_passports',
