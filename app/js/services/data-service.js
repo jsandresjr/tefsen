@@ -1080,19 +1080,6 @@ export async function markNotificationRead(mode, userId, notification = {}) {
 }
 
 
-function searchCandidateMatches(term, values = []) {
-  const normalizeSearch = value => String(value || '')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-  const queryTokens = [...new Set(
-    normalizeSearch(term).split(/[^a-z0-9]+/).filter(Boolean)
-  )].slice(0, 8);
-  if (!queryTokens.length) return false;
-  const haystack = normalizeSearch(values.filter(Boolean).join(' '));
-  return queryTokens.every(token => haystack.includes(token));
-}
-
 export async function searchAll(mode, term) {
   const qText = String(term || '').trim().toLowerCase();
   if (!qText) {
@@ -1108,12 +1095,10 @@ export async function searchAll(mode, term) {
 
   if (mode === 'demo') {
     const users = DEMO_USERS
-      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id))
-      .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]));
+      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id));
     const posts = demoPosts
       .map(post => normalizePost(post, post.id))
-      .filter(isPublicProfileActivity)
-      .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]));
+      .filter(isPublicProfileActivity);
     return {
       users,
       posts,
@@ -1138,13 +1123,11 @@ export async function searchAll(mode, term) {
   const postDocs = postsSnap.docs.slice(0, SEARCH_POST_SCAN_LIMIT);
 
   const users = userDocs
-    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
-    .filter(user => searchCandidateMatches(qText, [user.fullName, user.username, user.bio, user.role]));
+    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id));
 
   const posts = postDocs
     .map(row => normalizePost(row.data(), row.id))
-    .filter(isPublicProfileActivity)
-    .filter(post => searchCandidateMatches(qText, [post.title, post.content, post.subject, post.communitySubject, post.communityUniversity, post.communityIntake, post.successData?.opportunityName, post.successData?.university, post.successData?.country, post.successData?.subject, post.successData?.intake, ...(post.tags || [])]));
+    .filter(isPublicProfileActivity);
 
   return {
     users,
