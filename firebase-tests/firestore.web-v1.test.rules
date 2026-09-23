@@ -88,6 +88,58 @@ service cloud.firestore {
       allow create, update: if isOwner(uid) && validPreferences();
     }
 
+    match /users/{uid}/notificationState/{stateId} {
+      function validReadState() {
+        return stateId == "read"
+          && request.resource.data.keys().hasAll([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "readIds",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "readIds",
+            "updatedAt"
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.userId == uid
+          && request.resource.data.documentType == "notification_read_state"
+          && request.resource.data.schemaVersion == 1
+          && request.resource.data.readIds is list
+          && request.resource.data.readIds.size() <= 600;
+      }
+
+      allow read, delete: if isOwner(uid) && stateId == "read";
+      allow create, update: if isOwner(uid) && validReadState();
+    }
+
+    match /notifications/{notificationId} {
+      function notificationOwner(data) {
+        return signedIn()
+          && (
+            (data.keys().hasAny(["userId"]) && data.userId == request.auth.uid)
+            || (data.keys().hasAny(["recipientId"]) && data.recipientId == request.auth.uid)
+          );
+      }
+
+      allow read: if notificationOwner(resource.data);
+      allow update: if notificationOwner(resource.data)
+        && notificationOwner(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "read",
+          "isRead",
+          "readAt",
+          "updatedAt"
+        ]);
+      allow create, delete: if false;
+    }
+
     match /opportunities/{opportunityId} {
       allow read: if isAdmin()
         || (resource.data.status == "published"

@@ -41,9 +41,8 @@ test('existing Google Play subscription experience remains connected', () => {
   assert.match(app, /data-sync-subscription/);
 });
 
-test('Step 25 assets are loaded and cached under V52', () => {
+test('Step 25 assets stay loaded and cached after later cache-version bumps', () => {
   assert.match(index, /css\/v25-settings\.css/);
-  assert.match(sw, /tefsen-web-shell-v52-settings-account/);
   assert.match(sw, /css\/v25-settings\.css/);
   assert.match(sw, /js\/services\/settings-service\.js/);
 });

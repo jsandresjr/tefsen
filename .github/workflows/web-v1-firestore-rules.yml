@@ -21,6 +21,7 @@ on:
       - 'app/js/services/journey-story-service.js'
       - 'app/js/services/global-search-service.js'
       - 'app/js/services/notification-service.js'
+      - 'app/js/services/notification-state-service.js'
       - 'app/js/services/saved-community-service.js'
       - 'app/js/services/settings-service.js'
       - 'app/css/v25-settings.css'
@@ -59,10 +60,12 @@ jobs:
       - name: Install test dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Validate Step 25 JavaScript syntax
+      - name: Validate Web JavaScript syntax
         run: |
           node --check ../app/js/app.js
           node --check ../app/js/services/data-service.js
+          node --check ../app/js/services/notification-service.js
+          node --check ../app/js/services/notification-state-service.js
           node --check ../app/js/services/settings-service.js
           node --check ../app/sw.js
 
