@@ -2,6 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
+import { validatePublicProfileDraft } from './profile-presentation-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp,
@@ -731,21 +732,43 @@ export async function searchAll(mode, term) {
 }
 
 export async function updateUserProfile(mode, userId, data) {
+  const rawDraft = {
+    fullName: String(data?.fullName || ''),
+    username: String(data?.username || ''),
+    bio: String(data?.bio || '')
+  };
+  const validation = validatePublicProfileDraft(rawDraft);
+  if (!validation.valid) {
+    throw new Error(validation.errors[0]?.message || 'Review the public profile fields.');
+  }
+
+  const fullName = rawDraft.fullName.trim().slice(0, 80);
+  const username = rawDraft.username.trim().slice(0, 40);
+  const bio = rawDraft.bio.trim().slice(0, 500);
+  const photoFile = data?.profileImageFile instanceof File && data.profileImageFile.size
+    ? data.profileImageFile
+    : null;
+
+  if (photoFile) {
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(String(photoFile.type || '').toLowerCase())) {
+      throw new Error('Profile photo must be JPG, PNG or WebP.');
+    }
+    if (photoFile.size > 5 * 1024 * 1024) {
+      throw new Error('Profile photo must be 5 MB or smaller.');
+    }
+  }
+
   if (mode === 'demo') {
     const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
-    const { profileImageFile, ...profileFields } = data;
-    Object.assign(existing, profileFields);
-    if (profileImageFile instanceof File && profileImageFile.size) {
-      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
+    Object.assign(existing, { fullName, displayName:fullName, username, bio });
+    if (photoFile) {
+      existing.profileImageUrl = URL.createObjectURL(photoFile);
       existing.photoURL = existing.profileImageUrl;
+      existing.photoUrl = existing.profileImageUrl;
     }
     return normalizeUser(existing, userId);
   }
-
-  const fullName = String(data.fullName || '').trim().slice(0, 80);
-  const username = String(data.username || '').trim().replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40);
-  const bio = String(data.bio || '').trim().slice(0, 500);
-  if (!fullName) throw new Error('Full name is required.');
 
   const userRef = doc(db, C.users, userId);
   const snap = await getDoc(userRef);
@@ -755,17 +778,7 @@ export async function updateUserProfile(mode, userId, data) {
   const role = normalizeRoleValue(current.role, email);
   let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
 
-  const photoFile = data.profileImageFile instanceof File && data.profileImageFile.size
-    ? data.profileImageFile
-    : null;
   if (photoFile) {
-    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    if (!allowedTypes.has(String(photoFile.type || '').toLowerCase())) {
-      throw new Error('Profile photo must be JPG, PNG or WebP.');
-    }
-    if (photoFile.size > 5 * 1024 * 1024) {
-      throw new Error('Profile photo must be 5 MB or smaller.');
-    }
     const objectRef = ref(storage, `profile_images/${userId}.jpg`);
     const upload = await uploadBytes(objectRef, photoFile, { contentType: photoFile.type });
     profileImageUrl = await getDownloadURL(upload.ref);
