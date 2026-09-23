@@ -3998,10 +3998,11 @@ async function persistCurrentSettings(patch = {}) {
     { ...currentUserSettings, ...patch },
     { timeZone: browserTimeZone() }
   );
-  currentUserSettings = await saveUserSettings(state.mode, state.user.uid, next);
-  currentUserSettings = normalizeUserSettings(currentUserSettings, { timeZone: browserTimeZone() });
+  const saved = await saveUserSettings(state.mode, state.user.uid, next);
+  const localOnly = saved?.__localOnly === true;
+  currentUserSettings = normalizeUserSettings(saved, { timeZone: browserTimeZone() });
   applyRuntimeSettings(currentUserSettings);
-  return currentUserSettings;
+  return { ...currentUserSettings, __localOnly:localOnly };
 }
 
 async function handleSettingsPreferencesSave(form) {
@@ -4688,8 +4689,10 @@ async function handleClick(event) {
     if (!['light','dark','system'].includes(theme)) return;
     themeChoice.disabled = true;
     try {
-      await persistCurrentSettings({ theme });
-      toast(`${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} appearance saved.`, 'success');
+      const saved = await persistCurrentSettings({ theme });
+      toast(saved.__localOnly
+        ? `${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} appearance is active on this device. Cloud sync will resume after the settings rules update.`
+        : `${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} appearance saved.`, 'success');
       renderSettings();
     } catch (error) {
       themeChoice.disabled = false;
@@ -4703,8 +4706,10 @@ async function handleClick(event) {
     const theme = themeCycle.dataset.themeNext || 'light';
     themeCycle.disabled = true;
     try {
-      await persistCurrentSettings({ theme });
-      toast(`Appearance changed to ${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'}.`, 'success');
+      const saved = await persistCurrentSettings({ theme });
+      toast(saved.__localOnly
+        ? `Appearance changed to ${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} on this device.`
+        : `Appearance changed to ${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'}.`, 'success');
       renderRoute();
     } catch (error) {
       themeCycle.disabled = false;
