@@ -7,7 +7,6 @@ export const state = {
   profile: null,
   posts: [],
   notifications: [],
-  leaderboard: [],
   activeFeedTab: 'latest',
   searchQuery: '',
   busy: false,
