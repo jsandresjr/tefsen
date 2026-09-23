@@ -5,6 +5,7 @@ import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
 import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
 import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
+import { normalizeUserSettings, readSettingsCache, writeSettingsCache } from './settings-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp, documentId,
@@ -81,6 +82,46 @@ function updateSavedCache(userId, postId, active, savedAtMillis = Date.now()) {
 
 function savedReferenceCollection(userId) {
   return collection(db, C.users, String(userId), S.savedPosts || 'savedPosts');
+}
+
+function userSettingsDocument(userId) {
+  return doc(db, C.users, String(userId), 'settings', 'preferences');
+}
+
+export async function getUserSettings(mode, userId) {
+  const cached = readSettingsCache(userId);
+  if (!userId) return cached;
+  if (mode === 'demo') return cached;
+
+  try {
+    const snap = await getDoc(userSettingsDocument(userId));
+    const settings = normalizeUserSettings(snap.exists() ? snap.data() : {});
+    writeSettingsCache(userId, settings);
+    return settings;
+  } catch {
+    return cached;
+  }
+}
+
+export async function saveUserSettings(mode, userId, draft = {}) {
+  if (!userId) throw new Error('Sign in to save settings.');
+  const settings = normalizeUserSettings(draft);
+
+  if (mode === 'demo') {
+    writeSettingsCache(userId, settings);
+    return settings;
+  }
+
+  await setDoc(userSettingsDocument(userId), {
+    ...settings,
+    uid:String(userId),
+    userId:String(userId),
+    documentType:'preferences',
+    updatedAt:serverTimestamp()
+  });
+
+  writeSettingsCache(userId, settings);
+  return settings;
 }
 
 async function getSavedPostReferences(mode, userId) {

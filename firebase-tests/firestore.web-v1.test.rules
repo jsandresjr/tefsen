@@ -32,6 +32,62 @@ service cloud.firestore {
         && request.resource.data.postId == postId;
     }
 
+    match /users/{uid}/settings/{settingsId} {
+      function validPreferences() {
+        return settingsId == "preferences"
+          && request.resource.data.keys().hasAll([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "theme",
+            "compactFeed",
+            "reducedMotion",
+            "language",
+            "region",
+            "timeZone",
+            "notificationOpportunityDeadlines",
+            "notificationJourneyReminders",
+            "notificationCommunityActivity",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "theme",
+            "compactFeed",
+            "reducedMotion",
+            "language",
+            "region",
+            "timeZone",
+            "notificationOpportunityDeadlines",
+            "notificationJourneyReminders",
+            "notificationCommunityActivity",
+            "updatedAt"
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.userId == uid
+          && request.resource.data.documentType == "preferences"
+          && request.resource.data.schemaVersion == 1
+          && request.resource.data.theme == "dark"
+          && request.resource.data.language == "en"
+          && request.resource.data.compactFeed is bool
+          && request.resource.data.reducedMotion is bool
+          && request.resource.data.notificationOpportunityDeadlines is bool
+          && request.resource.data.notificationJourneyReminders is bool
+          && request.resource.data.notificationCommunityActivity is bool
+          && request.resource.data.region is string
+          && request.resource.data.region.size() <= 80
+          && request.resource.data.timeZone is string
+          && request.resource.data.timeZone.size() <= 100;
+      }
+
+      allow read, delete: if isOwner(uid) && settingsId == "preferences";
+      allow create, update: if isOwner(uid) && validPreferences();
+    }
+
     match /opportunities/{opportunityId} {
       allow read: if isAdmin()
         || (resource.data.status == "published"
