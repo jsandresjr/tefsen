@@ -66,7 +66,7 @@ test('Firebase config accurately documents reCAPTCHA v3 provider',()=>{
   assert.doesNotMatch(config,/reCAPTCHA Enterprise or v3/);
 });
 
-test('PWA caches App Check readiness under V59',()=>{
-  assert.match(sw,/tefsen-web-shell-v59-storage-appcheck/);
+test('PWA keeps App Check readiness cached after later cache-version bumps',()=>{
+  assert.match(sw,/tefsen-web-shell-v\d+/);
   assert.match(sw,/app-check-readiness-service\.js/);
 });
