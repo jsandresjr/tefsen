@@ -1,4 +1,5 @@
 import { buildJourneyPriorityRow } from './journey-priority-service.js';
+import { buildPostAcceptanceModel } from './post-acceptance-service.js';
 
 const TERMINAL = new Set(['accepted','rejected','withdrawn']);
 const PRE_SUBMISSION = new Set(['interested','preparing','ready_to_apply']);
@@ -67,9 +68,9 @@ function stageGuidance(status, priority) {
   if(status==='accepted') {
     return {
       tone:'accepted',
-      kicker:'ACCEPTED OUTCOME',
-      title:'Keep the next official steps organized.',
-      detail:'Record private notes and follow the provider’s official instructions for offer acceptance and later requirements. Tefsen does not replace official visa, legal or admissions guidance.'
+      kicker:'ACCEPTED · NEXT STAGE',
+      title:'Turn the acceptance into an organized next-step plan.',
+      detail:'Keep the application record unchanged, then use the separate post-acceptance plan for offer response, enrollment and other official next steps. Tefsen does not replace official visa, legal or admissions guidance.'
     };
   }
   if(status==='rejected') {
@@ -107,6 +108,9 @@ export function buildJourneyDetailModel(journey={}, opportunity=null, now=new Da
   const terminal=TERMINAL.has(status);
   const preSubmission=PRE_SUBMISSION.has(status);
   const guidance=stageGuidance(status,priority);
+  const postAcceptance=status==='accepted'
+    ? buildPostAcceptanceModel(journey,opportunity,now)
+    : null;
 
   return {
     priority,
@@ -115,6 +119,7 @@ export function buildJourneyDetailModel(journey={}, opportunity=null, now=new Da
     preSubmission,
     submitted:['applied','interview'].includes(status),
     guidance,
+    postAcceptance,
     progress:{
       completed:completed.length,
       total:tasks.length,
