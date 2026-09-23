@@ -436,6 +436,75 @@ export const STARTER_OPPORTUNITIES = Object.freeze([
     lastVerifiedAt: '2026-09-23',
     status: 'published',
     visibility: 'public'
+  },
+  {
+    id: 'starter-commonwealth-phd-2027',
+    catalogSource: 'starter',
+    sourceCheckedAt: '2026-09-23',
+    title: 'Commonwealth PhD Scholarships 2027–2028',
+    provider: 'Commonwealth Scholarship Commission in the UK',
+    country: 'United Kingdom',
+    opportunityType: 'Scholarship',
+    fundingType: 'Fully funded',
+    studyLevels: ['PhD'],
+    subjects: ['CSC development themes'],
+    eligibleNationalities: ['Eligible Commonwealth countries'],
+    benefits: [
+      'Scholarship funding for eligible full-time doctoral study in the UK',
+      'The official CSC page lists the current award package and support available to selected scholars'
+    ],
+    requirements: [
+      'Be a citizen of, have refugee status in, or be a British Protected Person connected to an eligible Commonwealth country',
+      'Be permanently resident in an eligible Commonwealth country',
+      'Meet the published academic requirements and be available to begin UK study in September or October 2027',
+      'Apply through both CSC Central and an eligible nominating body'
+    ],
+    requiredDocuments: ['Supporting documents required by the CSC and the applicant’s nominating body'],
+    languageRequirements: [],
+    deadline: '2026-10-20',
+    deadlineNote: 'CSC applications close 20 October 2026 at 16:00 BST. Nominating bodies may set an earlier deadline.',
+    summary: 'Commonwealth PhD Scholarships support doctoral research with developmental impact for eligible applicants from Commonwealth countries. Applicants must use the official CSC process and also meet their nominator’s requirements.',
+    officialSourceUrl: 'https://cscuk.fcdo.gov.uk/scholarships/commonwealth-phd-scholarships/',
+    verificationStatus: 'verified',
+    lastVerifiedAt: '2026-09-23',
+    status: 'published',
+    visibility: 'public'
+  },
+  {
+    id: 'starter-harding-cambridge-phd-2027',
+    catalogSource: 'starter',
+    sourceCheckedAt: '2026-09-23',
+    title: 'Harding Distinguished Postgraduate Scholarship — 2027 Entry',
+    provider: 'University of Cambridge — Harding Distinguished Postgraduate Scholars Programme',
+    country: 'United Kingdom',
+    opportunityType: 'Scholarship',
+    fundingType: 'Fully funded',
+    studyLevels: ['PhD', 'Integrated MRes + PhD'],
+    subjects: ['All Cambridge PhD disciplines'],
+    eligibleNationalities: ['All nationalities'],
+    benefits: [
+      'University Composition Fee for the duration of the course',
+      'Maintenance allowance for 3.5 years at the outset',
+      'Personal research allowance of £6,000 over the PhD',
+      'International student visa and Immigration Health Surcharge costs where applicable',
+      'Economy travel to Cambridge at the start of study and home at the end'
+    ],
+    requirements: [
+      'Apply for an eligible full-time or part-time Cambridge PhD or integrated MRes + PhD route',
+      'Indicate in the Cambridge Applicant Portal that you wish to apply for funding',
+      'Submit the course application by its published funding deadline',
+      'Be assessed as academically excellent by the relevant Cambridge Department or Faculty'
+    ],
+    requiredDocuments: ['Cambridge postgraduate application and the supporting documents required by the selected PhD course'],
+    languageRequirements: [],
+    deadline: '',
+    deadlineNote: 'Applications for 2027–2028 open in September 2026. The relevant funding deadline depends on the course and falls in early December 2026 or early January 2027.',
+    summary: 'The Harding Distinguished Postgraduate Scholars Programme offers fully funded PhD scholarships to academically outstanding applicants of any nationality and in any discipline at the University of Cambridge.',
+    officialSourceUrl: 'https://www.hardingscholars.fund.cam.ac.uk/apply/application-and-eligibility-information',
+    verificationStatus: 'verified',
+    lastVerifiedAt: '2026-09-23',
+    status: 'published',
+    visibility: 'public'
   }
 
 ]);
