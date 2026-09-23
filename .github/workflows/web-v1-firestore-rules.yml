@@ -16,6 +16,7 @@ on:
       - 'app/js/services/journey-detail-service.js'
       - 'app/js/services/post-acceptance-service.js'
       - 'app/js/services/public-profile-service.js'
+      - 'app/js/services/public-profile-record-service.js'
       - 'app/js/services/community-service.js'
       - 'app/js/services/success-story-service.js'
       - 'app/js/services/journey-story-service.js'
@@ -80,6 +81,7 @@ jobs:
           node --check ../app/js/services/moderation-model.js
           node --check ../app/js/services/moderation-service.js
           node --check ../app/js/services/public-profile-service.js
+          node --check ../app/js/services/public-profile-record-service.js
           node --check ../app/js/services/global-search-service.js
           node --check ../app/js/services/opportunity-service.js
           node --check ../app/js/store.js
