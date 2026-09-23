@@ -308,4 +308,23 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive visitor-profile privacy polish added
 - service-worker cache bumped to V41
 
-**Next: Step 15 — Community home redesign and usefulness**
+**Step 15: Community home redesign and usefulness — complete on branch `tefsen-web-completion-15-community-home`**
+- Community home rebuilt around student purpose instead of three undifferentiated data sections
+- primary actions now clearly separate asking/sharing knowledge from success and Journey story publishing
+- main Community feed is discussion-first so ordinary student questions and explanations are not buried under outcome stories
+- discussion ordering uses public replies, saves and likes and explicitly says it is not a quality or accuracy score
+- hidden/private posts are excluded from the Community home model
+- a dedicated “Needs a response” section surfaces public discussions with zero replies
+- students are prompted to respond only when they genuinely know something useful
+- subject discovery remains a lightweight home preview; deeper subject-community work stays in Step 16
+- university discovery remains a lightweight home preview; deeper university/intake work stays in Step 17
+- student outcomes are separated into their own “Experiences, not promises” section
+- outcome copy explicitly states that student stories do not prove current eligibility, funding or admission requirements
+- Community summary shows public discussions, subject spaces, university spaces and shared outcomes
+- no country is treated as a platform default
+- deterministic Community home model and regression tests added
+- desktop/tablet/mobile Community home redesign added
+- CI now runs when Community service or Community CSS changes
+- service-worker cache bumped to V42
+
+**Next: Step 16 — Subject communities**
