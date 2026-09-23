@@ -4,6 +4,47 @@ This document describes the security behavior required before the Student Passpo
 
 The repository currently contains the web client but does not contain the production Firestore rules file. Do **not** treat UI privacy as security. Firestore rules must enforce these boundaries.
 
+## Public profile vs private account boundary
+
+Tefsen Web must not rely on client-side field projection as a privacy boundary.
+
+Private account data remains in:
+
+`users/{uid}`
+
+Public profile identity is mirrored separately to:
+
+`public_profiles/{uid}`
+
+The public profile document is intentionally limited to:
+
+- `uid`
+- schema version
+- public name
+- optional public username
+- optional public bio
+- public profile image URL fields
+- update timestamp
+
+It must not contain:
+
+- email
+- subscription/billing fields
+- account role or admin authorization
+- verification authority
+- Student Passport data
+- Journey data
+- saved content
+- notification/settings state
+
+Public Search and other-user profile lookup should read `public_profiles`, not `users`.
+
+The signed-in owner may read their own `users/{uid}` document for account/subscription/profile editing. Ordinary users must not read another student's private user document.
+
+Public profile writes must not allow a student to publish privileged fields such as role, verified status, subscription state, or admin claims.
+
+Active users can be migrated safely by mirroring only the allowed public identity fields when they sign in or save their public profile. Do not backfill by exposing the full private user document to browsers.
+
 ## Required Student Passport rule
 
 Student Passport data is stored separately from the public user profile:
