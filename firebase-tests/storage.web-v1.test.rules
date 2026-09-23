@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function validImage(maxBytes) {
+      return request.resource != null
+        && request.resource.size <= maxBytes
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /profile_images/{fileName} {
+      function profileOwner() {
+        return signedIn()
+          && fileName == request.auth.uid + ".jpg";
+      }
+
+      allow get: if true;
+      allow create, update: if profileOwner()
+        && validImage(5 * 1024 * 1024);
+      allow delete: if profileOwner();
+    }
+
+    match /post_images/{uid}/{postId}/{slot} {
+      function validSlot() {
+        return slot == "1" || slot == "2";
+      }
+
+      function validMetadata() {
+        return request.resource.metadata.ownerUid == uid
+          && request.resource.metadata.postId == postId
+          && request.resource.metadata.slot == slot;
+      }
+
+      allow get: if true;
+      allow create, update: if isOwner(uid)
+        && validSlot()
+        && validImage(6 * 1024 * 1024)
+        && validMetadata();
+      allow delete: if isOwner(uid) && validSlot();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

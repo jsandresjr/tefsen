@@ -1,0 +1,170 @@
+import { db } from '../firebase-client.js';
+import { SCHEMA } from '../config/schema.js';
+import { DEMO_OPPORTUNITIES } from './opportunity-demo-data.js';
+import { STARTER_OPPORTUNITIES } from './opportunity-starter-data.js';
+import {
+  collection, doc, getDoc, getDocs, limit, query, where
+} from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
+
+const C = SCHEMA.collections;
+const SEARCH_OPPORTUNITY_SCAN_LIMIT = 180;
+
+function starterDeadlineOpen(item, now = new Date()) {
+  const raw = String(item?.deadline || '').trim();
+  if (!raw) return true;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return true;
+  const deadline = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+  return deadline >= now.getTime();
+}
+
+function currentStarterOpportunities() {
+  return STARTER_OPPORTUNITIES
+    .filter(item => starterDeadlineOpen(item))
+    .map(item => normalizeOpportunity(item, item.id));
+}
+
+function normalizedSourceKey(item) {
+  return String(item?.officialSourceUrl || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\/$/, '');
+}
+
+function normalizedTitleProviderKey(item) {
+  return [
+    String(item?.title || '').trim().toLowerCase(),
+    String(item?.provider || '').trim().toLowerCase()
+  ].join('|');
+}
+
+function mergePublishedWithStarters(liveItems = [], starterItems = currentStarterOpportunities()) {
+  const live = liveItems.map(item => normalizeOpportunity(item, item.id));
+  const liveIds = new Set(live.map(item => String(item.id || '').trim()).filter(Boolean));
+  const liveSources = new Set(live.map(normalizedSourceKey).filter(Boolean));
+  const liveTitleProviders = new Set(live.map(normalizedTitleProviderKey).filter(key => key !== '|'));
+
+  const starterOnly = starterItems.filter(item => {
+    const id = String(item.id || '').trim();
+    const source = normalizedSourceKey(item);
+    const titleProvider = normalizedTitleProviderKey(item);
+
+    if (id && liveIds.has(id)) return false;
+    if (source && liveSources.has(source)) return false;
+    if (titleProvider !== '|' && liveTitleProviders.has(titleProvider)) return false;
+    return true;
+  });
+
+  return [...live, ...starterOnly];
+}
+
+function stringArray(value) {
+  if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+  if (!value) return [];
+  return [String(value).trim()].filter(Boolean);
+}
+
+export function normalizeOpportunity(raw = {}, id = '') {
+  return {
+    ...raw,
+    id: id || raw.id || '',
+    title: String(raw.title || raw.name || 'Untitled opportunity'),
+    provider: String(raw.provider || raw.organization || raw.university || 'Opportunity provider'),
+    university: String(raw.university || raw.institution || ''),
+    country: String(raw.country || raw.destinationCountry || 'Global'),
+    intake: String(raw.intake || raw.intakeTerm || raw.intakeYear || ''),
+    opportunityType: String(raw.opportunityType || raw.type || 'Scholarship'),
+    fundingType: String(raw.fundingType || raw.funding || 'Funding not specified'),
+    studyLevels: stringArray(raw.studyLevels || raw.educationLevels || raw.studyLevel),
+    subjects: stringArray(raw.subjects || raw.subjectAreas || raw.subject),
+    eligibleNationalities: stringArray(raw.eligibleNationalities || raw.nationalities),
+    benefits: stringArray(raw.benefits || raw.fundingBenefits),
+    requirements: stringArray(raw.requirements || raw.eligibilityRequirements),
+    requiredDocuments: stringArray(raw.requiredDocuments),
+    languageRequirements: stringArray(raw.languageRequirements || raw.englishRequirements),
+    minGpa: raw.minGpa === '' || raw.minGpa === null || raw.minGpa === undefined ? null : Number(raw.minGpa),
+    gpaScale: Number(raw.gpaScale || 4),
+    deadline: raw.deadline || raw.applicationDeadline || '',
+    deadlineNote: String(raw.deadlineNote || ''),
+    applicationOpen: raw.applicationOpen !== false && raw.status !== 'closed' && raw.status !== 'archived',
+    verificationStatus: String(raw.verificationStatus || 'unverified').toLowerCase(),
+    lastVerifiedAt: raw.lastVerifiedAt || null,
+    sourceCheckedAt: raw.sourceCheckedAt || raw.lastVerifiedAt || null,
+    catalogSource: String(raw.catalogSource || 'firestore').toLowerCase(),
+    sourceNote: String(raw.sourceNote || ''),
+    summary: String(raw.summary || raw.description || ''),
+    officialSourceUrl: String(raw.officialSourceUrl || raw.sourceUrl || raw.officialUrl || ''),
+    status: String(raw.status || 'published').toLowerCase(),
+    visibility: String(raw.visibility || 'public').toLowerCase()
+  };
+}
+
+export async function getOpportunities(mode) {
+  if (mode === 'demo') return DEMO_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
+
+  const q = query(
+    collection(db, C.opportunities),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(60)
+  );
+  const snap = await getDocs(q);
+  const live = snap.docs
+    .map(row => normalizeOpportunity(row.data(), row.id))
+    .filter(item => item.visibility === 'public');
+
+  return mergePublishedWithStarters(live);
+}
+
+export async function getOpportunitySearchCorpus(mode) {
+  if (mode === 'demo') {
+    const items = DEMO_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
+    return {
+      items,
+      coverage:{ scanned:items.length, limit:SEARCH_OPPORTUNITY_SCAN_LIMIT, complete:true }
+    };
+  }
+
+  const q = query(
+    collection(db, C.opportunities),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(SEARCH_OPPORTUNITY_SCAN_LIMIT + 1)
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.slice(0, SEARCH_OPPORTUNITY_SCAN_LIMIT);
+  const items = docs
+    .map(row => normalizeOpportunity(row.data(), row.id))
+    .filter(item => item.status === 'published' && item.visibility === 'public');
+
+  const merged = mergePublishedWithStarters(items);
+  return {
+    items:merged,
+    coverage:{
+      scanned:docs.length,
+      limit:SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      complete:snap.docs.length <= SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      starterIncluded:true
+    }
+  };
+}
+
+export async function getOpportunityById(mode, opportunityId) {
+  const id = String(opportunityId || '').trim();
+  if (!id) return null;
+
+  if (mode === 'demo') {
+    const row = DEMO_OPPORTUNITIES.find(item => item.id === id);
+    return row ? normalizeOpportunity(row, row.id) : null;
+  }
+
+  const starter = STARTER_OPPORTUNITIES.find(item => item.id === id);
+  if (starter) return normalizeOpportunity(starter, starter.id);
+
+  const snap = await getDoc(doc(db, C.opportunities, id));
+  if (!snap.exists()) return null;
+
+  const item = normalizeOpportunity(snap.data(), snap.id);
+  if (item.status !== 'published' || item.visibility !== 'public') return null;
+  return item;
+}

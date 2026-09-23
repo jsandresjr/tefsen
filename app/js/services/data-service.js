@@ -2,17 +2,24 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
+import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
+import { buildPublicProfileRecord, normalizePublicProfileRecord } from './public-profile-record-service.js';
+import { validateSuccessStoryDraft } from './success-story-service.js';
+import { validateJourneyStoryDraft } from './journey-story-service.js';
+import { normalizeUserSettings, readSettingsCache, writeSettingsCache } from './settings-service.js';
+import { mergeNotificationReadIds, notificationReadStatePayload, mergeActivityNotificationRecords } from './notification-state-service.js';
 import {
-  collection, doc, setDoc, getDoc, getDocs, deleteDoc,
-  onSnapshot, query, where, limit, serverTimestamp,
-  getCountFromServer
+  collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, writeBatch,
+  onSnapshot, query, where, limit, serverTimestamp, documentId
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
 const C = SCHEMA.collections;
 const S = SCHEMA.subcollections;
 const ALLOWED_ROLES = new Set(['student', 'HS_STUDENT', 'UNI_STUDENT', 'MENTOR', 'ADMIN']);
 const userProfileCache = new Map();
+const SEARCH_USER_SCAN_LIMIT = 250;
+const SEARCH_POST_SCAN_LIMIT = 300;
 
 function likedCacheKey(userId) {
   return `tefsen_liked_${String(userId || 'guest')}`;
@@ -40,6 +47,138 @@ function updateLikedCache(userId, postId, active) {
   writeLikedCache(userId, liked);
 }
 
+function savedCacheKey(userId) {
+  return `tefsen_saved_posts_${String(userId || 'guest')}`;
+}
+
+function readSavedCache(userId) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(savedCacheKey(userId)) || '{}');
+    if (Array.isArray(parsed)) {
+      return new Map(parsed.map(id => [String(id), 0]));
+    }
+    return new Map(Object.entries(parsed || {}).map(([id,millis]) => [
+      String(id),
+      Math.max(0, Number(millis || 0))
+    ]));
+  } catch {
+    return new Map();
+  }
+}
+
+function writeSavedCache(userId, values) {
+  try {
+    const entries = [...values.entries()]
+      .filter(([id]) => Boolean(id))
+      .slice(-500);
+    localStorage.setItem(savedCacheKey(userId), JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
+}
+
+function updateSavedCache(userId, postId, active, savedAtMillis = Date.now()) {
+  const saved = readSavedCache(userId);
+  active ? saved.set(String(postId), Math.max(0, Number(savedAtMillis || Date.now()))) : saved.delete(String(postId));
+  writeSavedCache(userId, saved);
+}
+
+function savedReferenceCollection(userId) {
+  return collection(db, C.users, String(userId), S.savedPosts || 'savedPosts');
+}
+
+function userSettingsDocument(userId) {
+  return doc(db, C.users, String(userId), 'settings', 'preferences');
+}
+
+function publicProfileDocument(userId) {
+  return doc(db, C.publicProfiles, String(userId));
+}
+
+function publicProfileWritePayload(userId, source = {}) {
+  return {
+    ...buildPublicProfileRecord(userId, source),
+    updatedAt:serverTimestamp()
+  };
+}
+
+async function syncOwnPublicProfile(mode, userId, source = {}) {
+  if (!userId || mode === 'demo') return;
+  try {
+    await setDoc(
+      publicProfileDocument(userId),
+      publicProfileWritePayload(userId, source),
+      { merge:true }
+    );
+  } catch {
+    // The private account remains usable while production public-profile rules
+    // are being deployed. Public discovery will not fall back to private users.
+  }
+}
+
+export async function getUserSettings(mode, userId) {
+  const cached = readSettingsCache(userId);
+  if (!userId) return cached;
+  if (mode === 'demo') return cached;
+
+  try {
+    const snap = await getDoc(userSettingsDocument(userId));
+    const settings = normalizeUserSettings(snap.exists() ? snap.data() : {});
+    writeSettingsCache(userId, settings);
+    return settings;
+  } catch {
+    return cached;
+  }
+}
+
+export async function saveUserSettings(mode, userId, draft = {}) {
+  if (!userId) throw new Error('Sign in to save settings.');
+  const settings = normalizeUserSettings(draft);
+
+  if (mode === 'demo') {
+    writeSettingsCache(userId, settings);
+    return settings;
+  }
+
+  await setDoc(userSettingsDocument(userId), {
+    ...settings,
+    uid:String(userId),
+    userId:String(userId),
+    documentType:'preferences',
+    updatedAt:serverTimestamp()
+  });
+
+  writeSettingsCache(userId, settings);
+  return settings;
+}
+
+async function getSavedPostReferences(mode, userId) {
+  const cached = readSavedCache(userId);
+  if (!userId) return [];
+
+  if (mode === 'demo') {
+    return [...cached.entries()].map(([postId, savedAtMillis]) => ({ postId, savedAtMillis }));
+  }
+
+  try {
+    const snap = await getDocs(query(savedReferenceCollection(userId), limit(500)));
+    const refs = snap.docs.map(row => {
+      const raw = row.data() || {};
+      const savedAtMillis = Number(raw.savedAtMillis || timestampToDate(raw.savedAt)?.getTime() || timestampToDate(raw.createdAt)?.getTime() || 0);
+      return {
+        postId:String(raw.postId || row.id),
+        savedAtMillis:Math.max(0,savedAtMillis)
+      };
+    }).filter(row => row.postId);
+
+    const next = new Map(refs.map(row => [row.postId,row.savedAtMillis]));
+    writeSavedCache(userId,next);
+    return refs;
+  } catch {
+    return [...cached.entries()].map(([postId, savedAtMillis]) => ({ postId, savedAtMillis }));
+  }
+}
+
 function toBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
@@ -49,19 +188,14 @@ function toBoolean(value) {
   return false;
 }
 
-function normalizeRoleValue(role, email = '') {
+function normalizeRoleValue(role) {
   const raw = String(role || '').trim();
   if (ALLOWED_ROLES.has(raw)) return raw;
   if (raw.toLowerCase() === 'admin') return 'ADMIN';
   if (raw.toLowerCase() === 'hs_student') return 'HS_STUDENT';
   if (raw.toLowerCase() === 'uni_student') return 'UNI_STUDENT';
   if (raw.toLowerCase() === 'mentor') return 'MENTOR';
-  if (String(email || '').trim().toLowerCase() === 'jsandresjr@gmail.com') return 'ADMIN';
   return 'student';
-}
-
-function isAdminRole(role = '') {
-  return String(role || '').trim().toLowerCase() === 'admin';
 }
 
 function resolveSubscription(raw = {}) {
@@ -90,9 +224,8 @@ function resolveSubscription(raw = {}) {
   };
 }
 
-export function getWebPostingPolicy(profile = {}) {
-  const admin = isAdminRole(profile?.role);
-  if (admin) {
+export function getWebPostingPolicy(profile = {}, { admin = false } = {}) {
+  if (admin === true) {
     return {
       subscribed: true,
       admin: true,
@@ -140,25 +273,71 @@ function isWebPostForToday(post, dayKey) {
 
 export function normalizeUser(raw = {}, id = '') {
   const subscription = resolveSubscription(raw);
-  const email = raw.email || '';
   return {
     ...raw,
     id: id || raw.id || raw.uid || '',
     uid: raw.uid || id || raw.id || '',
     fullName: pick(raw, FIELD_ALIASES.userName, 'Tefsen User'),
     photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
-    role: normalizeRoleValue(pick(raw, FIELD_ALIASES.userRole, 'student'), email),
+    role: normalizeRoleValue(pick(raw, FIELD_ALIASES.userRole, 'student')),
     verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
     subscriptionActive: subscription.active,
     subscriptionStatus: subscription.status,
     subscriptionPlan: subscription.plan,
     subscriptionExpiresAt: subscription.expiresAt,
-    username: raw.username || raw.handle || (email ? String(email).split('@')[0] : ''),
-    bio: raw.bio || raw.about || '',
-    points: Number(raw.points || raw.score || raw.reputation || 0),
-    followersCount: Number(raw.followersCount || raw.followerCount || 0),
-    followingCount: Number(raw.followingCount || 0)
+    username: raw.username || raw.handle || '',
+    bio: raw.bio || raw.about || ''
   };
+}
+
+function cleanPublicText(value, max = 180) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, max);
+}
+
+function isSaveablePublicPost(mode, post) {
+  if (!post) return false;
+  if (mode === 'demo') return isPublicProfileActivity(post);
+  return String(post.status || '').toLowerCase() === 'published'
+    && String(post.visibility || '').toLowerCase() === 'public';
+}
+
+function normalizePublicPostMetadata(raw = {}) {
+  const allowedTypes = new Set(['discussion', 'success_story', 'journey_story']);
+  const postType = allowedTypes.has(raw.postType) ? raw.postType : 'discussion';
+  const successRaw = raw.successData && typeof raw.successData === 'object' ? raw.successData : {};
+  const successData = postType === 'success_story' ? {
+    university: cleanPublicText(successRaw.university, 180),
+    opportunityName: cleanPublicText(successRaw.opportunityName, 180),
+    country: cleanPublicText(successRaw.country, 120),
+    subject: cleanPublicText(successRaw.subject, 120),
+    studyLevel: cleanPublicText(successRaw.studyLevel, 100),
+    intake: cleanPublicText(successRaw.intake, 80),
+    fundingType: cleanPublicText(successRaw.fundingType, 100)
+  } : {};
+
+  const milestoneSource = Array.isArray(raw.publicMilestones) ? raw.publicMilestones : [];
+  const publicMilestones = postType === 'journey_story'
+    ? milestoneSource.slice(0, 8).map(item => ({
+        stage: cleanPublicText(item?.stage, 80),
+        month: cleanPublicText(item?.month, 20),
+        note: cleanPublicText(item?.note, 300)
+      })).filter(item => item.stage || item.note)
+    : [];
+
+  const communityUniversity = cleanPublicText(
+    raw.communityUniversity || successData.university,
+    180
+  );
+  const communityIntake = cleanPublicText(
+    raw.communityIntake || successData.intake,
+    80
+  );
+  const communitySubject = cleanPublicText(
+    raw.communitySubject || successData.subject || raw.subject,
+    120
+  );
+
+  return { postType, successData, publicMilestones, communityUniversity, communityIntake, communitySubject };
 }
 
 export function normalizePost(raw = {}, id = '') {
@@ -168,6 +347,7 @@ export function normalizePost(raw = {}, id = '') {
   const rawImages = pick(raw, FIELD_ALIASES.postImages, []);
   const imageUrls = Array.isArray(rawImages) ? rawImages.filter(Boolean).slice(0, 2) : [];
   if (!imageUrls.length && primaryImage) imageUrls.push(primaryImage);
+  const publicMetadata = normalizePublicPostMetadata(raw);
 
   return {
     ...raw,
@@ -185,6 +365,7 @@ export function normalizePost(raw = {}, id = '') {
     saveCount: Number(pick(raw, FIELD_ALIASES.saveCount, 0) || 0),
     subject: raw.subject || raw.category || raw.topic || 'General',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
+    ...publicMetadata,
     role: normalizeRoleValue(raw.authorRole || raw.role || raw.userRole || 'student'),
     verified: toBoolean(raw.authorVerified)
       || toBoolean(raw.verified)
@@ -245,13 +426,15 @@ export async function getUserById(mode, userId) {
 
   if (mode === 'demo') {
     const user = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
-    const normalized = user ? normalizeUser(user, userId) : null;
+    const normalized = user ? projectPublicUser(normalizeUser(user, userId), userId) : null;
     if (normalized) userProfileCache.set(key, normalized);
     return normalized;
   }
 
-  const snap = await getDoc(doc(db, C.users, userId));
-  const normalized = snap.exists() ? normalizeUser(snap.data(), snap.id) : null;
+  const snap = await getDoc(publicProfileDocument(userId));
+  const normalized = snap.exists()
+    ? projectPublicUser(normalizePublicProfileRecord(snap.data(), snap.id), snap.id)
+    : null;
   if (normalized) userProfileCache.set(key, normalized);
   return normalized;
 }
@@ -265,12 +448,14 @@ export async function getProfile(mode, user) {
   const snap = await getDoc(doc(db, C.users, user.uid));
   const fallback = {
     uid: user.uid,
-    fullName: user.displayName || user.email || 'Tefsen User',
+    fullName: user.displayName || 'Tefsen User',
     email: user.email || '',
     profileImageUrl: user.photoURL || '',
-    role: normalizeRoleValue('', user.email || '')
+    role: 'student'
   };
-  return normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
+  const profile=normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
+  await syncOwnPublicProfile(mode,user.uid,profile);
+  return profile;
 }
 
 export function subscribePosts(mode, callback, errorCallback = console.error) {
@@ -325,8 +510,63 @@ export async function getDailyPostUsage(mode, userId) {
   return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
 }
 
-export async function createPost(mode, user, profile, payload) {
-  const policy = getWebPostingPolicy(profile);
+export async function createPost(mode, user, profile, payload, { admin = false } = {}) {
+  const policy = getWebPostingPolicy(profile, { admin });
+
+  if (String(payload?.postType || '') === 'success_story') {
+    const draft = validateSuccessStoryDraft({
+      title:payload.title,
+      content:payload.content,
+      ...(payload.successData || {})
+    });
+    if (!draft.valid) {
+      throw new Error(draft.errors[0]?.message || 'Check the success story before publishing.');
+    }
+    payload = {
+      ...payload,
+      title:draft.value.title,
+      content:draft.value.content,
+      subject:draft.value.subject || 'Student Success',
+      successData:{
+        university:draft.value.university,
+        opportunityName:draft.value.opportunityName,
+        country:draft.value.country,
+        subject:draft.value.subject,
+        studyLevel:draft.value.studyLevel,
+        intake:draft.value.intake,
+        fundingType:draft.value.fundingType
+      },
+      communityUniversity:draft.value.university,
+      communityIntake:draft.value.intake,
+      communitySubject:draft.value.subject
+    };
+  }
+
+  if (String(payload?.postType || '') === 'journey_story') {
+    const draft = validateJourneyStoryDraft({
+      title:payload.title,
+      content:payload.content,
+      subject:payload.communitySubject || payload.subject,
+      university:payload.communityUniversity,
+      intake:payload.communityIntake,
+      publicMilestones:payload.publicMilestones
+    });
+    if (!draft.valid) {
+      throw new Error(draft.errors[0]?.message || 'Check the Journey story before publishing.');
+    }
+    payload = {
+      ...payload,
+      title:draft.value.title,
+      content:draft.value.content,
+      subject:draft.value.subject || 'Student Journey',
+      publicMilestones:draft.value.publicMilestones,
+      communitySubject:draft.value.subject,
+      communityUniversity:draft.value.university,
+      communityIntake:draft.value.intake
+    };
+  }
+
+  const publicMetadata = normalizePublicPostMetadata(payload);
   const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
     .filter(file => file && file.size);
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -361,11 +601,11 @@ export async function createPost(mode, user, profile, payload) {
       authorName: profile?.fullName || user.displayName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
       authorRole: profile?.role || 'student',
-      authorVerified: Boolean(profile?.verified),
-      title: payload.title,
+        title: payload.title,
       content: payload.content,
       subject: payload.subject || 'General',
       tags: payload.tags || [],
+      ...publicMetadata,
       imageUrl: imageUrls[0] || '',
       imageUrls,
       status: 'published',
@@ -382,17 +622,23 @@ export async function createPost(mode, user, profile, payload) {
 
   const postRef = doc(collection(db, C.posts));
   const imageUrls = [];
-  for (const file of imageFiles) {
-    const cleanName = String(file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+  for (const [index,file] of imageFiles.entries()) {
+    const slot=String(index+1);
     const objectRef = ref(
       storage,
-      `post_images/${user.uid}/${postRef.id}/${Date.now()}-${uid('img')}-${cleanName}`
+      `post_images/${user.uid}/${postRef.id}/${slot}`
     );
-    const upload = await uploadBytes(objectRef, file, { contentType: file.type });
+    const upload = await uploadBytes(objectRef, file, {
+      contentType:file.type,
+      customMetadata:{
+        ownerUid:String(user.uid),
+        postId:String(postRef.id),
+        slot
+      }
+    });
     imageUrls.push(await getDownloadURL(upload.ref));
   }
 
-  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const base = {
     title: payload.title,
     questionTitle: payload.title,
@@ -400,6 +646,7 @@ export async function createPost(mode, user, profile, payload) {
     description: payload.content,
     subject: payload.subject || 'General',
     tags: payload.tags || [],
+    ...publicMetadata,
     imageUrl: imageUrls[0] || '',
     imageUrls,
     imageCount: imageUrls.length,
@@ -409,17 +656,11 @@ export async function createPost(mode, user, profile, payload) {
     userId: user.uid,
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: role,
-    role,
-    authorVerified: Boolean(profile?.verified),
-    verified: Boolean(profile?.verified),
     type: 'question',
     status: 'published',
     visibility: 'public',
     sourcePlatform: 'web',
     webPost: true,
-    webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
-    quotaDay: usage.dayKey,
     likeCount: 0,
     commentCount: 0,
     answerCount: 0,
@@ -441,6 +682,31 @@ export async function getPost(mode, postId) {
   return snap.exists() ? enrichPostAuthor(mode, normalizePost(snap.data(), snap.id)) : null;
 }
 
+async function getPublicPostById(mode, postId) {
+  const canonicalPostId=String(postId || '');
+  if(!canonicalPostId) return null;
+
+  if(mode === 'demo'){
+    const post=demoPosts.find(row=>String(row.id)===canonicalPostId);
+    if(!post) return null;
+    const normalized=normalizePost(post,canonicalPostId);
+    return isSaveablePublicPost(mode,normalized)
+      ? enrichPostAuthor(mode,normalized)
+      : null;
+  }
+
+  const snap=await getDocs(query(
+    collection(db,C.posts),
+    where(documentId(),'==',canonicalPostId),
+    where('status','==','published'),
+    where('visibility','==','public'),
+    limit(1)
+  ));
+  if(snap.empty) return null;
+  const row=snap.docs[0];
+  return enrichPostAuthor(mode,normalizePost(row.data(),row.id));
+}
+
 export async function deletePost(mode, userId, postId) {
   if (!userId || !postId) throw new Error('Missing user or post ID.');
   if (mode === 'demo') {
@@ -449,14 +715,61 @@ export async function deletePost(mode, userId, postId) {
     return true;
   }
   await deleteDoc(doc(db, C.posts, String(postId)));
+
+  // New Web uploads use two deterministic owner slots. Delete both after the
+  // public post disappears; legacy random-name objects are left for trusted
+  // backend cleanup rather than broad client-side listing/deletion.
+  await Promise.allSettled(['1','2'].map(async slot => {
+    try {
+      await deleteObject(ref(storage,`post_images/${userId}/${postId}/${slot}`));
+    } catch (error) {
+      if (error?.code !== 'storage/object-not-found') throw error;
+    }
+  }));
   return true;
 }
 
 export async function getReactionIds(mode, userId) {
   if (!userId) return { saved: new Set(), liked: new Set() };
+  const refs = await getSavedPostReferences(mode,userId);
   return {
-    saved: new Set(),
-    liked: mode === 'demo' ? new Set() : readLikedCache(userId)
+    saved:new Set(refs.map(row=>row.postId)),
+    liked:readLikedCache(userId)
+  };
+}
+
+export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
+  if (!userId) return { posts:[], savedIds:[], referenceCount:0, staleCount:0 };
+
+  const refs = await getSavedPostReferences(mode,userId);
+  const known = new Map(
+    (Array.isArray(knownPosts)?knownPosts:[])
+      .filter(post=>post?.id)
+      .map(post=>[String(post.id),post])
+  );
+
+  const rows = await Promise.all(refs.slice(0,100).map(async refRow => {
+    const postId=String(refRow.postId||'');
+    if(!postId) return null;
+
+    let post=known.get(postId)||null;
+    if(!post){
+      post=await getPublicPostById(mode,postId).catch(()=>null);
+    }
+    if(!post || !isSaveablePublicPost(mode,post)) return null;
+
+    return {
+      ...post,
+      _savedAtMillis:Math.max(0,Number(refRow.savedAtMillis||0))
+    };
+  }));
+
+  const posts=rows.filter(Boolean);
+  return {
+    posts,
+    savedIds:refs.map(row=>row.postId),
+    referenceCount:refs.length,
+    staleCount:Math.max(0,refs.length-posts.length)
   };
 }
 
@@ -468,18 +781,8 @@ export async function hydratePostLikeState(mode, userId, postIds = []) {
 
   await Promise.allSettled(ids.map(async postId => {
     const likeRef = doc(db, C.posts, postId, S.likes, userId);
-    const likesRef = collection(db, C.posts, postId, S.likes);
-    const [mine, aggregate] = await Promise.allSettled([
-      getDoc(likeRef),
-      getCountFromServer(likesRef)
-    ]);
-
-    if (mine.status === 'fulfilled') {
-      mine.value.exists() ? liked.add(postId) : liked.delete(postId);
-    }
-    if (aggregate.status === 'fulfilled') {
-      counts.set(postId, Math.max(0, Number(aggregate.value.data().count || 0)));
-    }
+    const mine = await getDoc(likeRef);
+    mine.exists() ? liked.add(postId) : liked.delete(postId);
   }));
 
   writeLikedCache(userId, liked);
@@ -515,8 +818,42 @@ export async function toggleLike(mode, userId, postId) {
   return !active;
 }
 
-export async function toggleSave() {
-  throw new Error('Saved posts are not enabled in the current Tefsen app data model.');
+export async function toggleSave(mode, userId, postId) {
+  if (!userId || !postId) throw new Error('Missing user or post ID.');
+  const canonicalPostId=String(postId);
+
+  if (mode === 'demo') {
+    const post=demoPosts.find(row=>String(row.id)===canonicalPostId);
+    if(!post || !isSaveablePublicPost(mode,post)) throw new Error('Only public Community posts can be saved.');
+    const saved=readSavedCache(userId);
+    const active=saved.has(canonicalPostId);
+    updateSavedCache(userId,canonicalPostId,!active,Date.now());
+    return !active;
+  }
+
+  const saveRef=doc(db,C.users,String(userId),S.savedPosts || 'savedPosts',canonicalPostId);
+  const snap=await getDoc(saveRef);
+  const active=snap.exists();
+
+  if(active){
+    await deleteDoc(saveRef);
+    updateSavedCache(userId,canonicalPostId,false);
+    return false;
+  }
+
+  const post=await getPublicPostById(mode,canonicalPostId).catch(()=>null);
+  if(!post || !isSaveablePublicPost(mode,post)) throw new Error('Only public Community posts can be saved.');
+
+  const savedAtMillis=Date.now();
+  await setDoc(saveRef,{
+    uid:String(userId),
+    userId:String(userId),
+    postId:canonicalPostId,
+    savedAt:serverTimestamp(),
+    savedAtMillis
+  });
+  updateSavedCache(userId,canonicalPostId,true,savedAtMillis);
+  return true;
 }
 
 export function subscribeComments(mode, postId, callback, errorCallback = console.error) {
@@ -560,7 +897,6 @@ export async function addComment(mode, user, profile, postId, text) {
       authorName: profile?.fullName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
       authorRole: profile?.role || 'student',
-      authorVerified: Boolean(profile?.verified),
       content: cleanText,
       text: cleanText,
       status: 'published',
@@ -574,7 +910,6 @@ export async function addComment(mode, user, profile, postId, text) {
 
   const canonicalPostId = String(postId);
   const answerRef = doc(collection(db, C.posts, canonicalPostId, S.answers || 'answers'));
-  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const nowMillis = Date.now();
   const item = {
     id: answerRef.id,
@@ -588,10 +923,6 @@ export async function addComment(mode, user, profile, postId, text) {
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
     profileImageUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: role,
-    role,
-    authorVerified: Boolean(profile?.verified),
-    verified: Boolean(profile?.verified),
     content: cleanText,
     text: cleanText,
     answer: cleanText,
@@ -610,106 +941,263 @@ export async function addComment(mode, user, profile, postId, text) {
   return { ...item, createdAt: new Date(nowMillis).toISOString() };
 }
 
-export async function getNotifications() {
-  return [];
+function notificationReadKey(userId) {
+  return `tefsen_notification_reads_${String(userId || 'guest')}`;
 }
 
-export async function markNotificationRead() {
+function writeNotificationReadIds(userId, values) {
+  const ids = mergeNotificationReadIds(values);
+  if (!userId) return ids;
+  try {
+    localStorage.setItem(notificationReadKey(userId), JSON.stringify([...ids]));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
+  return ids;
+}
+
+export function getNotificationReadIds(userId) {
+  try {
+    return mergeNotificationReadIds(JSON.parse(localStorage.getItem(notificationReadKey(userId)) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function notificationReadStateDocument(userId) {
+  return doc(db, C.users, String(userId), 'notificationState', 'read');
+}
+
+export async function getSyncedNotificationReadIds(mode, userId) {
+  const local = getNotificationReadIds(userId);
+  if (!userId || mode === 'demo') return local;
+
+  try {
+    const snap = await getDoc(notificationReadStateDocument(userId));
+    const remote = snap.exists() && Array.isArray(snap.data()?.readIds)
+      ? snap.data().readIds
+      : [];
+    return writeNotificationReadIds(userId, mergeNotificationReadIds(local, remote));
+  } catch {
+    return local;
+  }
+}
+
+async function persistNotificationReadState(mode, userId, values) {
+  const ids = writeNotificationReadIds(userId, values);
+  if (!userId || mode === 'demo') return ids;
+
+  try {
+    const payload = notificationReadStatePayload(userId, ids);
+    await setDoc(notificationReadStateDocument(userId), {
+      ...payload,
+      updatedAt:serverTimestamp()
+    }, { merge:true });
+  } catch {
+    // Local per-user read state remains authoritative until the private
+    // notification-state rules are deployed.
+  }
+  return ids;
+}
+
+function normalizeNotificationRecord(raw = {}, id = '') {
+  const createdAt = raw.createdAt || raw.timestamp || raw.updatedAt || null;
+  const createdAtMillis = Number(
+    raw.createdAtMillis ||
+    timestampToDate(createdAt)?.getTime() ||
+    0
+  );
+  return {
+    ...raw,
+    id:String(id || raw.id || ''),
+    type:String(raw.type || raw.notificationType || 'update'),
+    actorName:String(raw.actorName || raw.fromUserName || raw.senderName || ''),
+    text:String(raw.text || raw.message || raw.body || ''),
+    postId:String(raw.postId || raw.questionId || raw.parentPostId || ''),
+    opportunityId:String(raw.opportunityId || ''),
+    actorId:String(raw.actorId || raw.fromUserId || raw.senderId || ''),
+    read:Boolean(raw.read || raw.isRead),
+    createdAt,
+    createdAtMillis,
+    sortTime:createdAtMillis,
+    source:'activity'
+  };
+}
+
+async function notificationQueryByField(userId, fieldName) {
+  try {
+    const snap = await getDocs(query(
+      collection(db, C.notifications),
+      where(fieldName, '==', String(userId)),
+      limit(80)
+    ));
+    return snap.docs.map(row => normalizeNotificationRecord(row.data(), row.id));
+  } catch {
+    return [];
+  }
+}
+
+export async function getNotifications(mode, userId) {
+  if (!userId || mode === 'demo') return [];
+
+  // Production history can contain both canonical userId records and older
+  // recipientId records for the same account. Query both shapes, then merge
+  // and deduplicate by notification document ID.
+  const [canonical, legacy] = await Promise.all([
+    notificationQueryByField(userId, 'userId'),
+    notificationQueryByField(userId, 'recipientId')
+  ]);
+  return mergeActivityNotificationRecords(canonical, legacy);
+}
+
+async function markActivityNotificationRead(notification = {}) {
+  const id = String(notification?.id || '');
+  const serverId = id.startsWith('activity:') ? id.slice('activity:'.length) : id;
+  if (!serverId) return;
+
+  try {
+    await updateDoc(doc(db, C.notifications, serverId), {
+      read:true,
+      isRead:true,
+      readAt:serverTimestamp(),
+      updatedAt:serverTimestamp()
+    });
+  } catch {
+    // Private account read-state still records the acknowledgement when a
+    // legacy notification document is immutable under current production rules.
+  }
+}
+
+export async function markNotificationsRead(mode, userId, notifications = []) {
+  if (!userId) return false;
+  const rows = (Array.isArray(notifications) ? notifications : [])
+    .filter(row => row?.id);
+  if (!rows.length) return true;
+
+  const ids = mergeNotificationReadIds(
+    getNotificationReadIds(userId),
+    rows.map(row => String(row.id))
+  );
+  await persistNotificationReadState(mode, userId, ids);
+
+  if (mode !== 'demo') {
+    await Promise.all(rows
+      .filter(row => row?.source === 'activity')
+      .map(row => markActivityNotificationRead(row)));
+  }
   return true;
 }
 
-export async function getConversations() {
-  return [];
+export async function markNotificationRead(mode, userId, notification = {}) {
+  if (!notification?.id) return false;
+  return markNotificationsRead(mode, userId, [notification]);
 }
 
-export function subscribeMessages(mode, conversationId, callback) {
-  callback([]);
-  return () => {};
-}
-
-export async function sendMessage() {
-  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
-}
-
-export async function getLeaderboard(mode) {
-  if (mode === 'demo') {
-    return [...DEMO_USERS]
-      .sort((a, b) => Number(b.points || 0) - Number(a.points || 0))
-      .map(row => normalizeUser(row, row.uid || row.id));
-  }
-
-  const snap = await getDocs(query(collection(db, C.users), limit(60)));
-  return snap.docs
-    .map(row => normalizeUser(row.data(), row.id))
-    .sort((a, b) => b.points - a.points)
-    .slice(0, 30);
-}
 
 export async function searchAll(mode, term) {
   const qText = String(term || '').trim().toLowerCase();
-  if (!qText) return { users: [], posts: [] };
+  if (!qText) {
+    return {
+      users: [],
+      posts: [],
+      coverage: {
+        people:{ scanned:0, limit:SEARCH_USER_SCAN_LIMIT, complete:true },
+        community:{ scanned:0, limit:SEARCH_POST_SCAN_LIMIT, complete:true }
+      }
+    };
+  }
 
   if (mode === 'demo') {
     const users = DEMO_USERS
-      .map(row => normalizeUser(row, row.uid || row.id))
-      .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText));
+      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id));
     const posts = demoPosts
       .map(post => normalizePost(post, post.id))
-      .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText));
-    return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
+      .filter(isPublicProfileActivity);
+    return {
+      users,
+      posts,
+      coverage: {
+        people:{ scanned:DEMO_USERS.length, limit:SEARCH_USER_SCAN_LIMIT, complete:true },
+        community:{ scanned:demoPosts.filter(isPublicProfileActivity).length, limit:SEARCH_POST_SCAN_LIMIT, complete:true }
+      }
+    };
   }
 
   const [usersSnap, postsSnap] = await Promise.all([
-    getDocs(query(collection(db, C.users), limit(100))),
+    getDocs(query(collection(db, C.publicProfiles), limit(SEARCH_USER_SCAN_LIMIT + 1))),
     getDocs(query(
       collection(db, C.posts),
       where('status', '==', 'published'),
       where('visibility', '==', 'public'),
-      limit(100)
+      limit(SEARCH_POST_SCAN_LIMIT + 1)
     ))
   ]);
 
-  const users = usersSnap.docs
-    .map(row => normalizeUser(row.data(), row.id))
-    .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText))
-    .slice(0, 20);
+  const userDocs = usersSnap.docs.slice(0, SEARCH_USER_SCAN_LIMIT);
+  const postDocs = postsSnap.docs.slice(0, SEARCH_POST_SCAN_LIMIT);
 
-  const posts = postsSnap.docs
+  const users = userDocs
+    .map(row => projectPublicUser(normalizePublicProfileRecord(row.data(), row.id), row.id));
+
+  const posts = postDocs
     .map(row => normalizePost(row.data(), row.id))
-    .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText))
-    .slice(0, 30);
+    .filter(isPublicProfileActivity);
 
-  return { users, posts: await enrichPostAuthors(mode, posts) };
+  return {
+    users,
+    posts: await enrichPostAuthors(mode, posts),
+    coverage: {
+      people:{
+        scanned:userDocs.length,
+        limit:SEARCH_USER_SCAN_LIMIT,
+        complete:usersSnap.docs.length <= SEARCH_USER_SCAN_LIMIT
+      },
+      community:{
+        scanned:postDocs.length,
+        limit:SEARCH_POST_SCAN_LIMIT,
+        complete:postsSnap.docs.length <= SEARCH_POST_SCAN_LIMIT
+      }
+    }
+  };
 }
 
 export async function updateUserProfile(mode, userId, data) {
+  const validation = validatePublicProfileDraft({
+    fullName:data.fullName,
+    username:data.username,
+    bio:data.bio
+  });
+  if (!validation.valid) throw new Error(validation.errors[0]?.message || 'Check the public profile fields.');
+  const { fullName, username, bio } = validation.value;
+
   if (mode === 'demo') {
     const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
-    Object.assign(existing, data);
+    const { profileImageFile } = data;
+    Object.assign(existing, { fullName, displayName:fullName, username, bio });
+    if (profileImageFile instanceof File && profileImageFile.size) {
+      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
+      existing.photoURL = existing.profileImageUrl;
+    }
     return normalizeUser(existing, userId);
   }
 
-  const fullName = String(data.fullName || '').trim().slice(0, 80);
-  const username = String(data.username || '').trim().replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40);
-  const bio = String(data.bio || '').trim().slice(0, 500);
-  if (!fullName) throw new Error('Full name is required.');
-
   const userRef = doc(db, C.users, userId);
   const snap = await getDoc(userRef);
-  const current = snap.exists() ? snap.data() : {};
+  if (!snap.exists()) throw new Error('Account profile is unavailable. Sign out and sign in again to restore it.');
+  const current = snap.data();
   const currentAuthUser = auth?.currentUser;
-  const email = String(current.email || currentAuthUser?.email || '').trim();
-  const role = normalizeRoleValue(current.role, email);
   let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
 
-  const photoInput = document.querySelector('[data-profile-form] input[name="profileImage"]');
-  const photoFile = photoInput?.files?.[0] || null;
+  const photoFile = data.profileImageFile instanceof File && data.profileImageFile.size
+    ? data.profileImageFile
+    : null;
   if (photoFile) {
-    if (!String(photoFile.type || '').startsWith('image/')) {
-      throw new Error('Profile photo must be an image.');
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(String(photoFile.type || '').toLowerCase())) {
+      throw new Error('Profile photo must be JPG, PNG or WebP.');
     }
-    if (photoFile.size >= 5 * 1024 * 1024) {
-      throw new Error('Profile photo must be smaller than 5 MB.');
+    if (photoFile.size > 5 * 1024 * 1024) {
+      throw new Error('Profile photo must be 5 MB or smaller.');
     }
     const objectRef = ref(storage, `profile_images/${userId}.jpg`);
     const upload = await uploadBytes(objectRef, photoFile, { contentType: photoFile.type });
@@ -717,72 +1205,65 @@ export async function updateUserProfile(mode, userId, data) {
   }
 
   const payload = {
-    uid: userId,
-    email,
     fullName,
     displayName: fullName,
     username,
     bio,
-    role,
     profileImageUrl,
     photoURL: profileImageUrl,
     updatedAt: serverTimestamp()
   };
 
-  if (!snap.exists()) {
-    payload.verified = false;
-    payload.createdAt = serverTimestamp();
-  }
-
-  await setDoc(userRef, payload, { merge: true });
+  const batch=writeBatch(db);
+  batch.set(userRef,payload,{ merge:true });
+  batch.set(
+    publicProfileDocument(userId),
+    publicProfileWritePayload(userId,{ ...current, ...payload }),
+    { merge:true }
+  );
+  await batch.commit();
   userProfileCache.delete(`${mode}:${userId}`);
   return normalizeUser({ ...current, ...payload }, userId);
 }
 
-export async function reportPost(mode, userId, postId, reason, details = '') {
-  const allowedReasons = new Set([
-    'Spam',
-    'Harassment',
-    'Harmful or unsafe content',
-    'Misinformation concern',
-    'Copyright concern',
-    'Other'
-  ]);
-  const cleanReason = String(reason || '').trim();
-  const cleanDetails = String(details || '').trim().slice(0, 1000);
-  if (!allowedReasons.has(cleanReason)) throw new Error('Choose a valid report reason.');
-  if (mode === 'demo') return { id: uid('report') };
+export async function removeProfilePhoto(mode, userId) {
+  if (!userId) throw new Error('Missing user ID.');
 
-  const requestRef = doc(collection(db, 'support_requests'));
-  await setDoc(requestRef, {
-    type: 'post_report',
-    status: 'open',
-    requesterId: String(userId),
-    userId: String(userId),
-    postId: String(postId),
-    reason: cleanReason,
-    details: cleanDetails,
-    sourcePlatform: 'web',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  return { id: requestRef.id };
+  if (mode === 'demo') {
+    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
+    if (existing) {
+      existing.profileImageUrl = '';
+      existing.photoURL = '';
+      existing.photoUrl = '';
+    }
+    return existing ? normalizeUser(existing, userId) : null;
+  }
+
+  const objectRef = ref(storage, `profile_images/${userId}.jpg`);
+  try {
+    await deleteObject(objectRef);
+  } catch (error) {
+    if (error?.code !== 'storage/object-not-found') throw error;
+  }
+
+  const userRef = doc(db, C.users, userId);
+  const currentSnap=await getDoc(userRef);
+  const current=currentSnap.exists() ? currentSnap.data() : {};
+  const batch=writeBatch(db);
+  batch.set(userRef,{
+    profileImageUrl:'',
+    photoURL:'',
+    updatedAt:serverTimestamp()
+  },{ merge:true });
+  batch.set(
+    publicProfileDocument(userId),
+    publicProfileWritePayload(userId,{ ...current, profileImageUrl:'', photoURL:'', photoUrl:'' }),
+    { merge:true }
+  );
+  await batch.commit();
+
+  userProfileCache.delete(`${mode}:${userId}`);
+  return normalizeUser({ ...current, profileImageUrl:'', photoURL:'' }, userId);
 }
 
-export async function getFollowState(mode, currentUserId, targetUserId) {
-  if (!targetUserId) return { following: false, followersCount: 0, followingCount: 0 };
-  const profile = await getUserById(mode, targetUserId).catch(() => null);
-  return {
-    following: false,
-    followersCount: Number(profile?.followersCount || 0),
-    followingCount: Number(profile?.followingCount || 0)
-  };
-}
 
-export async function toggleFollow() {
-  throw new Error('Following is not enabled in the current Tefsen app data model.');
-}
-
-export async function startConversation() {
-  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
-}

@@ -5,10 +5,17 @@
 export const SCHEMA = Object.freeze({
   collections: {
     users: 'users',
+    publicProfiles: 'public_profiles',
     posts: 'posts',
     notifications: 'notifications',
     conversations: 'conversations',
-    reports: 'reports'
+    reports: 'reports',
+    supportRequests: 'support_requests',
+    moderationAudit: 'moderation_audit',
+    opportunities: 'opportunities',
+    opportunityAudit: 'opportunity_audit',
+    studentPassports: 'student_passports',
+    journeys: 'journeys'
   },
   subcollections: {
     comments: 'comments',
@@ -17,7 +24,8 @@ export const SCHEMA = Object.freeze({
     savedPosts: 'savedPosts',
     messages: 'messages',
     followers: 'followers',
-    following: 'following'
+    following: 'following',
+    opportunityJourneys: 'opportunities'
   }
 });
 

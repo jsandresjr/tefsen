@@ -1,0 +1,28 @@
+/* Step 27 — Community reports and moderation center */
+
+.moderation27-panel{display:grid;gap:16px}
+.moderation27-note{
+  display:flex;gap:10px;align-items:flex-start;padding:14px 16px;
+  border:1px solid rgba(81,226,212,.14);border-radius:16px;
+  background:rgba(81,226,212,.045);color:#aac9c6;line-height:1.5
+}
+.moderation27-note svg{flex:0 0 auto;margin-top:2px;color:#65d8cf}
+.moderation27-row{position:relative}
+.moderation27-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+.moderation27-meta small{color:var(--muted)}
+.moderation27-excerpt{margin-top:7px!important;max-width:760px}
+.moderation27-details{
+  display:grid;gap:4px;margin-top:12px;padding:12px 13px;border:1px solid var(--line);
+  border-radius:13px;background:rgba(255,255,255,.018)
+}
+.moderation27-details b{font-size:.74rem;letter-spacing:.07em;text-transform:uppercase;color:#8db0ad}
+.moderation27-details span{color:#dcebea;line-height:1.5;overflow-wrap:anywhere}
+.moderation27-resolution{margin-top:10px!important;color:#8fd7af!important}
+.moderation27-history{display:grid;gap:10px;padding-top:8px}
+.moderation27-history header h2{margin:4px 0 0}
+.moderation27-hero .admin-stat strong{color:#8fe0d7}
+
+@media(max-width:680px){
+  .moderation27-row .admin-row-actions{display:grid;grid-template-columns:1fr}
+  .moderation27-row .admin-row-actions .btn{width:100%}
+}
