@@ -732,17 +732,6 @@ export async function searchAll(mode, term) {
 }
 
 export async function updateUserProfile(mode, userId, data) {
-  if (mode === 'demo') {
-    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
-    const { profileImageFile, ...profileFields } = data;
-    Object.assign(existing, profileFields);
-    if (profileImageFile instanceof File && profileImageFile.size) {
-      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
-      existing.photoURL = existing.profileImageUrl;
-    }
-    return normalizeUser(existing, userId);
-  }
-
   const validation = validatePublicProfileDraft({
     fullName:data.fullName,
     username:data.username,
@@ -750,6 +739,17 @@ export async function updateUserProfile(mode, userId, data) {
   });
   if (!validation.valid) throw new Error(validation.errors[0]?.message || 'Check the public profile fields.');
   const { fullName, username, bio } = validation.value;
+
+  if (mode === 'demo') {
+    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId) || {};
+    const { profileImageFile } = data;
+    Object.assign(existing, { fullName, displayName:fullName, username, bio });
+    if (profileImageFile instanceof File && profileImageFile.size) {
+      existing.profileImageUrl = URL.createObjectURL(profileImageFile);
+      existing.photoURL = existing.profileImageUrl;
+    }
+    return normalizeUser(existing, userId);
+  }
 
   const userRef = doc(db, C.users, userId);
   const snap = await getDoc(userRef);
