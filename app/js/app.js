@@ -3318,6 +3318,10 @@ async function handleClick(event) {
     document.querySelector('[data-profile-photo-input]')?.click();
     return;
   }
+  if (event.target.closest('[data-profile-photo-clear-selection]')) {
+    clearSelectedProfilePhoto();
+    return;
+  }
   if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
   const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
   if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
@@ -3850,24 +3854,108 @@ async function handleMessage(form) {
   try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
   catch(e){ input.value=text; toast(humanError(e),'error'); }
 }
+function updatePublicProfileValidation(form) {
+  const fd = new FormData(form);
+  const draft = {
+    fullName:String(fd.get('fullName') || ''),
+    username:String(fd.get('username') || ''),
+    bio:String(fd.get('bio') || '')
+  };
+  const validation = validatePublicProfileDraft(draft);
+
+  form.querySelectorAll('[data-profile-field-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector('[data-profile-field-error="' + error.field + '"]');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const summary = form.querySelector('[data-profile-validation-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  const bioCount = form.querySelector('[data-profile-bio-count]');
+  const bioField = form.elements.namedItem('bio');
+  if (bioCount && bioField instanceof HTMLTextAreaElement) bioCount.textContent = String(bioField.value.length);
+
+  return { draft, validation };
+}
+
+function clearSelectedProfilePhoto() {
+  const form = modalRoot.querySelector('[data-profile-form][data-profile-modal]');
+  const input = form?.querySelector('[data-profile-photo-input]');
+  const preview = form?.querySelector('[data-profile-photo-preview]');
+  if (!form || !input) return;
+
+  if (input.dataset.previewUrl) {
+    URL.revokeObjectURL(input.dataset.previewUrl);
+    delete input.dataset.previewUrl;
+  }
+  input.value = '';
+
+  if (preview) preview.innerHTML = avatar(state.profile || {}, 'lg');
+
+  const clearButton = form.querySelector('[data-profile-photo-clear-selection]');
+  if (clearButton) clearButton.hidden = true;
+
+  const chooseButton = form.querySelector('[data-profile-photo-choose]');
+  const hasPhoto = Boolean(safeUrl(state.profile?.photoUrl || state.profile?.profileImageUrl || state.profile?.photoURL || ''));
+  if (chooseButton) chooseButton.textContent = hasPhoto ? 'Choose new photo' : 'Choose photo';
+
+  const status = form.querySelector('[data-profile-photo-status]');
+  if (status) status.textContent = hasPhoto
+    ? 'Current photo will stay until you save a new one or remove it.'
+    : 'Initials are shown until you save a photo.';
+}
+
 async function handleProfileSave(form) {
+  const { draft, validation } = updatePublicProfileValidation(form);
+  if (!validation.valid) {
+    const firstError = validation.errors[0];
+    const field = form.elements.namedItem(firstError?.field || '');
+    if (field instanceof HTMLElement) field.focus();
+    toast('Check the highlighted public profile field before saving.', 'error');
+    return;
+  }
+
   const fd = new FormData(form);
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
+
   await withButton(submit, async () => {
     try {
       const profile = await updateUserProfile(state.mode, state.user.uid, {
-        fullName: String(fd.get('fullName') || '').trim(),
-        username: String(fd.get('username') || '').trim(),
-        bio: String(fd.get('bio') || '').trim(),
-        profileImageFile: selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+        fullName:draft.fullName,
+        username:draft.username,
+        bio:draft.bio,
+        profileImageFile:selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
       });
       state.profile = { ...state.profile, ...profile };
       state.posts = state.posts.map(post => post.authorId === state.user.uid
-        ? { ...post, authorName: profile.fullName, authorPhotoUrl: profile.photoUrl || '' }
+        ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
+
+      const input = form.querySelector('[data-profile-photo-input]');
+      if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
+
       modalRoot.innerHTML = '';
-      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Profile and photo updated.' : 'Profile updated.', 'success');
+      toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
     } catch (error) {
       toast(humanError(error), 'error');
@@ -4075,6 +4163,11 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
+  const profileForm = event.target.closest?.('[data-profile-form]');
+  if (profileForm && !event.target.matches('[type="file"]')) {
+    updatePublicProfileValidation(profileForm);
+    return;
+  }
   const passportForm = event.target.closest?.('[data-student-passport-form]');
   if (passportForm) {
     updateStudentPassportFormQuality(passportForm);
@@ -4112,8 +4205,14 @@ function handleInput(event) {
     const url = URL.createObjectURL(file);
     input.dataset.previewUrl = url;
     if (preview) {
-      preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
+      preview.innerHTML = `<div class="profile-final-selected-photo"><img class="protected-avatar-image" src="${url}" alt="Selected profile photo preview"></div>`;
     }
+    const clearButton = input.form?.querySelector('[data-profile-photo-clear-selection]');
+    if (clearButton) clearButton.hidden = false;
+    const chooseButton = input.form?.querySelector('[data-profile-photo-choose]');
+    if (chooseButton) chooseButton.textContent = 'Choose different photo';
+    const status = input.form?.querySelector('[data-profile-photo-status]');
+    if (status) status.textContent = 'New photo selected. It will become public only after you save the profile.';
     return;
   }
 
