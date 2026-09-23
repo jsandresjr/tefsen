@@ -7,6 +7,10 @@ import {
   assertSucceeds
 } from '@firebase/rules-unit-testing';
 import {
+  buildNewAccountDocument,
+  buildExistingAccountProfilePatch
+} from '../../app/js/services/account-bootstrap-service.js';
+import {
   collection,
   deleteDoc,
   doc,
@@ -193,6 +197,30 @@ test('Owner account creation cannot seed privileged or subscription fields', asy
     email:'user-e@example.test',
     subscriptionActive:true
   }));
+});
+
+test('Production auth bootstrap payload matches strict owner account rules', async () => {
+  const owner=env.authenticatedContext('bootstrap-user').firestore();
+  const created=buildNewAccountDocument({
+    uid:'bootstrap-user',
+    email:'bootstrap@example.test',
+    displayName:'Bootstrap Student',
+    photoURL:'https://example.test/bootstrap.jpg'
+  },{createdAt:123,updatedAt:123});
+
+  await assertSucceeds(setDoc(doc(owner,'users','bootstrap-user'),created));
+
+  const patch=buildExistingAccountProfilePatch({
+    uid:'bootstrap-user',
+    email:'changed-auth-email@example.test',
+    displayName:'Provider Name',
+    photoURL:'https://example.test/provider.jpg'
+  },created,{updatedAt:456});
+
+  await assertSucceeds(updateDoc(doc(owner,'users','bootstrap-user'),patch));
+  await assertFails(updateDoc(doc(owner,'users','bootstrap-user'),{email:'changed-auth-email@example.test'}));
+  await assertFails(updateDoc(doc(owner,'users','bootstrap-user'),{role:'ADMIN'}));
+  await assertFails(updateDoc(doc(owner,'users','bootstrap-user'),{verified:true}));
 });
 
 test('Public profile exposes only the dedicated safe public record', async () => {
