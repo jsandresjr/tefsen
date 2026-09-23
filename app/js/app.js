@@ -2468,9 +2468,9 @@ async function renderJourneyDetail(opportunityId) {
       ${journeyStageLine(journey)}
       ${nextStatuses.length ? `<form class="journey-stage-update" data-journey-stage-form="${escapeHTML(opportunityId)}">
         <div>
-          <label for="journey-stage-${escapeHTML(opportunityId)}">Update only after this happened in your real application</label>
+          <label for="journey-stage-${escapeHTML(opportunityId)}">Update only when this matches your real application</label>
           <select class="select" id="journey-stage-${escapeHTML(opportunityId)}" name="status" required>
-            <option value="">Choose the next real stage</option>
+            <option value="">Choose an allowed stage</option>
             ${stageOptions}
           </select>
         </div>
@@ -3566,8 +3566,7 @@ async function handleJourneyStageSave(form) {
   });
 }
 
-async function handleJourneyPlanningSave(form) {
-  const opportunityId = form.dataset.journeyPlanningForm || '';
+function updateJourneyPlanningValidation(form) {
   const fd = new FormData(form);
   const draft = {
     status:String(form.dataset.journeyStatus || 'interested'),
@@ -3583,25 +3582,42 @@ async function handleJourneyPlanningSave(form) {
   });
   form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
 
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector(`[data-journey-planning-error="${error.field}"]`);
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const summary = form.querySelector('[data-journey-planning-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  const count = form.querySelector('[data-journey-notes-count]');
+  const notes = form.elements.namedItem('notes');
+  if (count && notes instanceof HTMLTextAreaElement) count.textContent = String(notes.value.length);
+
+  return { draft, validation };
+}
+
+async function handleJourneyPlanningSave(form) {
+  const opportunityId = form.dataset.journeyPlanningForm || '';
+  const { draft, validation } = updateJourneyPlanningValidation(form);
+
   if (!validation.valid) {
-    for (const error of validation.errors) {
-      const field = form.elements.namedItem(error.field);
-      if (field instanceof HTMLElement) {
-        field.classList.add('field-error-state');
-        field.focus();
-      }
-      const errorEl = form.querySelector(`[data-journey-planning-error="${error.field}"]`);
-      if (errorEl) {
-        errorEl.hidden = false;
-        errorEl.textContent = error.message;
-      }
-    }
-    const summary = form.querySelector('[data-journey-planning-summary]');
-    if (summary) {
-      summary.hidden = false;
-      summary.classList.add('has-error');
-      summary.textContent = validation.errors.map(item => item.message).join(' ');
-    }
+    const firstError = validation.errors[0];
+    const field = form.elements.namedItem(firstError?.field || '');
+    if (field instanceof HTMLElement) field.focus();
     toast('Check the highlighted Journey planning field before saving.', 'error');
     return;
   }
@@ -3611,7 +3627,8 @@ async function handleJourneyPlanningSave(form) {
     try {
       await updateJourneyPlanning(state.mode, state.user.uid, opportunityId, {
         personalTargetDate: draft.personalTargetDate,
-        notes: draft.notes
+        notes: draft.notes,
+        officialDeadline: draft.officialDeadline
       });
       toast('Private Journey planning saved.', 'success');
       await renderJourneyDetail(opportunityId);
@@ -4001,10 +4018,9 @@ document.addEventListener('input', event => {
     updateStudentPassportFormQuality(passportForm);
     return;
   }
-  if (event.target.matches?.('[data-journey-notes]')) {
-    const form = event.target.closest('[data-journey-planning-form]');
-    const count = form?.querySelector('[data-journey-notes-count]');
-    if (count) count.textContent = String(event.target.value.length);
+  const journeyPlanningForm = event.target.closest?.('[data-journey-planning-form]');
+  if (journeyPlanningForm) {
+    updateJourneyPlanningValidation(journeyPlanningForm);
   }
 });
 document.addEventListener('keydown', event => {
