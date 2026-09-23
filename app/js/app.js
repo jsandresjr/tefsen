@@ -3265,6 +3265,8 @@ async function handleClick(event) {
   if (savedRemove) { openSavedRemoveConfirm(savedRemove); return; }
   const confirmSavedRemove = event.target.closest('[data-confirm-remove-saved]');
   if (confirmSavedRemove) { await confirmRemoveSaved(confirmSavedRemove); return; }
+  const confirmJourneyStage = event.target.closest('[data-confirm-journey-stage]');
+  if (confirmJourneyStage) { await confirmJourneyStageUpdate(confirmJourneyStage); return; }
 
   const opportunityView = event.target.closest('[data-opportunity-view]');
   if (opportunityView) {
@@ -3550,14 +3552,73 @@ async function handleJourneyTaskDelete(button) {
   }
 }
 
+function journeyStageConfirmCopy(status) {
+  if (status === 'applied') {
+    return {
+      title:'Confirm application submitted?',
+      detail:'Only mark Applied after you actually submitted the application to the provider. Tefsen does not submit it for you.'
+    };
+  }
+  if (status === 'interview') {
+    return {
+      title:'Confirm interview / review stage?',
+      detail:'Use this only after the provider has moved your application into an interview, review or equivalent evaluation stage.'
+    };
+  }
+  if (status === 'accepted') {
+    return {
+      title:'Confirm accepted outcome?',
+      detail:'Only record Accepted after the provider has officially communicated the acceptance or offer.'
+    };
+  }
+  if (status === 'rejected') {
+    return {
+      title:'Confirm rejected outcome?',
+      detail:'Only record Rejected after the provider has communicated that outcome.'
+    };
+  }
+  if (status === 'withdrawn') {
+    return {
+      title:'Confirm Journey withdrawn?',
+      detail:'Use Withdrawn only when you have chosen not to continue this application.'
+    };
+  }
+  return {
+    title:`Change Journey stage to ${JOURNEY_LABELS[status] || status}?`,
+    detail:'This should reflect what has actually happened in your application. You can use only the allowed Journey transitions.'
+  };
+}
+
 async function handleJourneyStageSave(form) {
   const opportunityId = form.dataset.journeyStageForm || '';
   const status = String(new FormData(form).get('status') || '');
   if (!opportunityId || !status) return;
-  const submit = form.querySelector('button[type="submit"]');
-  await withButton(submit, async () => {
+
+  const copy = journeyStageConfirmCopy(status);
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <section class="modal journey-stage-confirm-modal">
+      <header class="modal-head"><h2>${escapeHTML(copy.title)}</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header>
+      <div class="modal-body">
+        <p>${escapeHTML(copy.detail)}</p>
+        <div class="journey-stage-confirm-note">${icon('info',16)}<span>Tefsen never changes your real application status automatically. This update records your manual confirmation only.</span></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" type="button" data-close-modal>Cancel</button>
+          <button class="btn btn-primary" type="button" data-confirm-journey-stage="${escapeHTML(status)}" data-opportunity-id="${escapeHTML(opportunityId)}">Confirm ${escapeHTML(JOURNEY_LABELS[status] || status)}</button>
+        </div>
+      </div>
+    </section>
+  </div>`;
+}
+
+async function confirmJourneyStageUpdate(button) {
+  const opportunityId = String(button?.dataset?.opportunityId || '');
+  const status = String(button?.dataset?.confirmJourneyStage || '');
+  if (!opportunityId || !status) return;
+
+  await withButton(button, async () => {
     try {
       await updateJourneyStage(state.mode, state.user.uid, opportunityId, status);
+      modalRoot.innerHTML = '';
       toast('Journey stage updated.', 'success');
       await renderJourneyDetail(opportunityId);
     } catch (error) {
