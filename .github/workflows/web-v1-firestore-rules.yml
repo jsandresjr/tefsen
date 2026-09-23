@@ -59,5 +59,12 @@ jobs:
       - name: Install test dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Validate Step 25 JavaScript syntax
+        run: |
+          node --check ../app/js/app.js
+          node --check ../app/js/services/data-service.js
+          node --check ../app/js/services/settings-service.js
+          node --check ../app/sw.js
+
       - name: Run Firestore emulator security tests
         run: npm run test:emulator
