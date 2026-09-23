@@ -3831,7 +3831,7 @@ async function renderSearch(term = '') {
     currentSearch=buildGlobalSearchModel({
       term:query,
       users:rawSearch.users,
-      posts:query ? rawSearch.posts : state.posts,
+      posts:state.posts.length ? state.posts : rawSearch.posts,
       opportunities
     });
 
