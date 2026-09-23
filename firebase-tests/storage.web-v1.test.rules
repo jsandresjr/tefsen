@@ -16,11 +16,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
-    match /profile_images/{uid}.jpg {
+    match /profile_images/{fileName} {
+      function profileOwner() {
+        return signedIn()
+          && fileName == request.auth.uid + ".jpg";
+      }
+
       allow get: if true;
-      allow create, update: if isOwner(uid)
+      allow create, update: if profileOwner()
         && validImage(5 * 1024 * 1024);
-      allow delete: if isOwner(uid);
+      allow delete: if profileOwner();
     }
 
     match /post_images/{uid}/{postId}/{slot} {
