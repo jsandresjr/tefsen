@@ -3727,6 +3727,116 @@ async function handleJourneyTaskAdd(form) {
   });
 }
 
+function updatePostAcceptanceValidation(form) {
+  const fd = new FormData(form);
+  const draft = {
+    offerDecision: String(fd.get('offerDecision') || 'reviewing'),
+    offerResponseDate: String(fd.get('offerResponseDate') || ''),
+    enrollmentDate: String(fd.get('enrollmentDate') || '')
+  };
+  const validation = validatePostAcceptanceDraft(draft);
+
+  form.querySelectorAll('[data-post-acceptance-error]').forEach(el => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  form.querySelectorAll('.field-error-state').forEach(el => el.classList.remove('field-error-state'));
+
+  for (const error of validation.errors) {
+    const field = form.elements.namedItem(error.field);
+    if (field instanceof HTMLElement) field.classList.add('field-error-state');
+    const errorEl = form.querySelector('[data-post-acceptance-error="' + error.field + '"]');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = error.message;
+    }
+  }
+
+  const summary = form.querySelector('[data-post-acceptance-summary]');
+  if (summary) {
+    const messages = [
+      ...validation.errors.map(item => item.message),
+      ...validation.warnings.map(item => item.message)
+    ];
+    summary.hidden = messages.length === 0;
+    summary.classList.toggle('has-error', validation.errors.length > 0);
+    summary.textContent = messages.join(' ');
+  }
+
+  return { draft, validation };
+}
+
+async function handlePostAcceptancePlanningSave(form) {
+  const opportunityId = form.dataset.postAcceptancePlanForm || '';
+  const { draft, validation } = updatePostAcceptanceValidation(form);
+  if (!opportunityId) return;
+
+  if (!validation.valid) {
+    const firstError = validation.errors[0];
+    const field = form.elements.namedItem(firstError?.field || '');
+    if (field instanceof HTMLElement) field.focus();
+    toast('Check the highlighted next-stage planning field before saving.', 'error');
+    return;
+  }
+
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await updatePostAcceptancePlanning(state.mode, state.user.uid, opportunityId, draft);
+      toast('Post-acceptance plan saved.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+async function handlePostAcceptanceTaskToggle(button) {
+  const opportunityId = String(button?.dataset?.opportunityId || '');
+  const taskId = String(button?.dataset?.postAcceptanceTaskToggle || '');
+  if (!opportunityId || !taskId) return;
+
+  try {
+    await togglePostAcceptanceTask(state.mode, state.user.uid, opportunityId, taskId);
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handlePostAcceptanceTaskDelete(button) {
+  const opportunityId = String(button?.dataset?.opportunityId || '');
+  const taskId = String(button?.dataset?.postAcceptanceTaskDelete || '');
+  if (!opportunityId || !taskId) return;
+
+  try {
+    await deletePostAcceptanceTask(state.mode, state.user.uid, opportunityId, taskId);
+    toast('Next-stage task removed.', 'success');
+    await renderJourneyDetail(opportunityId);
+  } catch (error) {
+    toast(humanError(error), 'error');
+  }
+}
+
+async function handlePostAcceptanceTaskAdd(form) {
+  const opportunityId = form.dataset.postAcceptanceTaskForm || '';
+  const fd = new FormData(form);
+  const label = String(fd.get('label') || '').trim();
+  const category = String(fd.get('category') || 'custom');
+  if (!opportunityId || !label) return;
+
+  const submit = form.querySelector('button[type="submit"]');
+  await withButton(submit, async () => {
+    try {
+      await addPostAcceptanceTask(state.mode, state.user.uid, opportunityId, label, category);
+      toast('Next-stage task added.', 'success');
+      await renderJourneyDetail(opportunityId);
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
 async function handleDeletePost(postId, button) {
   const post = state.posts.find(item => item.id === postId) || await getPost(state.mode, postId).catch(() => null);
   if (!canDeletePost(post)) {
