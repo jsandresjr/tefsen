@@ -2797,9 +2797,9 @@ async function renderProfile(userId = '') {
         <span>→</span>
       </button>
     </div>
-  </section>` : `<section class="profile13-public-privacy-note">
+  </section>` : `<section class="profile13-public-privacy-note profile14-public-boundary">
     ${icon('info',16)}
-    <div><b>Public community profile</b><p>Only profile information and community activity this student chooses to make public appear here. Student Passport and private application planning are not shown.</p></div>
+    <div><b>Public information only</b><p>This view contains public name, username, bio, photo, role and explicitly public community posts. Email, subscription details, Student Passport, saved opportunities, Journeys and private planning are not part of this profile view.</p></div>
   </section>`;
 
   const activity = posts.length
@@ -2833,7 +2833,7 @@ async function renderProfile(userId = '') {
 
     ${privateWorkspace}
 
-    <section class="profile13-activity">
+    <section class="profile13-activity" id="profile-public-activity">
       <header class="profile13-section-head">
         <div><span class="opportunity-kicker">COMMUNITY</span><h2>${own ? 'Your public activity' : 'Public activity'}</h2><p>${own ? 'Only things you intentionally share with the Tefsen community appear here.' : 'Public discussions and outcomes shared by this student.'}</p></div>
         ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Open Community</button>' : ''}
@@ -3388,6 +3388,10 @@ async function handleClick(event) {
   if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
   const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
   if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
+  if (event.target.closest('[data-profile-activity-jump]')) {
+    document.getElementById('profile-public-activity')?.scrollIntoView({ behavior:'smooth', block:'start' });
+    return;
+  }
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
   const followUser = event.target.closest('[data-follow-user]');
   if (followUser) { await handleFollow(followUser); return; }
