@@ -43,13 +43,14 @@ function priorityFor({journey,officialDays,personalDays,targetAfterOfficial,prog
   if(TERMINAL.has(status)) return 90;
 
   if(PRE_SUBMISSION.has(status)) {
-    if(officialDays===0) return 0;
-    if(officialDays!==null && officialDays>0 && officialDays<=3) return 1;
-    if(personalDays!==null && personalDays<0) return 2;
-    if(targetAfterOfficial) return 3;
-    if(officialDays!==null && officialDays>3 && officialDays<=7) return 4;
-    if(officialDays!==null && officialDays>7 && officialDays<=14) return 5;
-    if(status==='ready_to_apply') return progress.total===0 || progress.completed===progress.total ? 6 : 7;
+    if(officialDays!==null && officialDays<0) return 0;
+    if(officialDays===0) return 1;
+    if(officialDays!==null && officialDays>0 && officialDays<=3) return 2;
+    if(personalDays!==null && personalDays<0) return 3;
+    if(targetAfterOfficial) return 4;
+    if(officialDays!==null && officialDays>3 && officialDays<=7) return 5;
+    if(officialDays!==null && officialDays>7 && officialDays<=14) return 6;
+    if(status==='ready_to_apply') return progress.total===0 || progress.completed===progress.total ? 7 : 8;
     if(status==='preparing') return 10;
     return 12;
   }
@@ -92,6 +93,13 @@ function attentionFor({journey,opportunity,officialDays,personalDays,targetAfter
   }
 
   if(PRE_SUBMISSION.has(status)) {
+    if(officialDays!==null && officialDays<0) {
+      return {
+        key:'deadline_expired',tone:'expired',label:'Stored deadline passed',
+        title:'The stored official application deadline has passed',
+        detail:'Do not assume late submission or a new cycle is available. Check the official provider source before taking further application action.'
+      };
+    }
     if(officialDays===0) {
       return {
         key:'deadline_today',tone:'urgent',label:'Deadline today',
@@ -229,7 +237,7 @@ export function buildJourneyPriorityWorkspace(rows=[],now=new Date()) {
   });
   const outcomes=mapped.filter(row=>row.terminal).sort((a,b)=>b.updatedAtMillis-a.updatedAtMillis);
 
-  const needsAttention=active.filter(row=>row.priority<=5);
+  const needsAttention=active.filter(row=>row.priority<=6);
   const ready=active.filter(row=>row.attention.key==='ready_to_apply');
   const submitted=active.filter(row=>['applied','interview'].includes(row.status));
 
