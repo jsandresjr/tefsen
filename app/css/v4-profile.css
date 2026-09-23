@@ -366,3 +366,837 @@ html.tefsen-v2 .v4-remove-photo-preview img{border-radius:50%!important}
     justify-content:center;
   }
 }
+
+
+/* =========================================================
+   Completion Step 13 — final public profile design
+   ========================================================= */
+
+html.tefsen-v2 .profile-final-page{
+  width:min(100%,1120px);
+  margin:0 auto;
+  display:grid;
+  gap:22px;
+}
+
+html.tefsen-v2 .profile-final-hero{
+  position:relative;
+  overflow:hidden;
+  padding:30px 34px 0;
+  border:1px solid rgba(177,222,217,.08);
+  border-radius:30px;
+  background:
+    radial-gradient(circle at 8% -8%,rgba(85,219,207,.09),transparent 26rem),
+    radial-gradient(circle at 92% 115%,rgba(93,182,224,.055),transparent 25rem),
+    linear-gradient(145deg,#092427 0%,#071b1e 68%,#061719 100%);
+  box-shadow:0 30px 80px rgba(0,0,0,.20);
+}
+html.tefsen-v2 .profile-final-hero::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(115deg,rgba(255,255,255,.018),transparent 34%);
+}
+
+html.tefsen-v2 .profile-final-hero-top{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:24px;
+}
+html.tefsen-v2 .profile-final-eyebrow,
+html.tefsen-v2 .profile-final-completion-head span,
+html.tefsen-v2 .profile-private-head>div>span,
+html.tefsen-v2 .profile-private-goal>span,
+html.tefsen-v2 .profile-final-section-head>div>span,
+html.tefsen-v2 .profile-final-photo-editor-copy>span,
+html.tefsen-v2 .profile-final-modal-kicker{
+  color:#73918d;
+  font-size:.57rem;
+  font-weight:850;
+  letter-spacing:.105em;
+  text-transform:uppercase;
+}
+html.tefsen-v2 .profile-final-visibility{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 10px;
+  border:1px solid rgba(177,222,217,.08);
+  border-radius:999px;
+  color:#78938f;
+  background:rgba(255,255,255,.018);
+  font-size:.57rem;
+  font-weight:720;
+}
+
+html.tefsen-v2 .profile-final-identity{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:156px minmax(0,1fr);
+  gap:30px;
+  align-items:center;
+  padding:0 0 30px;
+}
+
+html.tefsen-v2 .profile-final-photo-control{
+  width:156px;
+  display:grid;
+  gap:10px;
+  justify-items:center;
+}
+html.tefsen-v2 .profile-final-photo-button{
+  position:relative;
+  width:148px;
+  height:166px;
+  padding:0;
+  border:0;
+  border-radius:26px;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-final-photo-media{
+  width:148px;
+  height:166px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(177,222,217,.10);
+  border-radius:26px;
+  background:
+    radial-gradient(circle at 50% 20%,rgba(81,226,212,.07),transparent 10rem),
+    #0a2528;
+  box-shadow:0 20px 46px rgba(0,0,0,.25);
+  transition:transform .18s ease,border-color .18s ease,filter .18s ease;
+}
+html.tefsen-v2 .profile-final-photo-button:hover .profile-final-photo-media{
+  transform:translateY(-2px);
+  border-color:rgba(129,226,214,.22);
+  filter:brightness(1.035);
+}
+html.tefsen-v2 .profile-final-photo-media.static{
+  cursor:default;
+}
+html.tefsen-v2 .profile-final-photo-media .avatar.lg{
+  width:100%!important;
+  height:100%!important;
+  min-width:100%!important;
+  min-height:100%!important;
+  border:0!important;
+  border-radius:25px!important;
+  background:#0a282b!important;
+  font-size:2.1rem!important;
+}
+html.tefsen-v2 .profile-final-photo-media .avatar.lg img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  border-radius:25px!important;
+}
+html.tefsen-v2 .profile-final-photo-media .avatar-fallback{
+  font-size:2rem!important;
+  letter-spacing:-.04em;
+}
+html.tefsen-v2 .profile-final-photo-edit{
+  position:absolute;
+  right:-4px;
+  bottom:9px;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:4px solid #082124;
+  border-radius:12px;
+  background:#dff9f4;
+  color:#073236;
+  font-size:15px;
+  font-weight:900;
+  box-shadow:0 9px 20px rgba(0,0,0,.28);
+}
+html.tefsen-v2 .profile-final-photo-actions{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  flex-wrap:wrap;
+}
+html.tefsen-v2 .profile-final-photo-actions button{
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#90bdb7;
+  font-size:.58rem;
+  font-weight:780;
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-final-photo-actions button:hover{color:#dcf5f1}
+html.tefsen-v2 .profile-final-photo-actions button.danger{color:#ca8f96}
+html.tefsen-v2 .profile-final-photo-actions button.danger:hover{color:#eba7af}
+
+html.tefsen-v2 .profile-final-copy{
+  min-width:0;
+}
+html.tefsen-v2 .profile-final-name-line{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+}
+html.tefsen-v2 .profile-final-name-line h1{
+  margin:0;
+  color:#eff9f7;
+  font-size:clamp(2.35rem,5vw,4.15rem);
+  line-height:.96;
+  letter-spacing:-.057em;
+  overflow-wrap:anywhere;
+}
+html.tefsen-v2 .profile-final-name-line .role-pill{
+  flex:0 0 auto;
+  margin-top:5px;
+  opacity:.78;
+}
+html.tefsen-v2 .profile-final-handle,
+html.tefsen-v2 .profile-final-bio{
+  padding:0;
+  border:0;
+  background:none;
+  color:inherit;
+  text-align:left;
+  font:inherit;
+}
+html.tefsen-v2 .profile-final-handle{
+  display:inline-block;
+  margin-top:9px;
+  color:#8da7a3;
+  font-size:.82rem;
+  font-weight:680;
+}
+html.tefsen-v2 button.profile-final-handle:not(:disabled){
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-final-handle.placeholder{
+  color:#63817d;
+  text-decoration:underline;
+  text-decoration-style:dotted;
+  text-underline-offset:4px;
+}
+html.tefsen-v2 .profile-final-bio{
+  max-width:690px;
+  margin-top:24px;
+  color:#adc1be;
+  font-size:.88rem;
+  line-height:1.7;
+}
+html.tefsen-v2 button.profile-final-bio:not(:disabled){
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-final-bio.placeholder{
+  color:#667f7c;
+  font-style:italic;
+}
+html.tefsen-v2 .profile-final-actions{
+  display:flex;
+  gap:9px;
+  flex-wrap:wrap;
+  margin-top:22px;
+}
+html.tefsen-v2 .profile-final-actions .btn{
+  min-height:41px!important;
+}
+
+html.tefsen-v2 .profile-final-public-stats{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  border-top:1px solid rgba(177,222,217,.07);
+}
+html.tefsen-v2 .profile-final-public-stats>div{
+  min-height:82px;
+  padding:18px 22px;
+  display:grid;
+  align-content:center;
+  border-left:1px solid rgba(177,222,217,.06);
+}
+html.tefsen-v2 .profile-final-public-stats>div:first-child{
+  border-left:0;
+  padding-left:0;
+}
+html.tefsen-v2 .profile-final-public-stats strong,
+html.tefsen-v2 .profile-final-public-stats span{
+  display:block;
+}
+html.tefsen-v2 .profile-final-public-stats strong{
+  color:#e5f3f0;
+  font-size:1.3rem;
+  letter-spacing:-.025em;
+}
+html.tefsen-v2 .profile-final-public-stats span{
+  margin-top:3px;
+  color:#6f8b87;
+  font-size:.6rem;
+}
+
+/* Public profile setup quality is intentionally separate from Student Passport. */
+html.tefsen-v2 .profile-final-completion{
+  padding:19px 21px;
+  border:1px solid rgba(177,222,217,.07);
+  border-radius:20px;
+  background:rgba(7,28,31,.44);
+}
+html.tefsen-v2 .profile-final-completion-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:20px;
+}
+html.tefsen-v2 .profile-final-completion-head h2{
+  margin:4px 0 3px;
+  color:#d7e6e3;
+  font-size:1rem;
+}
+html.tefsen-v2 .profile-final-completion-head p{
+  max-width:690px;
+  margin:0!important;
+  color:#6d8582!important;
+  font-size:.61rem!important;
+  line-height:1.48!important;
+}
+html.tefsen-v2 .profile-final-meter{
+  height:5px;
+  margin-top:15px;
+  overflow:hidden;
+  border-radius:999px;
+  background:rgba(255,255,255,.035);
+}
+html.tefsen-v2 .profile-final-meter i{
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#65d7ca,#87d9b0);
+}
+html.tefsen-v2 .profile-final-improve-list{
+  margin-top:13px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+html.tefsen-v2 .profile-final-improve-list button{
+  min-width:0;
+  padding:10px 11px;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr);
+  gap:9px;
+  align-items:start;
+  border:1px solid rgba(177,222,217,.055);
+  border-radius:13px;
+  background:rgba(255,255,255,.012);
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-final-improve-list button:hover{
+  border-color:rgba(81,226,212,.13);
+  background:rgba(81,226,212,.018);
+}
+html.tefsen-v2 .profile-final-improve-list button>span{
+  width:27px;
+  height:27px;
+  display:grid;
+  place-items:center;
+  border-radius:9px;
+  color:#7fc9bf;
+  background:rgba(81,226,212,.05);
+  font-weight:900;
+}
+html.tefsen-v2 .profile-final-improve-list b,
+html.tefsen-v2 .profile-final-improve-list small{
+  display:block;
+}
+html.tefsen-v2 .profile-final-improve-list b{
+  color:#aebfbc;
+  font-size:.63rem;
+}
+html.tefsen-v2 .profile-final-improve-list small{
+  margin-top:3px;
+  color:#607875;
+  font-size:.53rem;
+  line-height:1.4;
+}
+html.tefsen-v2 .profile-final-complete-note{
+  margin-top:13px;
+  padding:10px 11px;
+  display:grid;
+  grid-template-columns:30px 1fr;
+  gap:9px;
+  border-radius:13px;
+  background:rgba(124,224,165,.025);
+}
+html.tefsen-v2 .profile-final-complete-note>span{
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  border-radius:9px;
+  color:#8fd7ad;
+  background:rgba(124,224,165,.06);
+}
+html.tefsen-v2 .profile-final-complete-note b{
+  color:#a7beb8;
+  font-size:.64rem;
+}
+html.tefsen-v2 .profile-final-complete-note p{
+  margin:2px 0 0!important;
+  color:#617b76!important;
+  font-size:.55rem!important;
+}
+
+/* Private Student Workspace */
+html.tefsen-v2 .profile-private-workspace{
+  position:relative;
+  overflow:hidden;
+  padding:24px;
+  border:1px solid rgba(104,149,187,.10);
+  border-radius:24px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(75,143,192,.055),transparent 20rem),
+    rgba(7,23,29,.63);
+}
+html.tefsen-v2 .profile-private-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:20px;
+}
+html.tefsen-v2 .profile-private-head h2{
+  max-width:720px;
+  margin:5px 0 4px;
+  color:#d5e2e0;
+  font-size:1.15rem;
+  line-height:1.25;
+  letter-spacing:-.02em;
+}
+html.tefsen-v2 .profile-private-head p{
+  max-width:760px;
+  margin:0!important;
+  color:#6d8582!important;
+  font-size:.62rem!important;
+  line-height:1.5!important;
+}
+html.tefsen-v2 .profile-private-lock{
+  flex:0 0 auto;
+  padding:7px 9px;
+  border:1px solid rgba(98,157,196,.10);
+  border-radius:999px;
+  color:#7d9eae;
+  background:rgba(68,123,160,.035);
+  font-size:.53rem;
+  font-weight:850;
+  letter-spacing:.07em;
+}
+html.tefsen-v2 .profile-private-goal{
+  margin-top:19px;
+  padding:14px 15px;
+  border-radius:14px;
+  background:rgba(255,255,255,.012);
+}
+html.tefsen-v2 .profile-private-goal h3{
+  margin:4px 0 0;
+  color:#b8cac7;
+  font-size:.79rem;
+  font-weight:720;
+}
+html.tefsen-v2 .profile-private-metrics{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+html.tefsen-v2 .profile-private-metrics button{
+  min-width:0;
+  min-height:88px;
+  padding:13px;
+  display:grid;
+  align-content:center;
+  border:1px solid rgba(177,222,217,.055);
+  border-radius:14px;
+  background:rgba(255,255,255,.012);
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+html.tefsen-v2 .profile-private-metrics button:hover{
+  border-color:rgba(111,172,205,.12);
+  background:rgba(75,137,177,.025);
+}
+html.tefsen-v2 .profile-private-metrics span,
+html.tefsen-v2 .profile-private-metrics strong,
+html.tefsen-v2 .profile-private-metrics small{
+  display:block;
+}
+html.tefsen-v2 .profile-private-metrics span{
+  color:#6f8b87;
+  font-size:.56rem;
+}
+html.tefsen-v2 .profile-private-metrics strong{
+  margin-top:3px;
+  color:#d5e5e2;
+  font-size:1.1rem;
+}
+html.tefsen-v2 .profile-private-metrics small{
+  margin-top:3px;
+  color:#5d7471;
+  font-size:.52rem;
+}
+html.tefsen-v2 .profile-private-actions{
+  margin-top:13px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+/* Activity */
+html.tefsen-v2 .profile-final-activity{
+  display:grid;
+  gap:15px;
+  padding-top:7px;
+}
+html.tefsen-v2 .profile-final-section-head{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:18px;
+  padding-top:14px;
+  border-top:1px solid rgba(177,222,217,.075);
+}
+html.tefsen-v2 .profile-final-section-head h2{
+  margin:4px 0 3px;
+  color:#d9e6e4;
+  font-size:1.05rem;
+}
+html.tefsen-v2 .profile-final-section-head p{
+  margin:0!important;
+  color:#68817e!important;
+  font-size:.61rem!important;
+}
+html.tefsen-v2 .profile-final-empty{
+  min-height:220px;
+  padding:28px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  text-align:center;
+  border:1px solid rgba(177,222,217,.055);
+  border-radius:22px;
+  background:
+    radial-gradient(circle at 50% 0,rgba(81,226,212,.035),transparent 15rem),
+    rgba(7,28,31,.34);
+}
+html.tefsen-v2 .profile-final-empty-icon{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  margin-bottom:10px;
+  border-radius:14px;
+  color:#779d98;
+  background:rgba(81,226,212,.04);
+}
+html.tefsen-v2 .profile-final-empty h3{
+  margin:0;
+  color:#b7c8c5;
+  font-size:.8rem;
+}
+html.tefsen-v2 .profile-final-empty p{
+  max-width:560px;
+  margin:5px auto 15px!important;
+  color:#657d7a!important;
+  font-size:.59rem!important;
+  line-height:1.5!important;
+}
+
+/* Final public-profile modal */
+html.tefsen-v2 .profile-final-modal{
+  width:min(100%,690px)!important;
+}
+html.tefsen-v2 .profile-final-modal .modal-head{
+  align-items:flex-start;
+}
+html.tefsen-v2 .profile-final-modal .modal-head h2{
+  margin:3px 0 0;
+}
+html.tefsen-v2 .profile-final-public-note{
+  margin-bottom:14px;
+  padding:11px 12px;
+  display:grid;
+  grid-template-columns:24px 1fr;
+  gap:9px;
+  border:1px solid rgba(177,222,217,.065);
+  border-radius:13px;
+  color:#718985;
+  background:rgba(81,226,212,.018);
+}
+html.tefsen-v2 .profile-final-public-note>svg{
+  margin-top:2px;
+}
+html.tefsen-v2 .profile-final-public-note b{
+  color:#9eb2af;
+  font-size:.62rem;
+}
+html.tefsen-v2 .profile-final-public-note p{
+  margin:2px 0 0!important;
+  color:#667e7b!important;
+  font-size:.55rem!important;
+  line-height:1.45!important;
+}
+html.tefsen-v2 .profile-final-photo-editor{
+  display:grid;
+  grid-template-columns:118px minmax(0,1fr);
+  gap:18px;
+  align-items:center;
+  padding:15px;
+  border:1px solid rgba(177,222,217,.07);
+  border-radius:18px;
+  background:rgba(255,255,255,.012);
+}
+html.tefsen-v2 .profile-final-photo-preview{
+  width:112px;
+  height:126px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(177,222,217,.10);
+  border-radius:19px;
+  background:#0a2528;
+}
+html.tefsen-v2 .profile-final-photo-preview .avatar.lg,
+html.tefsen-v2 .profile-final-selected-photo{
+  width:100%!important;
+  height:100%!important;
+  min-width:100%!important;
+  min-height:100%!important;
+  border:0!important;
+  border-radius:18px!important;
+  background:#0a2528!important;
+}
+html.tefsen-v2 .profile-final-photo-preview .avatar.lg img,
+html.tefsen-v2 .profile-final-selected-photo img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  border-radius:18px!important;
+}
+html.tefsen-v2 .profile-final-photo-editor-copy h3{
+  margin:4px 0 3px;
+  color:#c5d5d2;
+  font-size:.75rem;
+}
+html.tefsen-v2 .profile-final-photo-editor-copy p{
+  margin:0 0 11px!important;
+  color:#667f7b!important;
+  font-size:.57rem!important;
+  line-height:1.45!important;
+}
+html.tefsen-v2 .profile-final-photo-editor-actions{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap;
+}
+html.tefsen-v2 .profile-final-remove-photo{
+  color:#d4979e!important;
+}
+html.tefsen-v2 .profile-final-photo-status{
+  display:block;
+  margin-top:8px;
+  color:#5f7774;
+  font-size:.53rem;
+  line-height:1.42;
+}
+html.tefsen-v2 .profile-final-form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:11px 12px;
+}
+html.tefsen-v2 .profile-final-bio-field{
+  grid-column:1/-1;
+}
+html.tefsen-v2 .profile-final-bio-meta{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:5px;
+}
+html.tefsen-v2 .profile-final-bio-meta small{
+  color:#617875;
+  font-size:.52rem;
+  line-height:1.4;
+}
+html.tefsen-v2 .profile-final-validation-summary{
+  margin-top:0;
+}
+html.tefsen-v2 .profile-final-modal-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+html.tefsen-v2 .v4-remove-photo-preview .avatar.lg{
+  width:112px!important;
+  height:126px!important;
+  min-width:112px!important;
+  min-height:126px!important;
+  overflow:hidden;
+  border:1px solid rgba(177,222,217,.10)!important;
+  border-radius:19px!important;
+  background:#0a2528!important;
+}
+html.tefsen-v2 .v4-remove-photo-preview .avatar.lg img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  border-radius:18px!important;
+}
+
+html.tefsen-v2 .profile-final-page button:focus-visible,
+html.tefsen-v2 .profile-final-modal button:focus-visible{
+  outline:2px solid rgba(123,223,211,.68);
+  outline-offset:3px;
+}
+
+/* Responsive */
+@media(max-width:900px){
+  html.tefsen-v2 .profile-final-hero{
+    padding:26px 27px 0;
+  }
+  html.tefsen-v2 .profile-final-identity{
+    grid-template-columns:140px minmax(0,1fr);
+    gap:24px;
+  }
+  html.tefsen-v2 .profile-final-photo-control{
+    width:140px;
+  }
+  html.tefsen-v2 .profile-final-photo-button,
+  html.tefsen-v2 .profile-final-photo-media{
+    width:136px;
+    height:154px;
+  }
+  html.tefsen-v2 .profile-final-improve-list{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(max-width:680px){
+  html.tefsen-v2 .profile-final-page{
+    gap:15px;
+  }
+  html.tefsen-v2 .profile-final-hero{
+    padding:22px 20px 0;
+    border-radius:24px;
+  }
+  html.tefsen-v2 .profile-final-hero-top{
+    align-items:flex-start;
+    flex-direction:column;
+    margin-bottom:18px;
+  }
+  html.tefsen-v2 .profile-final-identity{
+    grid-template-columns:1fr;
+    gap:17px;
+    padding-bottom:22px;
+  }
+  html.tefsen-v2 .profile-final-photo-control{
+    width:auto;
+    justify-items:start;
+  }
+  html.tefsen-v2 .profile-final-photo-button,
+  html.tefsen-v2 .profile-final-photo-media{
+    width:118px;
+    height:132px;
+  }
+  html.tefsen-v2 .profile-final-photo-actions{
+    justify-content:flex-start;
+  }
+  html.tefsen-v2 .profile-final-name-line{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:8px;
+  }
+  html.tefsen-v2 .profile-final-name-line h1{
+    font-size:clamp(2.15rem,12vw,3.2rem);
+  }
+  html.tefsen-v2 .profile-final-bio{
+    margin-top:18px;
+  }
+  html.tefsen-v2 .profile-final-public-stats>div{
+    min-height:74px;
+    padding:14px 11px;
+  }
+  html.tefsen-v2 .profile-final-public-stats>div:first-child{
+    padding-left:0;
+  }
+  html.tefsen-v2 .profile-final-public-stats strong{
+    font-size:1.05rem;
+  }
+  html.tefsen-v2 .profile-final-completion,
+  html.tefsen-v2 .profile-private-workspace{
+    padding:17px;
+    border-radius:19px;
+  }
+  html.tefsen-v2 .profile-final-completion-head,
+  html.tefsen-v2 .profile-private-head,
+  html.tefsen-v2 .profile-final-section-head{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  html.tefsen-v2 .profile-private-lock{
+    align-self:flex-start;
+  }
+  html.tefsen-v2 .profile-private-metrics{
+    grid-template-columns:1fr;
+  }
+  html.tefsen-v2 .profile-private-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  html.tefsen-v2 .profile-private-actions .btn{
+    justify-content:center;
+  }
+  html.tefsen-v2 .profile-final-photo-editor{
+    grid-template-columns:1fr;
+    justify-items:start;
+  }
+  html.tefsen-v2 .profile-final-form-grid{
+    grid-template-columns:1fr;
+  }
+  html.tefsen-v2 .profile-final-bio-field{
+    grid-column:auto;
+  }
+}
+
+@media(max-width:440px){
+  html.tefsen-v2 .profile-final-hero{
+    padding-left:16px;
+    padding-right:16px;
+  }
+  html.tefsen-v2 .profile-final-public-stats{
+    grid-template-columns:1fr;
+  }
+  html.tefsen-v2 .profile-final-public-stats>div{
+    min-height:58px;
+    padding:10px 0!important;
+    border-left:0;
+    border-top:1px solid rgba(177,222,217,.055);
+  }
+  html.tefsen-v2 .profile-final-public-stats>div:first-child{
+    border-top:0;
+  }
+  html.tefsen-v2 .profile-final-bio-meta{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
