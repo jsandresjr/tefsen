@@ -54,7 +54,6 @@ let reactionState = { saved: new Set(), liked: new Set() };
 let currentComments = [];
 let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
-let currentProfileView = null;
 let currentStudentPassport = null;
 let passportOnboardingJustCompleted = false;
 let currentJourneyStates = new Map();
@@ -3495,7 +3494,6 @@ async function renderProfile(userId = '') {
     profile = profile || state.leaderboard.find(u => u.uid === userId) || { uid:userId, fullName:'Tefsen User', role:'Student' };
   }
 
-  currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
   const posts = state.posts.filter(p =>
     postBelongsToUser(p, profile?.uid || '') && isPublicProfileActivity(p)
