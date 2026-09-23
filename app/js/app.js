@@ -3489,10 +3489,12 @@ function notification21Item(n) {
 
 function notification21Section(title,eyebrow,rows,description='') {
   if(!rows?.length) return '';
+  const unreadCount=rows.filter(row=>!row.read).length;
+  const category=String(rows[0]?.category||'');
   return `<section class="notification21-section">
     <header class="notification21-section-head">
       <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2>${description?`<p>${escapeHTML(description)}</p>`:''}</div>
-      <span>${rows.filter(row=>!row.read).length} unread</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><span>${unreadCount} unread</span>${unreadCount&&category?`<button class="btn btn-ghost" type="button" data-notifications-mark-section="${escapeHTML(category)}">Mark section read</button>`:''}</div>
     </header>
     <div class="notification21-list">${rows.map(notification21Item).join('')}</div>
   </section>`;
@@ -4551,6 +4553,8 @@ async function handleClick(event) {
   const report = event.target.closest('[data-report]');
   if (report) { openReportModal(report.dataset.report); return; }
   if (event.target.closest('[data-notifications-mark-all]')) { await handleNotificationsMarkAll(event.target.closest('[data-notifications-mark-all]')); return; }
+  const markNotificationSection = event.target.closest('[data-notifications-mark-section]');
+  if (markNotificationSection) { await handleNotificationsMarkSection(markNotificationSection, markNotificationSection.dataset.notificationsMarkSection || ''); return; }
   const notification = event.target.closest('[data-notification]');
   if (notification) { await handleNotification(notification); return; }
   if (event.target.closest('[data-back]')) { history.length > 1 ? history.back() : go('home'); return; }
@@ -5442,6 +5446,19 @@ async function handleNotificationsMarkAll(button) {
     await markNotificationsRead(state.mode,state.user.uid,unread);
     for(const row of unread) row.read=true;
     setState({notifications:[...state.notifications],unreadCount:0});
+    await renderNotifications();
+  });
+}
+async function handleNotificationsMarkSection(button, category) {
+  const unread=state.notifications.filter(row=>!row.read && row.category===category);
+  if(!unread.length) return;
+  await withButton(button,async()=>{
+    await markNotificationsRead(state.mode,state.user.uid,unread);
+    for(const row of unread) row.read=true;
+    setState({
+      notifications:[...state.notifications],
+      unreadCount:state.notifications.filter(row=>!row.read).length
+    });
     await renderNotifications();
   });
 }
