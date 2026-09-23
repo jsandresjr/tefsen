@@ -140,8 +140,7 @@ export const STARTER_OPPORTUNITIES = Object.freeze([
     lastVerifiedAt: '2026-09-22',
     status: 'published',
     visibility: 'public'
-  }
-  ,
+  },
   {
     id: 'starter-knight-hennessy-2027',
     catalogSource: 'starter',
