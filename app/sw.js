@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v67-profile-photo-removal';
+const CACHE = 'tefsen-web-shell-v68-settings-permission-fix';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
