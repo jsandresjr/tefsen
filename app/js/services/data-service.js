@@ -820,19 +820,6 @@ export async function markNotificationRead(mode, userId, notification = {}) {
   return true;
 }
 
-export async function getConversations() {
-  return [];
-}
-
-export function subscribeMessages(mode, conversationId, callback) {
-  callback([]);
-  return () => {};
-}
-
-export async function sendMessage() {
-  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
-}
-
 export async function getLeaderboard(mode) {
   if (mode === 'demo') {
     return [...DEMO_USERS]
@@ -1042,6 +1029,3 @@ export async function toggleFollow() {
   throw new Error('Following is not enabled in the current Tefsen app data model.');
 }
 
-export async function startConversation() {
-  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
-}

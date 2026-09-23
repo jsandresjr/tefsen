@@ -466,4 +466,24 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now watches the notification service
 - service-worker cache bumped to V48 and notification service added to offline shell
 
-**Next: Step 22 — Private messaging decision: implement or remove**
+**Step 22: Private messaging decision — removed from Web on branch `tefsen-web-completion-22-remove-private-messaging`**
+- chose removal instead of pretending to implement private chat on top of empty Web service stubs
+- Web had no functioning conversation retrieval, message subscription, send-message path or start-conversation path
+- sidebar Messages navigation removed
+- top-bar Messages shortcut removed
+- visitor-profile Message action remains disabled/absent
+- login no longer requests empty conversation data
+- unused conversation/message state removed from the Web store
+- message form, conversation-list, chat rendering and message-send handlers removed
+- private messaging data-service stubs removed instead of leaving functions that return empty data or throw at runtime
+- old chat CSS and mobile chat CSS removed
+- old `#/messages` bookmarks resolve to a small compatibility page instead of a broken route
+- compatibility page directs students to public Community and Notifications and reminds them not to share sensitive application/identity/financial/visa/travel information publicly
+- shared schema names for legacy/Android conversation/message collections were intentionally left untouched to avoid breaking another client or historical data
+- no claim is made that private messaging data was deleted; Step 22 removes the unsupported Web feature surface only
+- implementing private messaging later would require a deliberate data model, recipient authorization, read/write security rules, abuse/report/block controls, retention/deletion behavior and real-device testing before enabling the UI
+- regression tests assert that no active Messages nav/button/form/conversation handlers or fake data-service APIs are reintroduced
+- public-profile capability test continues to require `message:false`
+- service-worker cache bumped to V49
+
+**Next: Step 23 — Follow/follower implementation or removal**
