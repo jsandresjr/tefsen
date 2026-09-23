@@ -313,24 +313,6 @@ img { max-width: 100%; }
 .notification-item small { color: var(--muted); }
 .notification-icon { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; flex: 0 0 auto; background: rgba(29, 188, 239, .1); color: #5fdcff; }
 
-/* messages */
-.messages-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); height: calc(100vh - var(--top) - 48px); min-height: 560px; overflow: hidden; }
-.conversation-list { border-right: 1px solid var(--line); overflow-y: auto; }
-.conversation-list-head { padding: 17px; border-bottom: 1px solid var(--line); }
-.conversation-item { display: flex; gap: 11px; padding: 13px 15px; cursor: pointer; border-bottom: 1px solid rgba(180, 210, 235, .06); }
-.conversation-item:hover, .conversation-item.active { background: rgba(23, 60, 91, .42); }
-.conversation-item div { min-width: 0; flex: 1; }
-.conversation-item b, .conversation-item small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conversation-item small { color: var(--muted); margin-top: 3px; }
-.chat-pane { display: flex; flex-direction: column; min-width: 0; }
-.chat-head { padding: 13px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
-.chat-messages { flex: 1; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; }
-.bubble { max-width: min(78%, 520px); padding: 10px 13px; border-radius: 16px 16px 16px 4px; background: #15334f; color: #dbe7f2; align-self: flex-start; }
-.bubble.mine { align-self: flex-end; border-radius: 16px 16px 4px 16px; background: linear-gradient(120deg, #117fd3, #17b4bf); color: white; }
-.bubble small { display: block; opacity: .65; font-size: 9px; margin-top: 4px; }
-.chat-form { padding: 13px; border-top: 1px solid var(--line); display: flex; gap: 9px; }
-.chat-form input { flex: 1; }
-
 /* leaderboard */
 .leaderboard-row { display: grid; grid-template-columns: 50px 1fr auto; gap: 12px; align-items: center; padding: 13px 17px; border-bottom: 1px solid var(--line); }
 .leaderboard-row:last-child { border-bottom: 0; }
@@ -1129,4 +1111,89 @@ html.profile-menu-open { overflow: hidden; }
 }
 @media (forced-colors: active) {
   .opportunity-chip, .story-type, .admin-status, .journey-stage-pill { border: 1px solid CanvasText; }
+}
+
+
+/* Completion step 22 — private messaging removed from Web */
+.messages22-retired{
+  width:min(100%,760px);
+  min-height:520px;
+  margin:0 auto;
+  padding:42px;
+  display:grid;
+  justify-items:start;
+  align-content:center;
+  border:1px solid rgba(177,222,217,.07);
+  border-radius:28px;
+  background:
+    radial-gradient(circle at 10% 0,rgba(81,226,212,.06),transparent 24rem),
+    linear-gradient(145deg,#082226,#07191d 76%);
+}
+.messages22-icon{
+  width:50px;
+  height:50px;
+  display:grid;
+  place-items:center;
+  margin-bottom:15px;
+  border-radius:15px;
+  color:#75958f;
+  background:rgba(81,226,212,.04);
+}
+.messages22-retired h1{
+  max-width:690px;
+  margin:7px 0 12px;
+  color:#edf8f6;
+  font-size:clamp(2.1rem,5vw,3.8rem);
+  line-height:.98;
+  letter-spacing:-.05em;
+}
+.messages22-retired>p{
+  max-width:680px;
+  margin:0;
+  color:#91a7a3;
+  line-height:1.7;
+}
+.messages22-actions{
+  display:flex;
+  gap:9px;
+  flex-wrap:wrap;
+  margin-top:20px;
+}
+.messages22-retired aside{
+  max-width:680px;
+  margin-top:25px;
+  padding:13px 14px;
+  border:1px solid rgba(177,222,217,.055);
+  border-radius:13px;
+  background:rgba(3,21,24,.34);
+}
+.messages22-retired aside b,
+.messages22-retired aside span{
+  display:block;
+}
+.messages22-retired aside b{
+  color:#9db2ae;
+  font-size:.62rem;
+}
+.messages22-retired aside span{
+  margin-top:4px;
+  color:#637b76;
+  font-size:.56rem;
+  line-height:1.5;
+}
+.messages22-retired code{
+  color:#7d9b95;
+}
+@media(max-width:620px){
+  .messages22-retired{
+    min-height:440px;
+    padding:28px 19px;
+    border-radius:22px;
+  }
+  .messages22-actions{
+    width:100%;
+  }
+  .messages22-actions .btn{
+    width:100%;
+  }
 }
