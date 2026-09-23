@@ -64,5 +64,5 @@ test('isolated Firebase README still warns against direct production overwrite',
 test('final handoff keeps App Check and rule deployment sequencing conservative',()=>{
   assert.match(handoff,/Never deploy the isolated/);
   assert.match(handoff,/Do not enable enforcement blindly/i);
-  assert.match(handoff,/real-domain authentication\/data\/device smoke testing/i);
+  assert.match(handoff,/real-domain authentication\/data\/device smoke tests/i);
 });
