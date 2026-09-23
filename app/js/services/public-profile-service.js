@@ -75,6 +75,8 @@ export function buildPublicProfileModel({
     ? 'Add a short public bio so students understand your interests or what you contribute.'
     : 'This student has not added a public bio yet.';
 
+  const capabilities=publicProfileCapabilities();
+
   return {
     own:Boolean(own),
     fullName,
@@ -91,6 +93,7 @@ export function buildPublicProfileModel({
       followers:Number(profile.followersCount || 0),
       following:Number(profile.followingCount || 0)
     },
+    capabilities,
     privateWorkspace:own ? {
       passportCompleteness:Math.max(0,Math.min(100,Number(passportCompleteness || 0))),
       activeJourneys:Math.max(0,Number(activeJourneys || 0)),
@@ -108,4 +111,41 @@ export function buildPublicProfileModel({
       privateFields:['Student Passport','saved opportunities','application Journeys','private planning notes']
     }
   };
+}
+
+
+export function projectPublicUser(raw={}, id='') {
+  const uid=String(raw.uid || raw.id || id || '');
+  const fullName=clean(raw.fullName || raw.displayName || 'Tefsen User',80) || 'Tefsen User';
+  const username=handle(raw.username || raw.handle || '');
+  const bio=String(raw.bio || raw.about || '').trim().slice(0,500);
+  const photoUrl=String(raw.photoUrl || raw.profileImageUrl || raw.photoURL || '').trim();
+  const role=String(raw.role || 'Student');
+  return {
+    id:uid,
+    uid,
+    fullName,
+    username,
+    bio,
+    photoUrl,
+    role,
+    verified:Boolean(raw.verified),
+    points:Math.max(0,Number(raw.points || 0)),
+    followersCount:Math.max(0,Number(raw.followersCount || 0)),
+    followingCount:Math.max(0,Number(raw.followingCount || 0))
+  };
+}
+
+export function isPublicProfileActivity(post={}) {
+  const status=String(post.status || 'published').toLowerCase();
+  const visibility=String(post.visibility || 'public').toLowerCase();
+  return status==='published' && visibility==='public';
+}
+
+export function publicProfileCapabilities() {
+  return Object.freeze({
+    follow:false,
+    message:false,
+    profileReporting:false
+  });
 }
