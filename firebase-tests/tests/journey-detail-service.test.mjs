@@ -129,3 +129,20 @@ test('detail guidance exposes a passed stored deadline before submission',()=>{
   assert.equal(model.priority.attention.key,'deadline_expired');
   assert.match(model.guidance.detail,/official provider source/i);
 });
+
+test('invalid calendar date is rejected instead of normalized',()=>{
+  const result=validateJourneyPlanningDraft({
+    status:'preparing',
+    personalTargetDate:'2026-02-31',
+    officialDeadline:'2026-10-20'
+  });
+  assert.equal(result.valid,false);
+  assert.match(result.errors[0].message,/valid personal preparation target date/i);
+});
+
+test('terminal outcome keeps checklist as record context',()=>{
+  const model=buildJourneyDetailModel(journey({status:'accepted'}),opportunity(),now);
+  assert.equal(model.terminal,true);
+  assert.equal(model.progress.total,3);
+  assert.equal(model.tasks.incomplete.length,2);
+});
