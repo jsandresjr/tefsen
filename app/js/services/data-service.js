@@ -188,19 +188,14 @@ function toBoolean(value) {
   return false;
 }
 
-function normalizeRoleValue(role, email = '') {
+function normalizeRoleValue(role) {
   const raw = String(role || '').trim();
   if (ALLOWED_ROLES.has(raw)) return raw;
   if (raw.toLowerCase() === 'admin') return 'ADMIN';
   if (raw.toLowerCase() === 'hs_student') return 'HS_STUDENT';
   if (raw.toLowerCase() === 'uni_student') return 'UNI_STUDENT';
   if (raw.toLowerCase() === 'mentor') return 'MENTOR';
-  if (String(email || '').trim().toLowerCase() === 'jsandresjr@gmail.com') return 'ADMIN';
   return 'student';
-}
-
-function isAdminRole(role = '') {
-  return String(role || '').trim().toLowerCase() === 'admin';
 }
 
 function resolveSubscription(raw = {}) {
@@ -229,9 +224,8 @@ function resolveSubscription(raw = {}) {
   };
 }
 
-export function getWebPostingPolicy(profile = {}) {
-  const admin = isAdminRole(profile?.role);
-  if (admin) {
+export function getWebPostingPolicy(profile = {}, { admin = false } = {}) {
+  if (admin === true) {
     return {
       subscribed: true,
       admin: true,
@@ -279,14 +273,13 @@ function isWebPostForToday(post, dayKey) {
 
 export function normalizeUser(raw = {}, id = '') {
   const subscription = resolveSubscription(raw);
-  const email = raw.email || '';
   return {
     ...raw,
     id: id || raw.id || raw.uid || '',
     uid: raw.uid || id || raw.id || '',
     fullName: pick(raw, FIELD_ALIASES.userName, 'Tefsen User'),
     photoUrl: pick(raw, FIELD_ALIASES.userPhoto, ''),
-    role: normalizeRoleValue(pick(raw, FIELD_ALIASES.userRole, 'student'), email),
+    role: normalizeRoleValue(pick(raw, FIELD_ALIASES.userRole, 'student')),
     verified: toBoolean(pick(raw, FIELD_ALIASES.userVerified, false)),
     subscriptionActive: subscription.active,
     subscriptionStatus: subscription.status,
@@ -458,7 +451,7 @@ export async function getProfile(mode, user) {
     fullName: user.displayName || 'Tefsen User',
     email: user.email || '',
     profileImageUrl: user.photoURL || '',
-    role: normalizeRoleValue('', user.email || '')
+    role: 'student'
   };
   const profile=normalizeUser(snap.exists() ? { ...fallback, ...snap.data() } : fallback, user.uid);
   await syncOwnPublicProfile(mode,user.uid,profile);
@@ -517,8 +510,8 @@ export async function getDailyPostUsage(mode, userId) {
   return { dayKey, imagePosts, textPosts: rows.length - imagePosts, totalPosts: rows.length };
 }
 
-export async function createPost(mode, user, profile, payload) {
-  const policy = getWebPostingPolicy(profile);
+export async function createPost(mode, user, profile, payload, { admin = false } = {}) {
+  const policy = getWebPostingPolicy(profile, { admin });
 
   if (String(payload?.postType || '') === 'success_story') {
     const draft = validateSuccessStoryDraft({
@@ -1190,10 +1183,9 @@ export async function updateUserProfile(mode, userId, data) {
 
   const userRef = doc(db, C.users, userId);
   const snap = await getDoc(userRef);
-  const current = snap.exists() ? snap.data() : {};
+  if (!snap.exists()) throw new Error('Account profile is unavailable. Sign out and sign in again to restore it.');
+  const current = snap.data();
   const currentAuthUser = auth?.currentUser;
-  const email = String(current.email || currentAuthUser?.email || '').trim();
-  const role = normalizeRoleValue(current.role, email);
   let profileImageUrl = pick(current, FIELD_ALIASES.userPhoto, currentAuthUser?.photoURL || '');
 
   const photoFile = data.profileImageFile instanceof File && data.profileImageFile.size
@@ -1213,22 +1205,14 @@ export async function updateUserProfile(mode, userId, data) {
   }
 
   const payload = {
-    uid: userId,
-    email,
     fullName,
     displayName: fullName,
     username,
     bio,
-    role,
     profileImageUrl,
     photoURL: profileImageUrl,
     updatedAt: serverTimestamp()
   };
-
-  if (!snap.exists()) {
-    payload.verified = false;
-    payload.createdAt = serverTimestamp();
-  }
 
   const batch=writeBatch(db);
   batch.set(userRef,payload,{ merge:true });

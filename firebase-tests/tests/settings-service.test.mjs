@@ -76,3 +76,26 @@ test('notification preferences suppress only the matching supported categories',
   assert.equal(model.counts.activity,0);
   assert.equal(model.unreadCount,1);
 });
+
+
+test('profile role alone cannot grant administrative plan state', () => {
+  const model = buildSettingsModel({
+    profile:{fullName:'Student',role:'ADMIN',subscriptionActive:false},
+    user:{email:'student@example.com'},
+    settings:{},
+    adminAuthorized:false
+  });
+  assert.equal(model.plan.admin,false);
+  assert.equal(model.plan.label,'Free Student');
+});
+
+test('trusted admin capability controls administrative plan state', () => {
+  const model = buildSettingsModel({
+    profile:{fullName:'Student',role:'student',subscriptionActive:false},
+    user:{email:'student@example.com'},
+    settings:{},
+    adminAuthorized:true
+  });
+  assert.equal(model.plan.admin,true);
+  assert.equal(model.plan.label,'Admin Full Access');
+});
