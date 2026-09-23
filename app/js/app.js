@@ -6,7 +6,7 @@ import {
   subscribeComments, addComment, getNotifications, getNotificationReadIds, markNotificationRead,
   getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
-  getFollowState, toggleFollow, hydratePostLikeState
+  hydratePostLikeState
 } from './services/data-service.js';
 import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
@@ -4348,8 +4348,6 @@ async function handleClick(event) {
     return;
   }
   if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
-  const followUser = event.target.closest('[data-follow-user]');
-  if (followUser) { await handleFollow(followUser); return; }
   const subject = event.target.closest('[data-subject]');
   if (subject) { state.searchQuery = subject.dataset.subject; go(`search/${encodeURIComponent(subject.dataset.subject)}`); return; }
 }
@@ -4463,36 +4461,6 @@ async function handleLike(postId) {
     });
   }
 }
-async function handleFollow(button) {
-  const targetUserId = button?.dataset?.followUser || currentProfileView?.uid || '';
-  if (!targetUserId || targetUserId === state.user.uid) return;
-  const previous = button.getAttribute('aria-pressed') === 'true';
-  button.disabled = true;
-  button.textContent = previous ? 'Follow' : 'Following';
-  button.classList.toggle('btn-primary', previous);
-  button.classList.toggle('btn-secondary', !previous);
-  button.classList.toggle('is-following', !previous);
-  button.setAttribute('aria-pressed', String(!previous));
-  try {
-    const active = await toggleFollow(state.mode, state.user.uid, targetUserId);
-    button.textContent = active ? 'Following' : 'Follow';
-    button.classList.toggle('btn-primary', !active);
-    button.classList.toggle('btn-secondary', active);
-    button.classList.toggle('is-following', active);
-    button.setAttribute('aria-pressed', String(active));
-    await renderProfile(targetUserId);
-  } catch (error) {
-    button.textContent = previous ? 'Following' : 'Follow';
-    button.classList.toggle('btn-primary', !previous);
-    button.classList.toggle('btn-secondary', previous);
-    button.classList.toggle('is-following', previous);
-    button.setAttribute('aria-pressed', String(previous));
-    toast(humanError(error), 'error');
-  } finally {
-    button.disabled = false;
-  }
-}
-
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
   catch(e){ toast(humanError(e),'error'); }
