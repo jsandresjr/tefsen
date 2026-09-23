@@ -14,14 +14,17 @@ import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibili
 import {
   listJourneyStates, getJourneyState, setOpportunitySaved, removeSavedOpportunity, startJourney,
   updateJourneyStage, updateJourneyPlanning, toggleJourneyTask,
-  addCustomJourneyTask, deleteCustomJourneyTask, journeyProgress,
-  allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
+  addCustomJourneyTask, deleteCustomJourneyTask,
+  updatePostAcceptancePlanning, togglePostAcceptanceTask, addPostAcceptanceTask, deletePostAcceptanceTask,
+  journeyProgress, allowedJourneyTransitions, JOURNEY_LABELS, JOURNEY_STATUSES
 } from './services/journey-service.js';
 import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
+import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
+import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
