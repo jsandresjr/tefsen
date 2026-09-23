@@ -76,3 +76,29 @@ test('provider identity fills empty legacy public profile fields safely',()=>{
   assert.equal(patch.fullName,'Provider Name');
   assert.equal(patch.profileImageUrl,'https://example.test/provider.jpg');
 });
+
+
+test('existing empty photo remains empty instead of restoring provider photo',()=>{
+  const patch=buildExistingAccountProfilePatch({
+    uid:'user-a',
+    displayName:'Provider Name',
+    photoURL:'https://example.test/provider.jpg'
+  },{
+    fullName:'Student Name',
+    profileImageUrl:'',
+    photoURL:''
+  },{updatedAt:3});
+  assert.equal(patch.profileImageUrl,'');
+  assert.equal(patch.photoURL,'');
+});
+
+test('legacy account without photo fields can adopt provider photo once',()=>{
+  const patch=buildExistingAccountProfilePatch({
+    uid:'user-a',
+    displayName:'Provider Name',
+    photoURL:'https://example.test/provider.jpg'
+  },{
+    fullName:'Student Name'
+  },{updatedAt:3});
+  assert.equal(patch.profileImageUrl,'https://example.test/provider.jpg');
+});
