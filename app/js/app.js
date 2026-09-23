@@ -23,7 +23,7 @@ import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
-import { buildPublicProfileModel, validatePublicProfileDraft } from './services/public-profile-service.js';
+import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
@@ -2707,18 +2707,9 @@ async function renderProfile(userId = '') {
 
   currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
-  const posts = state.posts.filter(p => postBelongsToUser(p, profile?.uid || ''));
-
-  let follow = {
-    following:false,
-    followersCount:Number(profile?.followersCount || 0),
-    followingCount:Number(profile?.followingCount || 0)
-  };
-  try {
-    follow = await getFollowState(state.mode, state.user.uid, profile?.uid || '');
-  } catch {
-    // Public profile remains usable even if social state is unavailable.
-  }
+  const posts = state.posts.filter(p =>
+    postBelongsToUser(p, profile?.uid || '') && isPublicProfileActivity(p)
+  );
 
   let passport = null;
   let journeys = [];
@@ -2736,7 +2727,7 @@ async function renderProfile(userId = '') {
   const savedOpportunities = own ? journeys.filter(row => row.saved).length : 0;
 
   const model = buildPublicProfileModel({
-    profile:{...profile,followersCount:follow.followersCount,followingCount:follow.followingCount},
+    profile,
     own,
     posts,
     passportCompleteness:completeness,
@@ -2749,9 +2740,8 @@ async function renderProfile(userId = '') {
     <button class="btn btn-secondary" type="button" data-route="passport">Student Passport</button>
   </div>`;
 
-  const otherActions = `<div class="profile13-actions">
-    <button class="btn ${follow.following ? 'btn-secondary is-following' : 'btn-primary'}" type="button" data-follow-user="${escapeHTML(profile?.uid || '')}" aria-pressed="${follow.following}">${follow.following ? 'Following' : 'Follow'}</button>
-    <button class="btn btn-secondary" type="button" data-message-user="${escapeHTML(profile?.uid || '')}">${icon('message',17)} Message</button>
+  const otherActions = `<div class="profile13-actions profile14-visitor-actions">
+    <button class="btn btn-primary" type="button" data-profile-activity-jump>${icon('comment',17)} View public activity</button>
   </div>`;
 
   const photo = own
@@ -2767,10 +2757,9 @@ async function renderProfile(userId = '') {
       </div>`
     : `<div class="profile13-photo-block public"><span class="profile13-avatar">${avatar(profile,'lg')}</span></div>`;
 
-  const publicStats = `<div class="profile13-public-stats">
-    <div><strong>${formatCount(model.publicStats.posts)}</strong><span>Posts</span></div>
-    <div><strong>${formatCount(model.publicStats.followers)}</strong><span>Followers</span></div>
-    <div><strong>${formatCount(model.publicStats.following)}</strong><span>Following</span></div>
+  const publicStats = `<div class="profile13-public-stats profile14-public-stats">
+    <div><strong>${formatCount(model.publicStats.posts)}</strong><span>Public posts</span></div>
+    <div><strong>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</strong><span>Community role</span></div>
   </div>`;
 
   const identityGuide = own ? `<section class="profile13-completion">
