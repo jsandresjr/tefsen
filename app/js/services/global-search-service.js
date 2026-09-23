@@ -171,6 +171,7 @@ function universityAndIntakeResults(posts,opportunities,query){
   for(const row of buildUniversityCommunities(posts,opportunities)){
     const universityScore=textScore(query,[
       [row.name,5],
+      [(row.intakes||[]).join(' '),3],
       [(row.countries||[]).join(' '),2]
     ]);
     if(universityScore){
