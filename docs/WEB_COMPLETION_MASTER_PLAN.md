@@ -390,4 +390,31 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now watches the success-story and data-service paths
 - service-worker cache bumped to V45
 
-**Next: Step 19 — Journey story publishing and reading experience**
+**Step 19: Journey story publishing and reading experience — complete on branch `tefsen-web-completion-19-journey-stories`**
+- dedicated Journey-story validation/reader service added
+- Journey-story form continues to start from explicit public fields and does not read private Journey checklists, notes, target dates, stage history or post-acceptance planning
+- subject, title, meaningful introduction and at least one public milestone are required
+- public milestone form supports up to four explicitly entered milestones
+- each milestone requires a stage name; optional notes require useful context
+- public timing is month-level only; exact private dates are intentionally not requested by the publisher
+- invalid milestone month values are rejected
+- obvious sensitive-identifier phrases reuse the public-story heuristic safety layer and block publication before write
+- Journey-story sensitive-text checks cover title, introduction, university/intake context and public milestone text
+- data-service validates Journey stories again before creating a post
+- publisher explains that nothing from the private Journey workspace is imported automatically
+- publisher explicitly warns against application IDs, passport/visa numbers, booking references, exact addresses, financial account/card numbers and private documents
+- Journey-story feed previews are compact and show only a short selected-milestone timeline
+- Journey-story posts now open a dedicated timeline reader instead of the generic discussion reader
+- reader separates author identity, subject/university/intake context, introduction, selected milestone timeline, trust/privacy guidance and replies
+- reader states that exact private dates are not requested in the public publisher
+- reader explicitly says private stages, checklists, target dates, notes and post-acceptance planning are not automatically shown
+- Journey stories are presented as personal context, not a recommended sequence or official admissions guidance
+- current admissions, scholarship, funding, deadline, visa, enrollment and arrival requirements are delegated to official university/provider sources
+- non-public Journey stories are blocked at the app reader layer for non-owners/non-admins; production network-level enforcement remains Step 35
+- reader links to matching subject, university and intake community spaces when public context exists
+- deterministic Journey-story regression tests added, including a check that private Journey-like properties do not enter the reader model
+- desktop/tablet/mobile publisher and timeline reader redesign added
+- CI now watches the Journey-story service
+- service-worker cache bumped to V46
+
+**Next: Step 20 — Global search**
