@@ -78,9 +78,9 @@ export function authProviderLabel(user = {}) {
   return user.email ? 'Tefsen account' : 'Account provider unavailable';
 }
 
-export function buildSettingsModel({ profile = {}, user = {}, settings = {} } = {}) {
+export function buildSettingsModel({ profile = {}, user = {}, settings = {}, adminAuthorized = false } = {}) {
   const normalized = normalizeUserSettings(settings);
-  const admin = String(profile.role || '').trim().toLowerCase() === 'admin';
+  const admin = adminAuthorized === true;
   const subscribed = Boolean(profile.subscriptionActive) && !admin;
   return {
     settings: normalized,
