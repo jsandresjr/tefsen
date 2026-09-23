@@ -527,4 +527,45 @@ A future Follow feature would require an explicit follower relationship collecti
 - service-worker cache bumped to V51 and Saved Community service added to offline shell
 - responsive desktop/tablet/mobile Saved Community workspace added
 
-**Next: Step 25 — Settings, account and subscription experience**
+## Completion closeout — Steps 25–40
+
+After Step 24, the remaining roadmap was deliberately reprioritized around the highest-risk production gaps rather than preserving the original draft order.
+
+Completed merged milestones:
+
+- **Step 25** — Settings, account and subscription experience — PR #67
+- **Step 26** — Notification center hardening — PR #69
+- **Step 27** — Reports and moderation center — PR #70
+- **Step 28** — Retire untrusted leaderboard — PR #71
+- **Step 29** — Public search integrity — PR #72
+- **Step 30** — Separate public profiles from private accounts — PR #73
+- **Step 31** — Secure Community interactions — PR #74
+- **Step 32** — Secure Storage and App Check readiness — PR #75
+- **Step 33** — Canonicalize the public Web surface — PR #76
+- **Step 34** — Fix auth account bootstrap integrity — PR #77
+- **Step 35** — Harden PWA and document security — PR #78
+- **Step 36** — Unify entitlement and admin authority — PR #79
+- **Step 37** — Align account deletion and privacy requests — PR #80
+- **Step 38** — Accessibility and dialog integrity — PR #81
+- **Step 39** — Public route and release integrity — PR #82
+- **Step 40** — Final release audit and handoff — final completion PR
+
+The original draft sequence remains above as historical planning context. The actual completion history is the merged PR sequence listed here.
+
+### Final source status
+
+After Step 40 is reviewed, CI is green, and the PR is merged:
+
+- the 40-step Web source-completion program is complete
+- known fake/dead Web feature surfaces have been implemented or removed
+- the isolated Web Firestore/Storage security contract is automated
+- release routing/PWA/privacy/accessibility regressions are automated
+- remaining actions are external production deployment/verification tasks, not unfinished placeholder Web code
+
+See:
+
+- `docs/WEB_FINAL_RELEASE_HANDOFF.md`
+- `docs/WEB_V1_LAUNCH_CHECKLIST.md`
+- `docs/WEB_V1_ENGINEERING_AUDIT.md`
+
+for the final release boundary and external Firebase/device checks.
