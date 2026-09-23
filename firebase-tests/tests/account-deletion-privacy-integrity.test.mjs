@@ -60,7 +60,7 @@ test('privacy request helper never asks users to send authentication secrets',()
   assert.match(privacyService,/support@tefsen\.com/);
 });
 
-test('PWA shell caches privacy request helper under V63',()=>{
-  assert.match(sw,/tefsen-web-shell-v63-account-privacy/);
+test('PWA shell keeps privacy request helper cached after later version bumps',()=>{
+  assert.match(sw,/tefsen-web-shell-v\d+/);
   assert.match(sw,/privacy-request-service\.js/);
 });
