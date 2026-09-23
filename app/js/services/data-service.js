@@ -1029,6 +1029,3 @@ export async function toggleFollow() {
   throw new Error('Following is not enabled in the current Tefsen app data model.');
 }
 
-export async function startConversation() {
-  throw new Error('Private messages are not enabled in the current Tefsen app data model.');
-}
