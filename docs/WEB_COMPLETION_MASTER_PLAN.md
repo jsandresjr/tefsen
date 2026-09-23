@@ -327,4 +327,22 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now runs when Community service or Community CSS changes
 - service-worker cache bumped to V42
 
-**Next: Step 16 — Subject communities**
+**Step 16: Subject communities — complete on branch `tefsen-web-completion-16-subject-communities`**
+- subject pages rebuilt as focused public learning spaces instead of one mixed feed with a small opportunity sidebar
+- subject-community model applies public-only filtering before counts, ranking or grouping
+- hidden/private posts and unrelated subjects are excluded from subject pages
+- ordinary discussions are separated from success and Journey stories
+- zero-reply subject discussions receive a dedicated “Needs a response” area
+- subject discussion ordering uses public replies, saves and likes and explicitly states it is not a quality or accuracy score
+- subject hero clearly explains the space is for questions, explanations, study methods, useful learning context and voluntary student experiences
+- public-posting safety copy reminds students not to publish application IDs, identity documents, addresses or private Journey details
+- linked opportunities are separated into discovery cards with destination, study level, intake and funding context when available
+- linked opportunity copy explicitly says official provider sources remain authoritative for eligibility, funding, deadlines and application requirements
+- unique linked universities, destinations and funding types are derived without assuming any default country
+- subject pages connect to university spaces without attempting the deeper university/intake redesign reserved for Step 17
+- student outcomes are presented as experiences, not evidence that the same result or requirements apply to another student
+- deterministic subject-community regression tests added
+- desktop/tablet/mobile subject-community redesign added
+- service-worker cache bumped to V43
+
+**Next: Step 17 — University and intake communities**
