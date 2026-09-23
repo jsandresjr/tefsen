@@ -163,6 +163,8 @@ test('Private user account document is readable only by its owner or admin', asy
 
 test('Owner account creation cannot seed privileged or subscription fields', async () => {
   const owner=env.authenticatedContext('user-c').firestore();
+  const adminAttempt=env.authenticatedContext('user-d').firestore();
+  const subscriptionAttempt=env.authenticatedContext('user-e').firestore();
   const valid={
     uid:'user-c',
     email:'user-c@example.test',
@@ -179,8 +181,18 @@ test('Owner account creation cannot seed privileged or subscription fields', asy
   };
   await assertSucceeds(setDoc(doc(owner,'users','user-c'),valid));
   await assertFails(setDoc(doc(owner,'users','user-d'),{...valid,uid:'user-d'}));
-  await assertFails(setDoc(doc(owner,'users','user-c-2'),{...valid,uid:'user-c-2',role:'ADMIN'}));
-  await assertFails(setDoc(doc(owner,'users','user-c-3'),{...valid,uid:'user-c-3',subscriptionActive:true}));
+  await assertFails(setDoc(doc(adminAttempt,'users','user-d'),{
+    ...valid,
+    uid:'user-d',
+    email:'user-d@example.test',
+    role:'ADMIN'
+  }));
+  await assertFails(setDoc(doc(subscriptionAttempt,'users','user-e'),{
+    ...valid,
+    uid:'user-e',
+    email:'user-e@example.test',
+    subscriptionActive:true
+  }));
 });
 
 test('Public profile exposes only the dedicated safe public record', async () => {
