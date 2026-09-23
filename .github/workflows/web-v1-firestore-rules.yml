@@ -8,12 +8,17 @@ on:
       - 'docs/WEB_SURFACE_OWNERSHIP.md'
       - 'docs/PWA_DOCUMENT_SECURITY.md'
       - 'docs/ENTITLEMENT_ADMIN_AUTHORITY.md'
+      - 'docs/ACCOUNT_DELETION_PRIVACY_REQUESTS.md'
       - 'app.js'
       - 'script.js'
       - 'style.css'
       - 'js/main.js'
       - 'services/**'
       - 'tefsen-web-signup-like-fix/**'
+      - 'delete-account.html'
+      - 'delete-account/**'
+      - 'privacy-policy/**'
+      - 'app/js/services/privacy-request-service.js'
       - 'app/index.html'
       - 'app/sw.js'
       - '.github/workflows/web-v1-firestore-rules.yml'
@@ -105,6 +110,7 @@ jobs:
           node --check ../app/js/services/app-check-readiness-service.js
           node --check ../app/js/services/auth-service.js
           node --check ../app/js/services/account-bootstrap-service.js
+          node --check ../app/js/services/privacy-request-service.js
           node --check ../app/js/store.js
           node --check ../app/sw.js
 
