@@ -45,6 +45,75 @@ Public profile writes must not allow a student to publish privileged fields such
 
 Active users can be migrated safely by mirroring only the allowed public identity fields when they sign in or save their public profile. Do not backfill by exposing the full private user document to browsers.
 
+## Community interaction security
+
+Tefsen Web uses authenticated subcollections for Community interactions rather than letting browsers rewrite public aggregate counters.
+
+### Posts
+
+An ordinary signed-in student may create a public Web post only as themselves.
+
+The Web security contract should require:
+
+- `authorId`, `firebaseUid`, and `userId` all equal `request.auth.uid`
+- public author name/photo match the student's `public_profiles/{uid}` record
+- new posts start as `published + public`
+- source is explicitly Web
+- all public counters start at zero
+- clients cannot include role/admin, verification, billing, or subscription claims
+- clients cannot later update like/comment/answer/save counters
+- post owners may delete their own post
+- moderation-field updates remain trusted-admin only
+
+### Likes
+
+Likes are stored at:
+
+`posts/{postId}/likes/{uid}`
+
+The liking identity is private account interaction data.
+
+Required behavior:
+
+- only `uid == request.auth.uid` may create/delete that like document
+- the parent post must currently be public/published
+- the like payload must bind uid/userId/postId to the authenticated user/path
+- an ordinary client may read only its own like document
+- clients must not list the full likes collection to discover who liked a post
+- Web must not regenerate public aggregate like counters from browser-side collection scans
+
+If a public aggregate like count is needed, maintain it from trusted backend/server logic.
+
+### Answers
+
+Answers are stored at:
+
+`posts/{postId}/answers/{answerId}`
+
+Required behavior:
+
+- the parent post must be public/published
+- answer author identity IDs must equal `request.auth.uid`
+- displayed public author name/photo must match `public_profiles/{uid}`
+- answer content aliases must represent the same submitted content
+- new answers start as `published + public`
+- clients cannot claim role/verified/admin metadata
+- ordinary clients cannot edit counters
+- answer owners may delete their own answer
+
+### Legacy compatibility script
+
+The former `app/js/latest-rules-sync.js` browser compatibility layer has been removed.
+
+It previously attempted to:
+
+- recompute like counts in the browser and update parent posts
+- recompute answer counts in the browser and update parent posts
+- hydrate obsolete follow/follower UI
+- rewrite answer profile-photo metadata client-side
+
+Those behaviors conflict with least-privilege rules and should not be restored. Counter denormalization and cross-document maintenance belong in trusted backend code when needed.
+
 ## Required Student Passport rule
 
 Student Passport data is stored separately from the public user profile:

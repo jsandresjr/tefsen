@@ -2,13 +2,17 @@
 
 This directory is intentionally **not** the production Firebase deployment configuration.
 
-It tests only the new Tefsen Web V1 security contract:
+It tests the isolated Tefsen Web security contract, including:
 
-- owner-only Student Passport
-- owner-only application Journey
+- private owner account and public-profile separation
+- owner-only Student Passport, settings, saved content and application Journey
+- public Community post creation/deletion ownership
+- private self-owned likes
+- self-authored public answers
+- private notification/read-state boundaries
+- report/moderation ownership and immutable audits
 - published/public opportunity reads
-- admin-claim-only opportunity writes
-- admin-only immutable opportunity audit records
+- admin-claim-only opportunity writes and audit records
 
 The catch-all rule denies all legacy collections because this isolated file must never be deployed over Tefsen's real production rules.
 

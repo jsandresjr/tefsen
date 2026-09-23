@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v57-public-profile-privacy';
+const CACHE = 'tefsen-web-shell-v58-community-interactions';
 const SHELL = [
   './', './index.html',
   './css/app.css', './css/premium.css', './css/premium-v2.css', './css/social-cleanup.css', './css/opportunities.css', './css/student-passport.css', './css/journey.css', './css/communities.css', './css/admin.css', './css/v2.css', './css/v3-polish.css', './css/v4-profile.css', './css/home-dashboard.css', './css/v25-settings.css', './css/v27-moderation.css', './css/v28-recognition.css', './css/v29-search-integrity.css',

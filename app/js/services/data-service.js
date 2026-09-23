@@ -10,8 +10,7 @@ import { normalizeUserSettings, readSettingsCache, writeSettingsCache } from './
 import { mergeNotificationReadIds, notificationReadStatePayload, mergeActivityNotificationRecords } from './notification-state-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, writeBatch,
-  onSnapshot, query, where, limit, serverTimestamp, documentId,
-  getCountFromServer
+  onSnapshot, query, where, limit, serverTimestamp, documentId
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
@@ -609,8 +608,7 @@ export async function createPost(mode, user, profile, payload) {
       authorName: profile?.fullName || user.displayName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
       authorRole: profile?.role || 'student',
-      authorVerified: Boolean(profile?.verified),
-      title: payload.title,
+        title: payload.title,
       content: payload.content,
       subject: payload.subject || 'General',
       tags: payload.tags || [],
@@ -641,7 +639,6 @@ export async function createPost(mode, user, profile, payload) {
     imageUrls.push(await getDownloadURL(upload.ref));
   }
 
-  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const base = {
     title: payload.title,
     questionTitle: payload.title,
@@ -659,17 +656,11 @@ export async function createPost(mode, user, profile, payload) {
     userId: user.uid,
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: role,
-    role,
-    authorVerified: Boolean(profile?.verified),
-    verified: Boolean(profile?.verified),
     type: 'question',
     status: 'published',
     visibility: 'public',
     sourcePlatform: 'web',
     webPost: true,
-    webPlan: policy.admin ? 'admin' : (policy.subscribed ? 'subscribed' : 'free'),
-    quotaDay: usage.dayKey,
     likeCount: 0,
     commentCount: 0,
     answerCount: 0,
@@ -779,18 +770,8 @@ export async function hydratePostLikeState(mode, userId, postIds = []) {
 
   await Promise.allSettled(ids.map(async postId => {
     const likeRef = doc(db, C.posts, postId, S.likes, userId);
-    const likesRef = collection(db, C.posts, postId, S.likes);
-    const [mine, aggregate] = await Promise.allSettled([
-      getDoc(likeRef),
-      getCountFromServer(likesRef)
-    ]);
-
-    if (mine.status === 'fulfilled') {
-      mine.value.exists() ? liked.add(postId) : liked.delete(postId);
-    }
-    if (aggregate.status === 'fulfilled') {
-      counts.set(postId, Math.max(0, Number(aggregate.value.data().count || 0)));
-    }
+    const mine = await getDoc(likeRef);
+    mine.exists() ? liked.add(postId) : liked.delete(postId);
   }));
 
   writeLikedCache(userId, liked);
@@ -905,7 +886,6 @@ export async function addComment(mode, user, profile, postId, text) {
       authorName: profile?.fullName || 'Tefsen User',
       authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
       authorRole: profile?.role || 'student',
-      authorVerified: Boolean(profile?.verified),
       content: cleanText,
       text: cleanText,
       status: 'published',
@@ -919,7 +899,6 @@ export async function addComment(mode, user, profile, postId, text) {
 
   const canonicalPostId = String(postId);
   const answerRef = doc(collection(db, C.posts, canonicalPostId, S.answers || 'answers'));
-  const role = normalizeRoleValue(profile?.role || 'student', user.email || '');
   const nowMillis = Date.now();
   const item = {
     id: answerRef.id,
@@ -933,10 +912,6 @@ export async function addComment(mode, user, profile, postId, text) {
     authorName: profile?.fullName || user.displayName || 'Tefsen User',
     authorPhotoUrl: profile?.photoUrl || user.photoURL || '',
     profileImageUrl: profile?.photoUrl || user.photoURL || '',
-    authorRole: role,
-    role,
-    authorVerified: Boolean(profile?.verified),
-    verified: Boolean(profile?.verified),
     content: cleanText,
     text: cleanText,
     answer: cleanText,

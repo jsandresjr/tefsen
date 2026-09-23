@@ -241,7 +241,136 @@ service cloud.firestore {
           && resource.data.visibility == "public";
       }
 
+      function parentPostIsPublic() {
+        return get(/databases/$(database)/documents/posts/$(postId)).data.status == "published"
+          && get(/databases/$(database)/documents/posts/$(postId)).data.visibility == "public";
+      }
+
+      function publicProfileExists(uid) {
+        return exists(/databases/$(database)/documents/public_profiles/$(uid));
+      }
+
+      function validWebPostCreate() {
+        return signedIn()
+          && publicProfileExists(request.auth.uid)
+          && request.resource.data.keys().hasAll([
+            "title",
+            "questionTitle",
+            "content",
+            "description",
+            "subject",
+            "tags",
+            "postType",
+            "successData",
+            "publicMilestones",
+            "communityUniversity",
+            "communityIntake",
+            "communitySubject",
+            "imageUrl",
+            "imageUrls",
+            "imageCount",
+            "totalImageBytes",
+            "authorId",
+            "firebaseUid",
+            "userId",
+            "authorName",
+            "authorPhotoUrl",
+            "type",
+            "status",
+            "visibility",
+            "sourcePlatform",
+            "webPost",
+            "likeCount",
+            "commentCount",
+            "answerCount",
+            "saveCount",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "title",
+            "questionTitle",
+            "content",
+            "description",
+            "subject",
+            "tags",
+            "postType",
+            "successData",
+            "publicMilestones",
+            "communityUniversity",
+            "communityIntake",
+            "communitySubject",
+            "imageUrl",
+            "imageUrls",
+            "imageCount",
+            "totalImageBytes",
+            "authorId",
+            "firebaseUid",
+            "userId",
+            "authorName",
+            "authorPhotoUrl",
+            "type",
+            "status",
+            "visibility",
+            "sourcePlatform",
+            "webPost",
+            "likeCount",
+            "commentCount",
+            "answerCount",
+            "saveCount",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.firebaseUid == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.authorName
+            == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.fullName
+          && request.resource.data.authorPhotoUrl
+            == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+          && request.resource.data.questionTitle == request.resource.data.title
+          && request.resource.data.description == request.resource.data.content
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 240
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 10000
+          && request.resource.data.subject is string
+          && request.resource.data.subject.size() <= 120
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 12
+          && request.resource.data.postType in ["discussion", "success_story", "journey_story"]
+          && request.resource.data.successData is map
+          && request.resource.data.successData.keys().hasOnly([
+            "university",
+            "opportunityName",
+            "country",
+            "subject",
+            "studyLevel",
+            "intake",
+            "fundingType"
+          ])
+          && request.resource.data.publicMilestones is list
+          && request.resource.data.publicMilestones.size() <= 8
+          && request.resource.data.imageUrls is list
+          && request.resource.data.imageUrls.size() <= 2
+          && request.resource.data.imageCount == request.resource.data.imageUrls.size()
+          && request.resource.data.totalImageBytes >= 0
+          && request.resource.data.totalImageBytes <= 6291456
+          && request.resource.data.type == "question"
+          && request.resource.data.status == "published"
+          && request.resource.data.visibility == "public"
+          && request.resource.data.sourcePlatform == "web"
+          && request.resource.data.webPost == true
+          && request.resource.data.likeCount == 0
+          && request.resource.data.commentCount == 0
+          && request.resource.data.answerCount == 0
+          && request.resource.data.saveCount == 0;
+      }
+
       allow read: if isAdmin() || publicPost();
+      allow create: if validWebPostCreate();
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "status",
@@ -251,7 +380,129 @@ service cloud.firestore {
           "moderatedByAdminUid",
           "updatedAt"
         ]);
-      allow create, delete: if false;
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.authorId == request.auth.uid);
+
+      match /likes/{uid} {
+        function validLikeCreate() {
+          return isOwner(uid)
+            && parentPostIsPublic()
+            && request.resource.data.keys().hasAll([
+              "uid",
+              "userId",
+              "postId",
+              "createdAt"
+            ])
+            && request.resource.data.keys().hasOnly([
+              "uid",
+              "userId",
+              "postId",
+              "createdAt"
+            ])
+            && request.resource.data.uid == uid
+            && request.resource.data.userId == uid
+            && request.resource.data.postId == postId;
+        }
+
+        allow read: if isAdmin() || isOwner(uid);
+        allow create: if validLikeCreate();
+        allow update: if false;
+        allow delete: if isAdmin() || isOwner(uid);
+      }
+
+      match /answers/{answerId} {
+        function publicAnswer() {
+          return resource.data.status == "published"
+            && resource.data.visibility == "public";
+        }
+
+        function validWebAnswerCreate() {
+          return signedIn()
+            && parentPostIsPublic()
+            && publicProfileExists(request.auth.uid)
+            && request.resource.data.keys().hasAll([
+              "id",
+              "postId",
+              "questionId",
+              "parentPostId",
+              "authorId",
+              "firebaseUid",
+              "userId",
+              "uid",
+              "authorName",
+              "authorPhotoUrl",
+              "profileImageUrl",
+              "content",
+              "text",
+              "answer",
+              "reply",
+              "type",
+              "status",
+              "visibility",
+              "sourcePlatform",
+              "likeCount",
+              "createdAtMillis",
+              "createdAt",
+              "updatedAt"
+            ])
+            && request.resource.data.keys().hasOnly([
+              "id",
+              "postId",
+              "questionId",
+              "parentPostId",
+              "authorId",
+              "firebaseUid",
+              "userId",
+              "uid",
+              "authorName",
+              "authorPhotoUrl",
+              "profileImageUrl",
+              "content",
+              "text",
+              "answer",
+              "reply",
+              "type",
+              "status",
+              "visibility",
+              "sourcePlatform",
+              "likeCount",
+              "createdAtMillis",
+              "createdAt",
+              "updatedAt"
+            ])
+            && request.resource.data.id == answerId
+            && request.resource.data.postId == postId
+            && request.resource.data.questionId == postId
+            && request.resource.data.parentPostId == postId
+            && request.resource.data.authorId == request.auth.uid
+            && request.resource.data.firebaseUid == request.auth.uid
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.authorName
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.fullName
+            && request.resource.data.authorPhotoUrl
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+            && request.resource.data.profileImageUrl
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+            && request.resource.data.content == request.resource.data.text
+            && request.resource.data.content == request.resource.data.answer
+            && request.resource.data.content == request.resource.data.reply
+            && request.resource.data.content is string
+            && request.resource.data.content.size() > 0
+            && request.resource.data.content.size() <= 5000
+            && request.resource.data.type == "answer"
+            && request.resource.data.status == "published"
+            && request.resource.data.visibility == "public"
+            && request.resource.data.sourcePlatform == "web"
+            && request.resource.data.likeCount == 0;
+        }
+
+        allow read: if isAdmin() || publicAnswer();
+        allow create: if validWebAnswerCreate();
+        allow update: if false;
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.authorId == request.auth.uid);
+      }
     }
 
     match /reports/{reportId} {

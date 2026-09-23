@@ -233,6 +233,122 @@ test('Public profile exposes only the dedicated safe public record', async () =>
   await assertFails(deleteDoc(doc(owner,'public_profiles','user-a')));
 });
 
+test('Students can create only self-authored public Web posts with zero client counters', async () => {
+  const owner=env.authenticatedContext('user-a').firestore();
+  const other=env.authenticatedContext('user-b').firestore();
+  const valid={
+    title:'Need scholarship advice',
+    questionTitle:'Need scholarship advice',
+    content:'How should I prepare my documents?',
+    description:'How should I prepare my documents?',
+    subject:'General',
+    tags:[],
+    postType:'discussion',
+    successData:{},
+    publicMilestones:[],
+    communityUniversity:'',
+    communityIntake:'',
+    communitySubject:'General',
+    imageUrl:'',
+    imageUrls:[],
+    imageCount:0,
+    totalImageBytes:0,
+    authorId:'user-a',
+    firebaseUid:'user-a',
+    userId:'user-a',
+    authorName:'Amina Rahman',
+    authorPhotoUrl:'',
+    type:'question',
+    status:'published',
+    visibility:'public',
+    sourcePlatform:'web',
+    webPost:true,
+    likeCount:0,
+    commentCount:0,
+    answerCount:0,
+    saveCount:0,
+    createdAt:123,
+    updatedAt:123
+  };
+
+  await assertSucceeds(setDoc(doc(owner,'posts','user-a-post'),valid));
+  await assertFails(setDoc(doc(other,'posts','forged-post'),{...valid}));
+  await assertFails(setDoc(doc(owner,'posts','spoofed-author'),{...valid,authorName:'Someone Else'}));
+  await assertFails(setDoc(doc(owner,'posts','spoofed-role'),{...valid,authorRole:'ADMIN'}));
+  await assertFails(setDoc(doc(owner,'posts','spoofed-verification'),{...valid,verified:true}));
+  await assertFails(setDoc(doc(owner,'posts','spoofed-plan'),{...valid,webPlan:'subscribed'}));
+  await assertFails(setDoc(doc(owner,'posts','spoofed-counter'),{...valid,likeCount:99}));
+  await assertFails(updateDoc(doc(owner,'posts','user-a-post'),{likeCount:500}));
+  await assertSucceeds(deleteDoc(doc(owner,'posts','user-a-post')));
+});
+
+test('Post likes are private to the liking account and cannot rewrite parent counters', async () => {
+  const owner=env.authenticatedContext('user-a').firestore();
+  const other=env.authenticatedContext('user-b').firestore();
+  const anon=env.unauthenticatedContext().firestore();
+  const likeRef=doc(owner,'posts','public-post','likes','user-a');
+  const valid={uid:'user-a',userId:'user-a',postId:'public-post',createdAt:123};
+
+  await assertSucceeds(setDoc(likeRef,valid));
+  await assertSucceeds(getDoc(likeRef));
+  await assertFails(getDoc(doc(other,'posts','public-post','likes','user-a')));
+  await assertFails(getDoc(doc(anon,'posts','public-post','likes','user-a')));
+  await assertFails(getDocs(collection(owner,'posts','public-post','likes')));
+  await assertFails(setDoc(doc(other,'posts','public-post','likes','user-a'),valid));
+  await assertFails(setDoc(doc(owner,'posts','public-post','likes','user-a-2'),{...valid,uid:'user-a-2',userId:'user-a-2'}));
+  await assertFails(updateDoc(likeRef,{postId:'private-post'}));
+  await assertFails(updateDoc(doc(owner,'posts','public-post'),{likeCount:999}));
+  await assertSucceeds(deleteDoc(likeRef));
+});
+
+test('Public answers require authenticated self-authorship and cannot claim trust metadata', async () => {
+  const owner=env.authenticatedContext('user-a').firestore();
+  const other=env.authenticatedContext('user-b').firestore();
+  const anon=env.unauthenticatedContext().firestore();
+  const answerRef=doc(owner,'posts','public-post','answers','answer-a');
+  const valid={
+    id:'answer-a',
+    postId:'public-post',
+    questionId:'public-post',
+    parentPostId:'public-post',
+    authorId:'user-a',
+    firebaseUid:'user-a',
+    userId:'user-a',
+    uid:'user-a',
+    authorName:'Amina Rahman',
+    authorPhotoUrl:'',
+    profileImageUrl:'',
+    content:'Prepare the official documents early.',
+    text:'Prepare the official documents early.',
+    answer:'Prepare the official documents early.',
+    reply:'Prepare the official documents early.',
+    type:'answer',
+    status:'published',
+    visibility:'public',
+    sourcePlatform:'web',
+    likeCount:0,
+    createdAtMillis:123,
+    createdAt:123,
+    updatedAt:123
+  };
+
+  await assertSucceeds(setDoc(answerRef,valid));
+  await assertSucceeds(getDoc(doc(anon,'posts','public-post','answers','answer-a')));
+  await assertFails(setDoc(doc(other,'posts','public-post','answers','answer-b'),{...valid,id:'answer-b'}));
+  await assertFails(setDoc(doc(owner,'posts','public-post','answers','answer-c'),{...valid,id:'answer-c',authorName:'Impersonated'}));
+  await assertFails(setDoc(doc(owner,'posts','public-post','answers','answer-d'),{...valid,id:'answer-d',authorVerified:true}));
+  await assertFails(setDoc(doc(owner,'posts','public-post','answers','answer-e'),{...valid,id:'answer-e',likeCount:7}));
+  await assertFails(setDoc(doc(owner,'posts','private-post','answers','answer-f'),{
+    ...valid,
+    id:'answer-f',
+    postId:'private-post',
+    questionId:'private-post',
+    parentPostId:'private-post'
+  }));
+  await assertFails(updateDoc(answerRef,{content:'edited'}));
+  await assertSucceeds(deleteDoc(answerRef));
+});
+
 test('Student Passport is owner-only', async () => {
   const owner = env.authenticatedContext('user-a').firestore();
   const other = env.authenticatedContext('user-b').firestore();
