@@ -2480,7 +2480,7 @@ async function renderJourneyDetail(opportunityId) {
         </div>
         <button class="btn btn-primary" type="submit">Update stage</button>
       </form>`
-      : `<div class="journey-final-stage-note">${icon('info',16)}<span>This Journey is in a final outcome stage. Its history remains private and available for reference.</span></div>`}
+      : `${journey.status === "accepted" ? `<div class="journey-final-stage-note accepted">${icon("check",16)}<span>The application outcome is final. The application record stays read-only while the separate post-acceptance plan remains editable.</span></div>` : `<div class="journey-final-stage-note">${icon("info",16)}<span>This Journey is in a final outcome stage. Its history remains private and available for reference.</span></div>`}`}
     </section>`;
 
     const content = `${demoBanner()}
@@ -2503,8 +2503,8 @@ async function renderJourneyDetail(opportunityId) {
           </div>
           <aside class="journey-detail-summary">
             <div><span>Stage</span><strong>${escapeHTML(JOURNEY_LABELS[journey.status] || journey.status)}</strong></div>
-            <div><span>Checklist</span><strong>${model.progress.completed}/${model.progress.total}</strong><small>${model.progress.percent}% complete</small></div>
-            <div><span>Next task</span><strong>${nextTask ? escapeHTML(nextTask.label) : model.terminal ? 'Outcome recorded' : 'No open task'}</strong></div>
+            <div><span>${postAcceptance?.active ? "Next-stage plan" : "Checklist"}</span><strong>${postAcceptance?.active ? `${postAcceptance.progress.completed}/${postAcceptance.progress.total}` : `${model.progress.completed}/${model.progress.total}`}</strong><small>${postAcceptance?.active ? `${postAcceptance.progress.percent}% complete` : `${model.progress.percent}% complete`}</small></div>
+            <div><span>Next task</span><strong>${postAcceptance?.active ? (postAcceptance.tasks.next ? escapeHTML(postAcceptance.tasks.next.label) : "Review official next steps") : (nextTask ? escapeHTML(nextTask.label) : model.terminal ? "Outcome recorded" : "No open task")}</strong></div>
           </aside>
         </section>
 
