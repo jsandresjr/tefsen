@@ -29,7 +29,7 @@ test('post deletion cleans deterministic slots without listing user folders',()=
 });
 
 test('Storage rules enforce owner paths image MIME size limits and deny-all fallback',()=>{
-  assert.match(rules,/match \/profile_images\/\{uid\}\.jpg/);
+  assert.match(rules,/match \/profile_images\/\{fileName\}/);
   assert.match(rules,/5 \* 1024 \* 1024/);
   assert.match(rules,/match \/post_images\/\{uid\}\/\{postId\}\/\{slot\}/);
   assert.match(rules,/slot == "1" \|\| slot == "2"/);
