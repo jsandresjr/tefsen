@@ -3092,34 +3092,49 @@ function openDeletePostModal(postId) {
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:440px" role="dialog" aria-modal="true"><header class="modal-head"><h2>Delete post?</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><p style="margin:0 0 18px;color:var(--muted);line-height:1.6">This will permanently remove your post. This action cannot be undone.</p><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-danger" type="button" data-confirm-delete-post="${escapeHTML(postId)}">Delete post</button></div></div></section></div>`;
 }
 
-function openEditProfile() {
+function openEditProfile(focusField = '') {
   const p = state.profile || {};
   const hasPhoto = Boolean(safeUrl(p.photoUrl || p.profileImageUrl || p.photoURL || ''));
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
-    <section class="modal v4-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
-      <header class="modal-head"><h2 id="edit-profile-title">Edit profile</h2><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
-      <div class="modal-body">
-        <form class="form-grid" data-profile-form data-profile-modal>
-          <section class="v4-photo-editor">
-            <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
-            <div class="v4-photo-editor-copy">
-              <b>Profile photo</b>
-              <p>Use a clear photo that represents you. JPG, PNG or WebP, up to 5 MB.</p>
-              <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
-              <div class="v4-photo-editor-actions">
-                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Change photo' : 'Add photo'}</button>
-                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove photo</button>' : ''}
-              </div>
-            </div>
-          </section>
-          <div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div>
-          <div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div>
-          <div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div>
-          <div class="v4-profile-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div>
-        </form>
-      </div>
-    </section>
-  </div>`;
+  modalRoot.innerHTML =
+    '<div class="modal-backdrop" data-modal-backdrop>' +
+      '<section class="modal profile-final-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">' +
+        '<header class="modal-head"><div><span class="profile-final-modal-kicker">PUBLIC IDENTITY</span><h2 id="edit-profile-title">Edit public profile</h2></div><button class="close-btn" data-close-modal aria-label="Close">' + icon('close',19) + '</button></header>' +
+        '<div class="modal-body">' +
+          '<div class="profile-final-public-note">' + icon('info',16) + '<div><b>These fields are public.</b><p>Your Student Passport, saved opportunities, application Journeys and private planning are not edited or published here.</p></div></div>' +
+          '<form class="form-grid" data-profile-form data-profile-modal>' +
+            '<section class="profile-final-photo-editor">' +
+              '<div class="profile-final-photo-preview" data-profile-photo-preview>' + avatar(p,'lg') + '</div>' +
+              '<div class="profile-final-photo-editor-copy">' +
+                '<span>PROFILE PHOTO</span><h3>' + (hasPhoto ? 'Change or remove your photo' : 'Add a profile photo') + '</h3>' +
+                '<p>JPG, PNG or WebP up to 5 MB. The photo appears on your public profile and community content.</p>' +
+                '<input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>' +
+                '<div class="profile-final-photo-editor-actions">' +
+                  '<button class="btn btn-secondary" type="button" data-profile-photo-choose>' + (hasPhoto ? 'Choose new photo' : 'Choose photo') + '</button>' +
+                  '<button class="btn btn-ghost" type="button" data-profile-photo-clear-selection hidden>Cancel selected photo</button>' +
+                  (hasPhoto ? '<button class="btn btn-ghost profile-final-remove-photo" type="button" data-profile-photo-remove>Remove current photo</button>' : '') +
+                '</div>' +
+                '<small class="profile-final-photo-status" data-profile-photo-status>' + (hasPhoto ? 'Current photo will stay until you save a new one or remove it.' : 'Initials are shown until you save a photo.') + '</small>' +
+              '</div>' +
+            '</section>' +
+            '<div class="profile-final-form-grid">' +
+              '<div class="field"><label>Full name <small>Public</small></label><input class="input" name="fullName" value="' + escapeHTML(p.fullName || '') + '" required maxlength="80"><span class="field-error" data-profile-field-error="fullName" hidden></span></div>' +
+              '<div class="field"><label>Username <small>Public · optional</small></label><input class="input" name="username" value="' + escapeHTML(p.username || '') + '" maxlength="40" autocomplete="off" placeholder="your.username"><small>Letters, numbers, dots, underscores and hyphens only.</small><span class="field-error" data-profile-field-error="username" hidden></span></div>' +
+              '<div class="field profile-final-bio-field"><label>Bio <small>Public · optional</small></label><textarea class="textarea" name="bio" maxlength="500" placeholder="Study interests, subjects, goals or context you choose to share publicly.">' + escapeHTML(p.bio || '') + '</textarea><div class="profile-final-bio-meta"><small>Do not add private application IDs, addresses, financial details or document numbers.</small><small><span data-profile-bio-count>' + String(p.bio || '').length + '</span>/500</small></div><span class="field-error" data-profile-field-error="bio" hidden></span></div>' +
+            '</div>' +
+            '<div class="journey-planning-summary profile-final-validation-summary" data-profile-validation-summary hidden></div>' +
+            '<div class="profile-final-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save public profile</button></div>' +
+          '</form>' +
+        '</div>' +
+      '</section>' +
+    '</div>';
+
+  const targetSelector = {
+    photo:'[data-profile-photo-choose]',
+    username:'[name="username"]',
+    bio:'[name="bio"]',
+    fullName:'[name="fullName"]'
+  }[focusField] || '';
+  if (targetSelector) requestAnimationFrame(() => modalRoot.querySelector(targetSelector)?.focus());
 }
 
 function openRemoveProfilePhotoModal() {
@@ -3306,7 +3321,8 @@ async function handleClick(event) {
   if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
   const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
   if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
-  if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
+  const editProfile = event.target.closest('[data-edit-profile]');
+  if (editProfile) { openEditProfile(editProfile.dataset.profileFocus || ''); return; }
   const followUser = event.target.closest('[data-follow-user]');
   if (followUser) { await handleFollow(followUser); return; }
   const messageUser = event.target.closest('[data-message-user]');
