@@ -15,6 +15,8 @@ on:
       - 'app/js/services/journey-priority-service.js'
       - 'app/js/services/journey-detail-service.js'
       - 'app/js/services/post-acceptance-service.js'
+      - 'app/js/services/public-profile-service.js'
+      - 'app/css/v4-profile.css'
       - 'app/js/post-acceptance-view.js'
   workflow_dispatch:
 
