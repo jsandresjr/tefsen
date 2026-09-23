@@ -47,6 +47,8 @@ on:
       - 'app/js/config/schema.js'
       - 'app/css/v25-settings.css'
       - 'app/js/app.js'
+      - 'app/js/services/auth-service.js'
+      - 'app/js/services/account-bootstrap-service.js'
       - 'app/js/services/app-check-readiness-service.js'
       - 'app/js/config/firebase-config.example.js'
       - 'app/js/config/firebase-config.js'
@@ -99,6 +101,8 @@ jobs:
           node --check ../app/js/services/global-search-service.js
           node --check ../app/js/services/opportunity-service.js
           node --check ../app/js/services/app-check-readiness-service.js
+          node --check ../app/js/services/auth-service.js
+          node --check ../app/js/services/account-bootstrap-service.js
           node --check ../app/js/store.js
           node --check ../app/sw.js
 
