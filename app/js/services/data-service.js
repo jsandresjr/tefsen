@@ -2,7 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
-import { validatePublicProfileDraft } from './public-profile-service.js';
+import { projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, deleteDoc,
   onSnapshot, query, where, limit, serverTimestamp,
@@ -291,13 +291,15 @@ export async function getUserById(mode, userId) {
 
   if (mode === 'demo') {
     const user = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
-    const normalized = user ? normalizeUser(user, userId) : null;
+    const normalized = user ? projectPublicUser(normalizeUser(user, userId), userId) : null;
     if (normalized) userProfileCache.set(key, normalized);
     return normalized;
   }
 
   const snap = await getDoc(doc(db, C.users, userId));
-  const normalized = snap.exists() ? normalizeUser(snap.data(), snap.id) : null;
+  const normalized = snap.exists()
+    ? projectPublicUser(normalizeUser(snap.data(), snap.id), snap.id)
+    : null;
   if (normalized) userProfileCache.set(key, normalized);
   return normalized;
 }
@@ -684,12 +686,12 @@ export async function getLeaderboard(mode) {
   if (mode === 'demo') {
     return [...DEMO_USERS]
       .sort((a, b) => Number(b.points || 0) - Number(a.points || 0))
-      .map(row => normalizeUser(row, row.uid || row.id));
+      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id));
   }
 
   const snap = await getDocs(query(collection(db, C.users), limit(60)));
   return snap.docs
-    .map(row => normalizeUser(row.data(), row.id))
+    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
     .sort((a, b) => b.points - a.points)
     .slice(0, 30);
 }
@@ -700,7 +702,7 @@ export async function searchAll(mode, term) {
 
   if (mode === 'demo') {
     const users = DEMO_USERS
-      .map(row => normalizeUser(row, row.uid || row.id))
+      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id))
       .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText));
     const posts = demoPosts
       .map(post => normalizePost(post, post.id))
@@ -719,7 +721,7 @@ export async function searchAll(mode, term) {
   ]);
 
   const users = usersSnap.docs
-    .map(row => normalizeUser(row.data(), row.id))
+    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
     .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText))
     .slice(0, 20);
 
