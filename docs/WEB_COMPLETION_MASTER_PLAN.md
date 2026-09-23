@@ -286,6 +286,7 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - temporary browser photo-preview URLs are cleaned up on save, cancel, backdrop dismiss and Escape
 - profile-photo file type and 5 MB limit remain enforced in UI and persistence service
 - photo removal returns the public profile to initials and updates the user’s community-post author photo state locally
+- an explicitly removed stored photo now stays removed on later text-only profile saves instead of restoring an Auth-provider photo
 - edit modal clearly labels public fields and reminds students that Student Passport / Journey data is not published there
 - public bio includes privacy guidance for application IDs, addresses, financial details and document numbers
 - public profile layout is responsive across desktop, tablet and mobile
