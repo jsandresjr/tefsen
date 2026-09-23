@@ -4,12 +4,21 @@ on:
   pull_request:
     paths:
       - 'firebase-tests/**'
+      - 'js/home.js'
+      - 'CNAME'
+      - 'sitemap.xml'
+      - 'robots.txt'
+      - 'founder.html'
+      - 'privacy.html'
+      - 'terms.html'
+      - 'index.html'
       - 'README.md'
       - 'docs/WEB_SURFACE_OWNERSHIP.md'
       - 'docs/PWA_DOCUMENT_SECURITY.md'
       - 'docs/ENTITLEMENT_ADMIN_AUTHORITY.md'
       - 'docs/ACCOUNT_DELETION_PRIVACY_REQUESTS.md'
       - 'docs/ACCESSIBILITY_KEYBOARD.md'
+      - 'docs/PUBLIC_RELEASE_INTEGRITY.md'
       - 'app.js'
       - 'script.js'
       - 'style.css'
@@ -99,6 +108,7 @@ jobs:
       - name: Validate Web JavaScript syntax
         run: |
           node --check ../app/js/app.js
+          node --check ../js/home.js
           node --check ../app/js/services/data-service.js
           node --check ../app/js/services/notification-service.js
           node --check ../app/js/services/notification-state-service.js

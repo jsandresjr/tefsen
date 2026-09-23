@@ -37,10 +37,10 @@ See:
 
 Keep these paths available when deploying:
 
-- `/privacy.html`
-- `/privacy-policy/`
-- `/delete-account.html`
-- `/delete-account/`
+- `/privacy-policy/` (canonical)
+- `/privacy.html` (legacy redirect only)
+- `/delete-account/` (canonical)
+- `/delete-account.html` (legacy redirect only)
 - `/founder.html`
 - `/app/`
 - `/CNAME`
