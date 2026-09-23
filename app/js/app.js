@@ -552,7 +552,7 @@ function renderRightbar() {
       <div class="widget-link"><span class="notification-icon">${icon('check',17)}</span><div><b>${successCount} success stor${successCount===1?'y':'ies'}</b><small>Shared voluntarily by students</small></div></div>
       <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="explore"><span class="notification-icon">${icon('compass',17)}</span><div><b>Open Community</b><small>Subjects, universities and intakes</small></div></button>
     </section>
-    <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
+    <div class="footer-mini"><a href="../privacy-policy/">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
 }
 
 function scorePost(p) { return Number(p.trendingScore || 0) || Number(p.likeCount || 0) * 2 + Number(p.commentCount || 0) * 3; }
