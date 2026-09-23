@@ -291,4 +291,21 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - CI now runs when profile service or final profile CSS changes
 - service-worker cache bumped to V40 and includes the public-profile model
 
-**Next: Step 14 — Other-student public profile and privacy review**
+**Step 14: Other-student public profile and privacy review — complete on branch `tefsen-web-completion-14-public-profile-privacy`**
+- non-owner profile reads now pass through an explicit public-user whitelist instead of retaining the raw user document in the web profile object
+- public projection includes only uid, public name, username, bio, photo, role, verification marker, public points and aggregate public counters
+- email, subscription metadata, Student Passport, saved opportunities, Journey data and private notes are not included in the visitor profile object
+- people search and leaderboard user results now use the same public projection
+- post/answer author enrichment now receives only the projected public-user shape
+- other-student profiles no longer show Follow or Message controls while those features are intentionally unimplemented
+- visitor action now moves directly to that student’s public activity instead of triggering a guaranteed error
+- follower/following counts are no longer presented as usable social features on the public profile surface
+- profile activity is defensively limited to published + public records
+- legacy demo posts remain visible for preview compatibility when status/visibility flags are absent
+- visitor privacy notice explicitly lists what is public and what is not part of the public profile
+- public/private projection, capabilities and activity-filter regression tests added
+- production network-level field isolation for legacy `users/{uid}` reads is not falsely claimed here; the production Firestore rules/data-model review is explicitly part of Step 35
+- responsive visitor-profile privacy polish added
+- service-worker cache bumped to V41
+
+**Next: Step 15 — Community home redesign and usefulness**

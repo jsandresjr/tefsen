@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   buildPublicProfileModel,
+  isPublicProfileActivity,
+  projectPublicUser,
+  publicProfileCapabilities,
   validatePublicProfileDraft
 } from '../../app/js/services/public-profile-service.js';
 
@@ -120,4 +123,53 @@ test('bio maximum is enforced',()=>{
   });
   assert.equal(result.valid,false);
   assert.equal(result.errors.some(item=>item.field==='bio'),true);
+});
+
+
+test('public projection removes private account fields from visitor objects',()=>{
+  const projected=projectPublicUser({
+    uid:'student-1',
+    fullName:'Alex Student',
+    username:'alex',
+    bio:'Public bio',
+    profileImageUrl:'https://example.org/photo.jpg',
+    role:'UNI_STUDENT',
+    verified:true,
+    points:42,
+    email:'private@example.org',
+    subscriptionActive:true,
+    subscriptionPlan:'paid',
+    studentPassport:{nationality:'Private'},
+    savedOpportunities:['private'],
+    journeys:['private'],
+    privateNotes:'never expose'
+  });
+
+  assert.equal(projected.uid,'student-1');
+  assert.equal(projected.fullName,'Alex Student');
+  assert.equal(projected.verified,true);
+  assert.equal('email' in projected,false);
+  assert.equal('subscriptionActive' in projected,false);
+  assert.equal('subscriptionPlan' in projected,false);
+  assert.equal('studentPassport' in projected,false);
+  assert.equal('savedOpportunities' in projected,false);
+  assert.equal('journeys' in projected,false);
+  assert.equal('privateNotes' in projected,false);
+});
+
+test('visitor capabilities do not advertise unimplemented follow or messaging',()=>{
+  const capabilities=publicProfileCapabilities();
+  assert.equal(capabilities.follow,false);
+  assert.equal(capabilities.message,false);
+  assert.equal(capabilities.profileReporting,false);
+});
+
+test('public profile activity rejects hidden or private records',()=>{
+  assert.equal(isPublicProfileActivity({status:'published',visibility:'public'}),true);
+  assert.equal(isPublicProfileActivity({status:'hidden',visibility:'public'}),false);
+  assert.equal(isPublicProfileActivity({status:'published',visibility:'private'}),false);
+});
+
+test('legacy demo activity without explicit flags remains visible',()=>{
+  assert.equal(isPublicProfileActivity({title:'Demo discussion'}),true);
 });
