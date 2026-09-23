@@ -2,7 +2,7 @@ import { auth, db, storage } from '../firebase-client.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
-import { projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
+import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft } from './public-profile-service.js';
 import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
 import {
@@ -762,7 +762,8 @@ export async function searchAll(mode, term) {
       .filter(user => `${user.fullName} ${user.username} ${user.bio}`.toLowerCase().includes(qText));
     const posts = demoPosts
       .map(post => normalizePost(post, post.id))
-      .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText));
+      .filter(isPublicProfileActivity)
+      .filter(post => `${post.title} ${post.content} ${post.subject} ${post.communitySubject || ''} ${post.communityUniversity || ''} ${post.communityIntake || ''} ${post.successData?.opportunityName || ''} ${post.successData?.university || ''} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText));
     return { users: users.slice(0, 20), posts: posts.slice(0, 30) };
   }
 
@@ -783,7 +784,8 @@ export async function searchAll(mode, term) {
 
   const posts = postsSnap.docs
     .map(row => normalizePost(row.data(), row.id))
-    .filter(post => `${post.title} ${post.content} ${post.subject} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText))
+    .filter(isPublicProfileActivity)
+    .filter(post => `${post.title} ${post.content} ${post.subject} ${post.communitySubject || ''} ${post.communityUniversity || ''} ${post.communityIntake || ''} ${post.successData?.opportunityName || ''} ${post.successData?.university || ''} ${(post.tags || []).join(' ')}`.toLowerCase().includes(qText))
     .slice(0, 30);
 
   return { users, posts: await enrichPostAuthors(mode, posts) };
