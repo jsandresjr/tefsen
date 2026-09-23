@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v64-accessibility-dialogs';
+const CACHE = 'tefsen-web-shell-v65-public-release-integrity';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
