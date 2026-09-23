@@ -6,8 +6,9 @@ import { isPublicProfileActivity, projectPublicUser, validatePublicProfileDraft 
 import { validateSuccessStoryDraft } from './success-story-service.js';
 import { validateJourneyStoryDraft } from './journey-story-service.js';
 import { normalizeUserSettings, readSettingsCache, writeSettingsCache } from './settings-service.js';
+import { mergeNotificationReadIds, notificationReadStatePayload, mergeActivityNotificationRecords } from './notification-state-service.js';
 import {
-  collection, doc, setDoc, getDoc, getDocs, deleteDoc,
+  collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc,
   onSnapshot, query, where, limit, serverTimestamp, documentId,
   getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
@@ -929,26 +930,68 @@ function notificationReadKey(userId) {
   return `tefsen_notification_reads_${String(userId || 'guest')}`;
 }
 
+function writeNotificationReadIds(userId, values) {
+  const ids = mergeNotificationReadIds(values);
+  if (!userId) return ids;
+  try {
+    localStorage.setItem(notificationReadKey(userId), JSON.stringify([...ids]));
+  } catch {
+    // localStorage may be unavailable in private contexts.
+  }
+  return ids;
+}
+
 export function getNotificationReadIds(userId) {
   try {
-    return new Set(JSON.parse(localStorage.getItem(notificationReadKey(userId)) || '[]'));
+    return mergeNotificationReadIds(JSON.parse(localStorage.getItem(notificationReadKey(userId)) || '[]'));
   } catch {
     return new Set();
   }
 }
 
-function rememberNotificationRead(userId, notificationId) {
-  if (!userId || !notificationId) return;
-  const ids = getNotificationReadIds(userId);
-  ids.add(String(notificationId));
+function notificationReadStateDocument(userId) {
+  return doc(db, C.users, String(userId), 'notificationState', 'read');
+}
+
+export async function getSyncedNotificationReadIds(mode, userId) {
+  const local = getNotificationReadIds(userId);
+  if (!userId || mode === 'demo') return local;
+
   try {
-    localStorage.setItem(notificationReadKey(userId), JSON.stringify([...ids].slice(-600)));
+    const snap = await getDoc(notificationReadStateDocument(userId));
+    const remote = snap.exists() && Array.isArray(snap.data()?.readIds)
+      ? snap.data().readIds
+      : [];
+    return writeNotificationReadIds(userId, mergeNotificationReadIds(local, remote));
   } catch {
-    // localStorage may be unavailable in private contexts.
+    return local;
   }
 }
 
+async function persistNotificationReadState(mode, userId, values) {
+  const ids = writeNotificationReadIds(userId, values);
+  if (!userId || mode === 'demo') return ids;
+
+  try {
+    const payload = notificationReadStatePayload(userId, ids);
+    await setDoc(notificationReadStateDocument(userId), {
+      ...payload,
+      updatedAt:serverTimestamp()
+    }, { merge:true });
+  } catch {
+    // Local per-user read state remains authoritative until the private
+    // notification-state rules are deployed.
+  }
+  return ids;
+}
+
 function normalizeNotificationRecord(raw = {}, id = '') {
+  const createdAt = raw.createdAt || raw.timestamp || raw.updatedAt || null;
+  const createdAtMillis = Number(
+    raw.createdAtMillis ||
+    timestampToDate(createdAt)?.getTime() ||
+    0
+  );
   return {
     ...raw,
     id:String(id || raw.id || ''),
@@ -959,73 +1002,80 @@ function normalizeNotificationRecord(raw = {}, id = '') {
     opportunityId:String(raw.opportunityId || ''),
     actorId:String(raw.actorId || raw.fromUserId || raw.senderId || ''),
     read:Boolean(raw.read || raw.isRead),
-    createdAt:raw.createdAt || raw.timestamp || raw.updatedAt || null,
+    createdAt,
+    createdAtMillis,
+    sortTime:createdAtMillis,
     source:'activity'
   };
 }
 
 async function notificationQueryByField(userId, fieldName) {
-  const snap = await getDocs(query(
-    collection(db, C.notifications),
-    where(fieldName, '==', String(userId)),
-    limit(80)
-  ));
-  return snap.docs.map(row => normalizeNotificationRecord(row.data(), row.id));
-}
-
-export async function getNotifications(mode, userId) {
-  if (!userId || mode === 'demo') return [];
-
-  // The Android/web schema historically used userId. Some older records may
-  // use recipientId, so try that only when the canonical query is empty.
   try {
-    const canonical = await notificationQueryByField(userId, 'userId');
-    if (canonical.length) return canonical.sort((a,b) =>
-      (timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0) -
-      (timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0)
-    );
-  } catch {
-    // Fall through to the compatibility field. Callers still get [] if both
-    // shapes are unavailable or blocked by current rules.
-  }
-
-  try {
-    const legacy = await notificationQueryByField(userId, 'recipientId');
-    return legacy.sort((a,b) =>
-      (timestampToDate(b.createdAt)?.getTime() || Number(b.createdAtMillis || 0) || 0) -
-      (timestampToDate(a.createdAt)?.getTime() || Number(a.createdAtMillis || 0) || 0)
-    );
+    const snap = await getDocs(query(
+      collection(db, C.notifications),
+      where(fieldName, '==', String(userId)),
+      limit(80)
+    ));
+    return snap.docs.map(row => normalizeNotificationRecord(row.data(), row.id));
   } catch {
     return [];
   }
 }
 
-export async function markNotificationRead(mode, userId, notification = {}) {
+export async function getNotifications(mode, userId) {
+  if (!userId || mode === 'demo') return [];
+
+  // Production history can contain both canonical userId records and older
+  // recipientId records for the same account. Query both shapes, then merge
+  // and deduplicate by notification document ID.
+  const [canonical, legacy] = await Promise.all([
+    notificationQueryByField(userId, 'userId'),
+    notificationQueryByField(userId, 'recipientId')
+  ]);
+  return mergeActivityNotificationRecords(canonical, legacy);
+}
+
+async function markActivityNotificationRead(notification = {}) {
   const id = String(notification?.id || '');
-  if (!userId || !id) return false;
-
-  rememberNotificationRead(userId, id);
-
-  if (notification?.source !== 'activity' || mode === 'demo') return true;
-
   const serverId = id.startsWith('activity:') ? id.slice('activity:'.length) : id;
-  if (!serverId) return true;
+  if (!serverId) return;
 
   try {
-    const ref = doc(db, C.notifications, serverId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return true;
-    await setDoc(ref, {
+    await updateDoc(doc(db, C.notifications, serverId), {
       read:true,
       isRead:true,
       readAt:serverTimestamp(),
       updatedAt:serverTimestamp()
-    }, { merge:true });
+    });
   } catch {
-    // Local read state still prevents the notification from repeatedly
-    // appearing unread when legacy Firestore rules do not allow updates.
+    // Private account read-state still records the acknowledgement when a
+    // legacy notification document is immutable under current production rules.
+  }
+}
+
+export async function markNotificationsRead(mode, userId, notifications = []) {
+  if (!userId) return false;
+  const rows = (Array.isArray(notifications) ? notifications : [])
+    .filter(row => row?.id);
+  if (!rows.length) return true;
+
+  const ids = mergeNotificationReadIds(
+    getNotificationReadIds(userId),
+    rows.map(row => String(row.id))
+  );
+  await persistNotificationReadState(mode, userId, ids);
+
+  if (mode !== 'demo') {
+    await Promise.all(rows
+      .filter(row => row?.source === 'activity')
+      .map(row => markActivityNotificationRead(row)));
   }
   return true;
+}
+
+export async function markNotificationRead(mode, userId, notification = {}) {
+  if (!notification?.id) return false;
+  return markNotificationsRead(mode, userId, [notification]);
 }
 
 export async function getLeaderboard(mode) {
