@@ -75,6 +75,29 @@ beforeEach(async () => {
       isRead:false,
       createdAtMillis:100
     });
+    await setDoc(doc(db, 'posts', 'public-post'), {
+      title:'Public Community post',
+      content:'Public content for moderation testing',
+      authorId:'author-a',
+      status:'published',
+      visibility:'public'
+    });
+    await setDoc(doc(db, 'posts', 'private-post'), {
+      title:'Private post',
+      content:'Not reportable through public Community',
+      authorId:'author-b',
+      status:'hidden',
+      visibility:'private'
+    });
+    await setDoc(doc(db, 'support_requests', 'legacy-report'), {
+      type:'post_report',
+      status:'open',
+      requesterId:'user-a',
+      userId:'user-a',
+      postId:'public-post',
+      reason:'Spam',
+      details:'Legacy moderation item'
+    });
   });
 });
 
@@ -247,6 +270,135 @@ test('Notification recipients can only acknowledge existing activity records', a
     type:'reply',
     read:false
   }));
+  await assertFails(deleteDoc(ref));
+});
+
+test('Students can submit a valid private report only as themselves for public content', async () => {
+  const user = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const anon = env.unauthenticatedContext().firestore();
+  const reportRef = doc(user, 'reports', 'report-a');
+  const valid = {
+    targetType:'post',
+    postId:'public-post',
+    targetTitle:'Public Community post',
+    targetAuthorId:'author-a',
+    targetExcerpt:'Public content for moderation testing',
+    reporterUid:'user-a',
+    userId:'user-a',
+    reason:'Spam',
+    details:'Repeated promotional links',
+    status:'open',
+    sourcePlatform:'web',
+    createdAtMillis:123,
+    createdAt:123,
+    updatedAt:123
+  };
+
+  await assertSucceeds(setDoc(reportRef, valid));
+  await assertFails(getDoc(reportRef));
+  await assertFails(getDoc(doc(other, 'reports', 'report-a')));
+  await assertFails(getDoc(doc(anon, 'reports', 'report-a')));
+  await assertFails(setDoc(doc(other, 'reports', 'forged-owner'), { ...valid, reporterUid:'user-a', userId:'user-a' }));
+  await assertFails(setDoc(doc(user, 'reports', 'forged-private'), { ...valid, postId:'private-post' }));
+  await assertFails(setDoc(doc(user, 'reports', 'bad-reason'), { ...valid, reason:'I disagree' }));
+  await assertFails(setDoc(doc(user, 'reports', 'extra-field'), { ...valid, adminApproved:true }));
+});
+
+test('Only admin can read and resolve canonical or legacy reports', async () => {
+  const user = env.authenticatedContext('user-a').firestore();
+  const admin = env.authenticatedContext('admin-user', { admin:true }).firestore();
+
+  const reportRef = doc(admin, 'reports', 'report-a');
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'reports', 'report-a'), {
+      targetType:'post',
+      postId:'public-post',
+      targetTitle:'Public Community post',
+      targetAuthorId:'author-a',
+      targetExcerpt:'Public content',
+      reporterUid:'user-a',
+      userId:'user-a',
+      reason:'Spam',
+      details:'',
+      status:'open',
+      sourcePlatform:'web',
+      createdAtMillis:123,
+      createdAt:123,
+      updatedAt:123
+    });
+  });
+
+  await assertSucceeds(getDoc(reportRef));
+  await assertFails(updateDoc(doc(user, 'reports', 'report-a'), { status:'dismissed' }));
+  await assertSucceeds(updateDoc(reportRef, {
+    status:'resolved',
+    resolution:'reviewed_no_hide',
+    reviewedAt:456,
+    reviewedByAdminUid:'admin-user',
+    updatedAt:456
+  }));
+  await assertFails(updateDoc(reportRef, { reporterUid:'admin-user' }));
+  await assertFails(deleteDoc(reportRef));
+
+  await assertSucceeds(getDoc(doc(admin, 'support_requests', 'legacy-report')));
+  await assertFails(getDoc(doc(user, 'support_requests', 'legacy-report')));
+  await assertSucceeds(updateDoc(doc(admin, 'support_requests', 'legacy-report'), {
+    status:'dismissed',
+    resolution:'no_action',
+    reviewedAt:456,
+    reviewedByAdminUid:'admin-user',
+    updatedAt:456
+  }));
+});
+
+test('Admin can hide a reported public post but ordinary users cannot modify moderation fields', async () => {
+  const user = env.authenticatedContext('user-a').firestore();
+  const admin = env.authenticatedContext('admin-user', { admin:true }).firestore();
+
+  await assertSucceeds(getDoc(doc(user,'posts','public-post')));
+  await assertFails(getDoc(doc(user,'posts','private-post')));
+  await assertFails(updateDoc(doc(user,'posts','public-post'), { status:'hidden', visibility:'private' }));
+
+  await assertSucceeds(updateDoc(doc(admin,'posts','public-post'), {
+    status:'hidden',
+    visibility:'private',
+    moderationStatus:'hidden',
+    moderatedAt:456,
+    moderatedByAdminUid:'admin-user',
+    updatedAt:456
+  }));
+
+  await assertFails(getDoc(doc(user,'posts','public-post')));
+  await assertSucceeds(getDoc(doc(admin,'posts','public-post')));
+});
+
+test('Moderation audit is admin-only and immutable', async () => {
+  const user = env.authenticatedContext('user-a').firestore();
+  const admin = env.authenticatedContext('admin-user', { admin:true }).firestore();
+  const ref = doc(admin,'moderation_audit','audit-1');
+
+  await assertSucceeds(setDoc(ref,{
+    action:'hide_reported_post',
+    reportId:'report-a',
+    reportSource:'reports',
+    postId:'public-post',
+    adminUid:'admin-user',
+    reason:'Spam',
+    createdAt:123
+  }));
+  await assertSucceeds(getDoc(ref));
+  await assertFails(getDoc(doc(user,'moderation_audit','audit-1')));
+  await assertFails(setDoc(doc(user,'moderation_audit','audit-2'),{
+    action:'resolve_report',
+    reportId:'report-a',
+    reportSource:'reports',
+    postId:'public-post',
+    adminUid:'user-a',
+    reason:'Spam',
+    createdAt:123
+  }));
+  await assertFails(updateDoc(ref,{ action:'dismiss_report' }));
   await assertFails(deleteDoc(ref));
 });
 
