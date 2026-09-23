@@ -27,7 +27,7 @@ import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfile
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
-  buildSubjectCommunities, buildUniversityCommunities,
+  buildCommunityHomeModel, buildSubjectCommunities, buildUniversityCommunities,
   subjectCommunityData, universityCommunityData, intakeCommunityData
 } from './services/community-service.js';
 import {
@@ -690,46 +690,116 @@ function renderSavedCommunity() {
 }
 
 async function renderExplore() {
-  renderShell(`<header class="page-head"><div><h1>Community</h1><p>Loading student communities and shared experiences…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  renderShell(`<div class="community15-page"><section class="community15-hero loading"><div><span class="opportunity-kicker">STUDENT COMMUNITY</span><h1>Loading useful discussions…</h1><p>Preparing public discussions, communities and student outcomes.</p></div></section></div>`, { wide:true, right:false });
   try {
     const opportunities = await getOpportunities(state.mode).catch(() => []);
-    const subjects = buildSubjectCommunities(state.posts, opportunities).filter(row => row.name !== 'General').slice(0, 12);
-    const universities = buildUniversityCommunities(state.posts, opportunities).slice(0, 12);
-    const successes = state.posts.filter(post => post.postType === 'success_story');
-    const journeys = state.posts.filter(post => post.postType === 'journey_story');
+    const model = buildCommunityHomeModel(state.posts, opportunities);
+
+    const discussionCards = model.discussions.length
+      ? model.discussions.map(post => postCard(post)).join('')
+      : `<section class="community15-empty"><div>${icon('comment',22)}</div><h3>No public discussions yet.</h3><p>Start with a real question, explanation or study insight that could help another student.</p><button class="btn btn-primary" type="button" data-action="compose">Start a discussion</button></section>`;
+
+    const unanswered = model.unanswered.length
+      ? `<section class="community15-response-panel">
+          <header><div><span class="opportunity-kicker">NEEDS A RESPONSE</span><h2>Questions with no public replies yet</h2><p>Help another student if you genuinely know something useful.</p></div></header>
+          <div class="community15-response-list">
+            ${model.unanswered.map(post => `<button type="button" data-route="post/${encodeURIComponent(post.id)}">
+              <span>${escapeHTML(post.subject || 'General')}</span>
+              <strong>${escapeHTML(post.title || (post.content || '').slice(0,110) || 'Student question')}</strong>
+              <small>Open discussion →</small>
+            </button>`).join('')}
+          </div>
+        </section>`
+      : '';
+
+    const subjectCards = model.subjects.length
+      ? model.subjects.map(row => `<button class="community15-topic-card" type="button" data-route="subject/${encodeURIComponent(row.name)}">
+          <span class="community15-topic-icon">${icon('compass',18)}</span>
+          <div><h3>${escapeHTML(row.name)}</h3><p>${row.postCount} public post${row.postCount===1?'':'s'} · ${row.opportunityCount} linked opportunit${row.opportunityCount===1?'y':'ies'}</p></div>
+          <span>→</span>
+        </button>`).join('')
+      : `<div class="community15-inline-empty">Subject spaces will appear as public discussions and verified opportunities grow.</div>`;
+
+    const universityCards = model.universities.length
+      ? model.universities.map(row => `<button class="community15-university-card" type="button" data-route="university/${encodeURIComponent(row.name)}">
+          <div><span>UNIVERSITY COMMUNITY</span><h3>${escapeHTML(row.name)}</h3><p>${row.countries.length ? escapeHTML(row.countries.join(', ')) : 'Global student community'}</p></div>
+          <small>${row.postCount} posts · ${row.opportunityCount} opportunities →</small>
+        </button>`).join('')
+      : `<div class="community15-inline-empty">University spaces appear when verified opportunity or public student data links to them.</div>`;
+
+    const outcomes = model.outcomes.length
+      ? model.outcomes.map(post => `<button class="community15-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}">
+          <span>${post.postType === 'success_story' ? 'SUCCESS STORY' : 'JOURNEY STORY'}</span>
+          <h3>${escapeHTML(post.title || 'Student experience')}</h3>
+          <p>${escapeHTML((post.content || '').slice(0,170))}</p>
+          <small>Shared voluntarily by a student →</small>
+        </button>`).join('')
+      : `<section class="community15-inline-empty"><b>No public outcome stories yet.</b><span>Students can choose to share success stories or selected Journey milestones.</span></section>`;
 
     const content = `${demoBanner()}
-      <div class="community-hub">
-        <section class="community-hero">
-          <span class="opportunity-kicker">OUTCOME-FOCUSED COMMUNITY</span>
-          <h1>Learn from students who are moving forward.</h1>
-          <p>Explore subject communities, university and intake spaces, scholarship success stories, and public journey experiences. Community experiences never replace official provider information.</p>
-          <div class="community-action-row">
-            <button class="btn btn-primary" type="button" data-share-success>Share a success</button>
-            <button class="btn btn-secondary" type="button" data-share-journey-story>Share a journey story</button>
-            <button class="btn btn-ghost" type="button" data-action="compose">${icon('plus',16)} General discussion</button>
+      <div class="community15-page">
+        <section class="community15-hero">
+          <div class="community15-hero-copy">
+            <span class="opportunity-kicker">STUDENT COMMUNITY</span>
+            <h1>Ask better questions. Share what actually helps.</h1>
+            <p>Tefsen Community connects student discussions, subject spaces, university communities and voluntarily shared outcomes. Experiences add context; official provider sources still control requirements, deadlines and eligibility.</p>
+            <div class="community15-hero-actions">
+              <button class="btn btn-primary" type="button" data-action="compose">${icon('plus',16)} Ask or share knowledge</button>
+              <button class="btn btn-secondary" type="button" data-share-success>Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story>Share selected Journey milestones</button>
+            </div>
           </div>
+          <aside class="community15-purpose">
+            <span>WHAT BELONGS HERE</span>
+            <div><b>Questions</b><small>Specific things you are trying to understand.</small></div>
+            <div><b>Explanations</b><small>Useful knowledge, study methods and lessons learned.</small></div>
+            <div><b>Student experiences</b><small>Voluntary outcomes and selected Journey stories—not official guidance.</small></div>
+          </aside>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">Subject communities</h2><p>Opportunities and student conversations grouped by field.</p></div></header>
-          <div class="community-grid">${subjects.length ? subjects.map(row => `<button class="community-card" type="button" data-route="subject/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.opportunityCount} opportunities · ${row.postCount} community posts</p><div class="community-card-meta">${row.successCount ? `<span class="story-type success">${row.successCount} success stor${row.successCount===1?'y':'ies'}</span>` : ''}</div></button>`).join('') : '<div class="panel opportunity-empty">Subject communities will appear as opportunities and posts are added.</div>'}</div>
+        <section class="community15-stats" aria-label="Community summary">
+          <article><strong>${model.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${model.counts.subjectCommunities || '—'}</strong><span>Subject spaces</span></article>
+          <article><strong>${model.counts.universityCommunities || '—'}</strong><span>University spaces</span></article>
+          <article><strong>${model.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">University communities</h2><p>Find opportunities, success stories and intake conversations around a university.</p></div></header>
-          <div class="community-grid">${universities.length ? universities.map(row => `<button class="community-card" type="button" data-route="university/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.countries.length ? escapeHTML(row.countries.join(', ')) : 'Community university'}</p><div class="community-card-meta"><span class="opportunity-chip">${row.opportunityCount} opportunities</span><span class="opportunity-chip">${row.postCount} posts</span>${row.intakes.slice(0,2).map(intake => `<span class="opportunity-chip">${escapeHTML(intake)}</span>`).join('')}</div></button>`).join('') : '<div class="panel opportunity-empty">University communities will appear as verified opportunity and student data grows.</div>'}</div>
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>Active student conversations</h2><p>Ordered using public engagement signals such as replies, saves and likes—not an accuracy or quality score.</p></div>
+            <button class="btn btn-secondary" type="button" data-action="compose">Start discussion</button>
+          </header>
+          <div class="community15-feed">${discussionCards}</div>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">Student outcomes</h2><p>Shared voluntarily by students.</p></div><span class="opportunity-chip">${successes.length} success · ${journeys.length} journey</span></header>
-          <div class="feed-list">${[...successes,...journeys].sort((x,y)=>scorePost(y)-scorePost(x)).slice(0,12).map(postCard).join('') || emptyState('compass','No outcome stories yet','Students can choose to share a success or selected public journey milestones.')}</div>
+        ${unanswered}
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">EXPLORE BY SUBJECT</span><h2>Find the field you care about</h2><p>Subject spaces connect student conversations with relevant verified-source opportunities.</p></div>
+          </header>
+          <div class="community15-topic-grid">${subjectCards}</div>
+        </section>
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">UNIVERSITY SPACES</span><h2>Explore student context around institutions</h2><p>See public conversations and linked opportunities without treating community posts as official university information.</p></div>
+          </header>
+          <div class="community15-university-grid">${universityCards}</div>
+        </section>
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences, not promises</h2><p>Success and Journey stories are voluntarily shared by students. They do not prove current eligibility, funding or admission requirements.</p></div>
+            <div class="community15-outcome-actions"><button class="btn btn-secondary" type="button" data-share-success>Share success</button><button class="btn btn-ghost" type="button" data-share-journey-story>Share Journey story</button></div>
+          </header>
+          <div class="community15-outcome-grid">${outcomes}</div>
         </section>
       </div>`;
-    renderShell(content, { wide:true });
+    renderShell(content, { wide:true, right:false });
   } catch (error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Community unavailable','Please try again.')}`, { wide:true });
+    renderShell(`${demoBanner()}${emptyState('info','Community unavailable','Please try again.')}`, { wide:true, right:false });
   }
 }
 
