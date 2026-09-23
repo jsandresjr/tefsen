@@ -127,8 +127,7 @@ export function projectPublicUser(raw={}, id='') {
     bio,
     photoUrl,
     role,
-    verified:Boolean(raw.verified),
-    points:Math.max(0,Number(raw.points || 0))
+    verified:Boolean(raw.verified)
   };
 }
 
