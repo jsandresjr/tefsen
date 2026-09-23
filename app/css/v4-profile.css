@@ -975,3 +975,40 @@ html.tefsen-v2 .profile13-editor-summary{
   }
   html.tefsen-v2 .profile13-private-chip{align-self:flex-start}
 }
+
+
+/* Completion step 14 — visitor public-profile privacy review */
+html.tefsen-v2 .profile14-visitor-actions{
+  margin-top:2px;
+}
+html.tefsen-v2 .profile14-public-stats{
+  max-width:420px;
+}
+html.tefsen-v2 .profile14-public-stats>div{
+  min-width:150px;
+}
+html.tefsen-v2 .profile14-public-boundary{
+  border-color:rgba(118,194,203,.09);
+  background:
+    linear-gradient(135deg,rgba(81,226,212,.018),transparent 55%),
+    rgba(6,27,30,.42);
+}
+html.tefsen-v2 .profile14-public-boundary>svg{
+  color:#7aa49f;
+}
+html.tefsen-v2 #profile-public-activity{
+  scroll-margin-top:92px;
+}
+@media(max-width:620px){
+  html.tefsen-v2 .profile14-public-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:100%;
+    max-width:100%;
+  }
+  html.tefsen-v2 .profile14-public-stats>div{
+    min-width:0;
+  }
+  html.tefsen-v2 .profile14-visitor-actions{
+    justify-content:center;
+  }
+}
