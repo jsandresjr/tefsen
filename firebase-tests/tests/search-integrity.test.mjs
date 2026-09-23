@@ -14,8 +14,8 @@ test('public search no longer calls a first-100 corpus global', () => {
   const end=data.indexOf('export async function updateUserProfile',start);
   assert.ok(start>=0 && end>start);
   const block=data.slice(start,end);
-  assert.match(block,/SEARCH_USER_SCAN_LIMIT = 250/);
-  assert.match(block,/SEARCH_POST_SCAN_LIMIT = 300/);
+  assert.match(data,/SEARCH_USER_SCAN_LIMIT = 250/);
+  assert.match(data,/SEARCH_POST_SCAN_LIMIT = 300/);
   assert.match(block,/limit\(SEARCH_USER_SCAN_LIMIT \+ 1\)/);
   assert.match(block,/limit\(SEARCH_POST_SCAN_LIMIT \+ 1\)/);
   assert.doesNotMatch(block,/limit\(100\)/);
