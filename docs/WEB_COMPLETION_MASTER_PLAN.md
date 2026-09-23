@@ -224,4 +224,29 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - responsive desktop/tablet/mobile priority and outcome cards added
 - service-worker cache bumped for the Journey priority model
 
-**Next: Step 11 — Journey detail page and preparation workflow polish**
+**Step 11: Journey detail page and preparation workflow polish — complete on branch `tefsen-web-completion-11-journey-detail`**
+- Journey detail page rebuilt around stage-aware guidance instead of a generic two-column form
+- hero explains the current application phase and what to focus on now
+- current stage, checklist completion and next unfinished task are visible immediately
+- stage updates explicitly tell students to update only after the real application stage changes
+- checklist separates unfinished and completed work and highlights the next task
+- system-generated tasks remain distinguishable from private custom tasks
+- stage-aware custom task prompts support preparation, submitted follow-up and interview/review work
+- personal preparation target is editable only before submission
+- personal target after the stored official deadline is blocked before save
+- missing personal target remains optional and does not block saving
+- applied/interview stages keep old targets only as historical context
+- original application deadline is no longer shown as active urgency after submission
+- official source trust/status is visible directly in the Journey detail page
+- official provider source link is prominent when available
+- missing source link shows a clear warning not to rely on Tefsen alone
+- accepted stage includes explicit official visa/legal/admissions guidance disclaimer
+- private notes remain editable across submitted and outcome stages
+- private note character counter added
+- Journey stage history redesigned as a clearer timeline
+- deterministic Journey detail model and planning-validation tests added
+- CI now runs when the Journey detail service changes
+- responsive desktop/tablet/mobile Journey detail experience added
+- service-worker cache bumped for the Journey detail workflow
+
+**Next: Step 12 — Deadline reminders and notification experience**
