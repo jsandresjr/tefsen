@@ -96,15 +96,88 @@ export function buildUniversityCommunities(posts = [], opportunities = []) {
   );
 }
 
-export function subjectCommunityData(name, posts = [], opportunities = []) {
-  const target = communityKey(name);
-  const communityPosts = posts.filter(post => uniqueValues([
-    post.communitySubject, post.successData?.subject, post.subject
-  ].filter(Boolean), 5).some(value => communityKey(value) === target));
-  const communityOpportunities = opportunities.filter(opportunity =>
-    (opportunity.subjects || []).some(value => communityKey(value) === target)
+function postMatchesSubject(post={}, target='') {
+  return uniqueValues([
+    post.communitySubject,
+    post.successData?.subject,
+    post.subject
+  ].filter(Boolean),5).some(value=>communityKey(value)===target);
+}
+
+function opportunityMatchesSubject(opportunity={}, target='') {
+  return (Array.isArray(opportunity.subjects) ? opportunity.subjects : [])
+    .some(value=>communityKey(value)===target);
+}
+
+export function buildSubjectCommunityModel(name, posts = [], opportunities = []) {
+  const subjectName=clean(name,120);
+  const target=communityKey(subjectName);
+  const publicPosts=(Array.isArray(posts) ? posts : [])
+    .filter(isPublicProfileActivity)
+    .filter(post=>postMatchesSubject(post,target));
+  const linkedOpportunities=(Array.isArray(opportunities) ? opportunities : [])
+    .filter(opportunity=>opportunityMatchesSubject(opportunity,target));
+
+  const discussions=publicPosts
+    .filter(post=>communityPostType(post)==='discussion')
+    .sort((a,b)=>discussionActivityScore(b)-discussionActivityScore(a));
+
+  const unanswered=discussions
+    .filter(post=>Number(post.commentCount || 0)===0)
+    .sort((a,b)=>{
+      const bySaves=Number(b.saveCount || 0)-Number(a.saveCount || 0);
+      return bySaves || Number(b.likeCount || 0)-Number(a.likeCount || 0);
+    });
+
+  const outcomes=publicPosts
+    .filter(post=>communityPostType(post)!=='discussion')
+    .sort((a,b)=>outcomeActivityScore(b)-outcomeActivityScore(a));
+
+  const universities=uniqueValues(
+    linkedOpportunities.map(item=>item.university).filter(Boolean),
+    12
   );
-  return { name: clean(name,120), posts: communityPosts, opportunities: communityOpportunities };
+
+  const destinations=uniqueValues(
+    linkedOpportunities.map(item=>item.country).filter(Boolean),
+    12
+  );
+
+  const fundingTypes=uniqueValues(
+    linkedOpportunities.map(item=>item.fundingType).filter(Boolean),
+    8
+  );
+
+  return {
+    name:subjectName || 'Subject',
+    discussions,
+    unanswered,
+    outcomes,
+    opportunities:linkedOpportunities,
+    universities,
+    destinations,
+    fundingTypes,
+    counts:{
+      discussions:discussions.length,
+      unanswered:unanswered.length,
+      outcomes:outcomes.length,
+      opportunities:linkedOpportunities.length,
+      universities:universities.length,
+      destinations:destinations.length
+    },
+    empty:discussions.length===0 && outcomes.length===0 && linkedOpportunities.length===0,
+    rankingNote:'Discussion order uses public engagement signals such as replies, saves and likes. It is not a quality or accuracy score.',
+    sourceNote:'Linked opportunities provide discovery context only. Official provider sources remain authoritative for eligibility, deadlines, funding and application requirements.'
+  };
+}
+
+export function subjectCommunityData(name, posts = [], opportunities = []) {
+  const model=buildSubjectCommunityModel(name,posts,opportunities);
+  return {
+    name:model.name,
+    posts:[...model.discussions,...model.outcomes],
+    opportunities:model.opportunities
+  };
 }
 
 export function universityCommunityData(name, posts = [], opportunities = []) {
