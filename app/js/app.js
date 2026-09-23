@@ -452,6 +452,7 @@ function renderShell(content, options = {}) {
           </form>
         </div>
         <div class="topbar-actions">
+          ${quickThemeButtonMarkup()}
           <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
           <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
         </div>
@@ -3970,6 +3971,28 @@ function settingsToggleMarkup(key, checked, label) {
   return `<button class="settings25-toggle ${checked ? 'active' : ''}" type="button" data-settings-toggle="${key}" aria-label="${escapeHTML(label)}" aria-pressed="${checked}"></button>`;
 }
 
+function settingsThemeMarkup(selected = 'system') {
+  const options = [
+    ['light','Light','Bright white interface'],
+    ['dark','Dark','Low-light interface'],
+    ['system','System','Follow this device']
+  ];
+  return `<div class="settings25-theme-options" role="radiogroup" aria-label="Appearance">
+    ${options.map(([value,label,detail]) => `<button class="settings25-theme-choice ${selected === value ? 'active' : ''}" type="button" data-settings-theme="${value}" role="radio" aria-checked="${selected === value}">
+      <span class="settings25-theme-preview ${value}" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><b>${label}</b><small>${detail}</small></span>
+    </button>`).join('')}
+  </div>`;
+}
+
+function quickThemeButtonMarkup() {
+  const selected = currentUserSettings?.theme || 'system';
+  const resolved = document.documentElement.dataset.appearance || (selected === 'light' ? 'light' : 'dark');
+  const next = selected === 'dark' ? 'light' : selected === 'light' ? 'system' : 'dark';
+  const symbol = resolved === 'light' ? '☀' : '☾';
+  return `<button class="icon-button theme-quick-button" type="button" data-theme-cycle data-theme-next="${next}" aria-label="Appearance: ${escapeHTML(selected)}. Change appearance" title="Appearance: ${escapeHTML(selected)}"><span aria-hidden="true">${symbol}</span></button>`;
+}
+
 async function persistCurrentSettings(patch = {}) {
   const next = normalizeUserSettings(
     { ...currentUserSettings, ...patch },
@@ -4045,9 +4068,10 @@ function renderSettings() {
         <div class="settings25-row"><div class="settings25-row-copy"><b>Reduced motion</b><p>Minimize nonessential animations and transitions across Tefsen Web.</p></div>${settingsToggleMarkup('reducedMotion',s.reducedMotion,'Reduced motion')}</div>
       </article>
       <article class="settings25-card">
-        <div class="settings25-card-head"><div><h2>Appearance & language</h2><p>Only options that Tefsen fully supports are shown.</p></div></div>
-        <div class="settings25-identity">
-          <div class="settings25-fact"><small>Appearance</small><strong>Dark</strong></div>
+        <div class="settings25-card-head"><div><h2>Appearance & language</h2><p>Choose Light, Dark, or follow your device. Your choice is saved to this Tefsen account.</p></div></div>
+        ${settingsThemeMarkup(s.theme)}
+        <div class="settings25-identity settings25-language-fact">
+          <div class="settings25-fact"><small>Current appearance</small><strong>${escapeHTML(s.theme === 'light' ? 'Light' : s.theme === 'dark' ? 'Dark' : 'System')}</strong></div>
           <div class="settings25-fact"><small>Interface language</small><strong>English</strong></div>
         </div>
       </article>
@@ -4657,6 +4681,38 @@ function openDemoInfo() {
 async function handleClick(event) {
   const settingsTabEl = event.target.closest('[data-settings-tab]');
   if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'overview'; renderSettings(); return; }
+
+  const themeChoice = event.target.closest('[data-settings-theme]');
+  if (themeChoice) {
+    const theme = themeChoice.dataset.settingsTheme;
+    if (!['light','dark','system'].includes(theme)) return;
+    themeChoice.disabled = true;
+    try {
+      await persistCurrentSettings({ theme });
+      toast(`${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} appearance saved.`, 'success');
+      renderSettings();
+    } catch (error) {
+      themeChoice.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+
+  const themeCycle = event.target.closest('[data-theme-cycle]');
+  if (themeCycle) {
+    const theme = themeCycle.dataset.themeNext || 'light';
+    themeCycle.disabled = true;
+    try {
+      await persistCurrentSettings({ theme });
+      toast(`Appearance changed to ${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'}.`, 'success');
+      renderRoute();
+    } catch (error) {
+      themeCycle.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+
   const settingsToggle = event.target.closest('[data-settings-toggle]');
   if (settingsToggle) {
     const key = settingsToggle.dataset.settingsToggle;
