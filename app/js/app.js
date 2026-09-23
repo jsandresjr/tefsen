@@ -23,6 +23,7 @@ import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
+import { buildPublicProfileModel, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
