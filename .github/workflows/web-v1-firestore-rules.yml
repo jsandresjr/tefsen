@@ -27,6 +27,9 @@ on:
       - 'app/js/services/moderation-model.js'
       - 'app/js/services/moderation-service.js'
       - 'app/css/v27-moderation.css'
+      - 'app/css/v28-recognition.css'
+      - 'app/js/services/public-profile-service.js'
+      - 'app/js/store.js'
       - 'app/js/config/schema.js'
       - 'app/css/v25-settings.css'
       - 'app/js/app.js'
@@ -73,6 +76,8 @@ jobs:
           node --check ../app/js/services/settings-service.js
           node --check ../app/js/services/moderation-model.js
           node --check ../app/js/services/moderation-service.js
+          node --check ../app/js/services/public-profile-service.js
+          node --check ../app/js/store.js
           node --check ../app/sw.js
 
       - name: Run Firestore emulator security tests

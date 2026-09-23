@@ -11,7 +11,6 @@
 :root{--left:220px;--right:300px}
 
 /* Keep only primary navigation visually prominent. Secondary destinations live in account menu. */
-.sidebar .nav-item[data-route="leaderboard"],
 .sidebar .nav-item[data-route="subscription"],
 .sidebar .nav-item[data-route="settings"]{display:none!important}
 .sidebar .nav-divider{margin:12px 8px}

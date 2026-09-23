@@ -54,9 +54,8 @@ test('report and moderation audit rules are explicit', () => {
   assert.match(rules, /allow update, delete: if false/);
 });
 
-test('Step 27 assets are loaded and cached under V54', () => {
+test('Step 27 moderation assets stay loaded and cached after later cache-version bumps', () => {
   assert.match(index, /css\/v27-moderation\.css/);
-  assert.match(sw, /tefsen-web-shell-v54-moderation-center/);
   assert.match(sw, /moderation-model\.js/);
   assert.match(sw, /moderation-service\.js/);
 });

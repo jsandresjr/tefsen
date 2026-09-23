@@ -313,17 +313,6 @@ img { max-width: 100%; }
 .notification-item small { color: var(--muted); }
 .notification-icon { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; flex: 0 0 auto; background: rgba(29, 188, 239, .1); color: #5fdcff; }
 
-/* leaderboard */
-.leaderboard-row { display: grid; grid-template-columns: 50px 1fr auto; gap: 12px; align-items: center; padding: 13px 17px; border-bottom: 1px solid var(--line); }
-.leaderboard-row:last-child { border-bottom: 0; }
-.rank { font-size: 15px; font-weight: 900; color: #728da6; text-align: center; }
-.rank.top { color: #ffd366; }
-.user-inline { display: flex; gap: 10px; align-items: center; min-width: 0; }
-.user-inline div { min-width: 0; }
-.user-inline b, .user-inline small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-inline small { color: var(--muted); }
-.points { color: #5edaf3; font-weight: 850; }
-
 /* settings */
 .settings-grid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
 .settings-nav { padding: 8px; height: fit-content; }
