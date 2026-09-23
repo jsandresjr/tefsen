@@ -51,6 +51,30 @@ beforeEach(async () => {
       visibility: 'private',
       verificationStatus: 'pending'
     });
+    await setDoc(doc(db, 'notifications', 'canonical-a'), {
+      userId:'user-a',
+      type:'reply',
+      text:'A reply for user A',
+      read:false,
+      isRead:false,
+      createdAtMillis:300
+    });
+    await setDoc(doc(db, 'notifications', 'legacy-a'), {
+      recipientId:'user-a',
+      type:'like',
+      text:'A legacy notification for user A',
+      read:false,
+      isRead:false,
+      createdAtMillis:200
+    });
+    await setDoc(doc(db, 'notifications', 'canonical-b'), {
+      userId:'user-b',
+      type:'reply',
+      text:'A reply for user B',
+      read:false,
+      isRead:false,
+      createdAtMillis:100
+    });
   });
 });
 
@@ -148,6 +172,82 @@ test('Settings preferences are owner-only, validated, and cannot spoof identity'
   await assertFails(setDoc(ref, { ...valid, unexpectedField:true }));
   await assertSucceeds(updateDoc(ref, { region:'Canada', timeZone:'America/Toronto' }));
   await assertSucceeds(deleteDoc(ref));
+});
+
+test('Notification read state is private to the authenticated owner', async () => {
+  const owner = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const anon = env.unauthenticatedContext().firestore();
+  const ref = doc(owner, 'users', 'user-a', 'notificationState', 'read');
+  const valid = {
+    uid:'user-a',
+    userId:'user-a',
+    documentType:'notification_read_state',
+    schemaVersion:1,
+    readIds:['activity:canonical-a','deadline:opp-1:2026-10-01:soon'],
+    updatedAt:123
+  };
+
+  await assertSucceeds(setDoc(ref, valid));
+  await assertSucceeds(getDoc(ref));
+  await assertFails(getDoc(doc(other, 'users', 'user-a', 'notificationState', 'read')));
+  await assertFails(getDoc(doc(anon, 'users', 'user-a', 'notificationState', 'read')));
+  await assertFails(setDoc(doc(other, 'users', 'user-a', 'notificationState', 'read'), valid));
+  await assertFails(setDoc(ref, { ...valid, uid:'user-b', userId:'user-b' }));
+  await assertFails(setDoc(ref, { ...valid, readIds:Array.from({length:601},(_,i)=>`id-${i}`) }));
+  await assertFails(setDoc(ref, { ...valid, extra:true }));
+  await assertSucceeds(updateDoc(ref, { readIds:['activity:canonical-a'] }));
+  await assertSucceeds(deleteDoc(ref));
+});
+
+test('Activity notifications are readable only by their canonical or legacy recipient', async () => {
+  const owner = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const anon = env.unauthenticatedContext().firestore();
+
+  await assertSucceeds(getDoc(doc(owner, 'notifications', 'canonical-a')));
+  await assertSucceeds(getDoc(doc(owner, 'notifications', 'legacy-a')));
+  await assertFails(getDoc(doc(other, 'notifications', 'canonical-a')));
+  await assertFails(getDoc(doc(anon, 'notifications', 'canonical-a')));
+
+  const canonical = await assertSucceeds(getDocs(query(
+    collection(owner, 'notifications'),
+    where('userId', '==', 'user-a')
+  )));
+  assert.equal(canonical.size, 1);
+
+  const legacy = await assertSucceeds(getDocs(query(
+    collection(owner, 'notifications'),
+    where('recipientId', '==', 'user-a')
+  )));
+  assert.equal(legacy.size, 1);
+
+  await assertFails(getDocs(query(
+    collection(other, 'notifications'),
+    where('userId', '==', 'user-a')
+  )));
+});
+
+test('Notification recipients can only acknowledge existing activity records', async () => {
+  const owner = env.authenticatedContext('user-a').firestore();
+  const other = env.authenticatedContext('user-b').firestore();
+  const ref = doc(owner, 'notifications', 'canonical-a');
+
+  await assertSucceeds(updateDoc(ref, {
+    read:true,
+    isRead:true,
+    readAt:456,
+    updatedAt:456
+  }));
+  await assertFails(updateDoc(ref, { text:'tampered' }));
+  await assertFails(updateDoc(ref, { userId:'user-b' }));
+  await assertFails(updateDoc(doc(other, 'notifications', 'canonical-a'), { read:true }));
+  await assertFails(setDoc(doc(owner, 'notifications', 'forged'), {
+    userId:'user-a',
+    type:'reply',
+    read:false
+  }));
+  await assertFails(deleteDoc(ref));
 });
 
 test('Ordinary users can read only published public opportunities', async () => {
