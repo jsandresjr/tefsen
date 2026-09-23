@@ -114,6 +114,57 @@ It previously attempted to:
 
 Those behaviors conflict with least-privilege rules and should not be restored. Counter denormalization and cross-document maintenance belong in trusted backend code when needed.
 
+## Cloud Storage security
+
+Tefsen Web currently writes only two media categories:
+
+- public profile photos at `profile_images/{uid}.jpg`
+- public post images at `post_images/{uid}/{postId}/{slot}`
+
+New Web post uploads use deterministic slots `1` and `2`. This prevents arbitrary file counts under one post path.
+
+The isolated Storage contract requires:
+
+### Profile photos
+
+- public object reads
+- write/delete only when `request.auth.uid == uid`
+- JPG, PNG or WebP content type only
+- maximum object size 5 MiB
+- all other profile-image paths denied
+
+### Post images
+
+- public object reads
+- write/delete only when `request.auth.uid == uid`
+- slot must be exactly `1` or `2`
+- JPG, PNG or WebP only
+- maximum object size 6 MiB
+- custom metadata ownerUid/postId/slot must match the path
+- folder listing is not granted to ordinary/anonymous clients
+- all unknown Storage paths are denied
+
+The browser's Free/Student Plus daily and aggregate post-image quotas are product limits, not fully authoritative Storage quotas. The Storage contract intentionally provides the hard abuse boundary that can be enforced independently: ownership, two slots per new Web post, image-only content, per-object size limits and deny-all fallback.
+
+If exact subscription-specific byte quotas need server authority, move that decision to trusted backend upload issuance or trusted claims rather than relying on browser state.
+
+New Web post deletion removes deterministic slots 1 and 2 after the Firestore post is removed. Legacy random-name objects are not broadly listed/deleted by clients; use trusted backend cleanup for historical orphan media.
+
+## Web App Check readiness
+
+The Web client uses Firebase's `ReCaptchaV3Provider`.
+
+Client configuration and enforcement are different states:
+
+1. **Missing key** — App Check is not configured for Web.
+2. **Key configured but initialization failed** — do not enable enforcement.
+3. **Client initialized** — validate real App Check traffic first.
+4. **Enforcement enabled in Firebase Console** — verify separately for each supported Firebase service.
+
+Tefsen Web must never infer enforcement merely because a site key exists or `initializeAppCheck()` returned a client instance.
+
+The Admin review surface reports only client readiness and explicitly states that enforcement must still be verified service-by-service in Firebase Console.
+
 ## Required Student Passport rule
 
 Student Passport data is stored separately from the public user profile:

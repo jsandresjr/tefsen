@@ -15,8 +15,10 @@ window.TEFSEN_FIREBASE_CONFIG = {
   appId: "PASTE_WEB_APP_ID"
 };
 
-// Optional: reCAPTCHA Enterprise or v3 site key for Firebase App Check.
-// Leave empty until App Check is configured for the Web app in Firebase Console.
+// Optional: reCAPTCHA v3 site key for Firebase App Check.
+// This Web build currently uses ReCaptchaV3Provider. A site key is public client
+// configuration, not a secret. Leave it empty until the Web App Check provider
+// is registered in Firebase Console, then validate traffic before enforcement.
 window.TEFSEN_APPCHECK_SITE_KEY = "";
 
 // Demo mode lets you preview the complete interface before Firebase is connected.
