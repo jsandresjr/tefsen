@@ -1,3 +1,5 @@
+import { isPublicProfileActivity } from './public-profile-service.js';
+
 function clean(value, max = 160) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, max);
 }
@@ -148,5 +150,74 @@ export function intakeCommunityData(university, intake, posts = [], opportunitie
     intake: clean(intake,80),
     posts: communityPosts,
     opportunities: communityOpportunities
+  };
+}
+
+
+function communityPostType(post={}) {
+  const type=String(post.postType || 'discussion').trim();
+  return ['success_story','journey_story'].includes(type) ? type : 'discussion';
+}
+
+function discussionActivityScore(post={}) {
+  const comments=Math.max(0,Number(post.commentCount || 0));
+  const saves=Math.max(0,Number(post.saveCount || 0));
+  const likes=Math.max(0,Number(post.likeCount || 0));
+  const subject=clean(post.communitySubject || post.subject || '',120);
+  return comments*4 + saves*3 + likes + (subject && communityKey(subject)!=='general' ? 5 : 0);
+}
+
+function outcomeActivityScore(post={}) {
+  const comments=Math.max(0,Number(post.commentCount || 0));
+  const saves=Math.max(0,Number(post.saveCount || 0));
+  const likes=Math.max(0,Number(post.likeCount || 0));
+  return comments*3 + saves*3 + likes;
+}
+
+export function buildCommunityHomeModel(posts=[], opportunities=[]) {
+  const publicPosts=(Array.isArray(posts) ? posts : []).filter(isPublicProfileActivity);
+  const publicOpportunities=Array.isArray(opportunities) ? opportunities : [];
+  const subjects=buildSubjectCommunities(publicPosts,publicOpportunities)
+    .filter(row=>communityKey(row.name)!=='general');
+  const universities=buildUniversityCommunities(publicPosts,publicOpportunities);
+
+  const discussions=publicPosts
+    .filter(post=>communityPostType(post)==='discussion')
+    .sort((a,b)=>discussionActivityScore(b)-discussionActivityScore(a));
+
+  const unanswered=discussions
+    .filter(post=>Number(post.commentCount || 0)===0)
+    .sort((a,b)=>{
+      const bySaves=Number(b.saveCount || 0)-Number(a.saveCount || 0);
+      return bySaves || Number(b.likeCount || 0)-Number(a.likeCount || 0);
+    });
+
+  const outcomes=publicPosts
+    .filter(post=>communityPostType(post)!=='discussion')
+    .sort((a,b)=>outcomeActivityScore(b)-outcomeActivityScore(a));
+
+  const activeSubjects=subjects
+    .filter(row=>row.postCount>0 || row.opportunityCount>0)
+    .slice(0,6);
+
+  const activeUniversities=universities
+    .filter(row=>row.postCount>0 || row.opportunityCount>0)
+    .slice(0,4);
+
+  return {
+    counts:{
+      discussions:discussions.length,
+      unanswered:unanswered.length,
+      outcomes:outcomes.length,
+      subjectCommunities:subjects.length,
+      universityCommunities:universities.length
+    },
+    discussions:discussions.slice(0,6),
+    unanswered:unanswered.slice(0,3),
+    outcomes:outcomes.slice(0,4),
+    subjects:activeSubjects,
+    universities:activeUniversities,
+    empty:publicPosts.length===0 && activeSubjects.length===0 && activeUniversities.length===0,
+    rankingNote:'Discussion order uses public engagement signals such as replies, saves and likes. It is not a quality or accuracy score.'
   };
 }
