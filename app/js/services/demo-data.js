@@ -2,11 +2,11 @@ const now = Date.now();
 const ago = (ms) => new Date(now - ms).toISOString();
 
 export const DEMO_USERS = [
-  { id: 'demo-kasuni', uid: 'demo-kasuni', fullName: 'Kasuni Mahesha', username: 'kasuni', email: 'kasuni@example.com', bio: 'Physical science student exploring ideas across physics, chemistry and technology.', role: 'University Student', verified: true, points: 2840, followersCount: 318, followingCount: 126 },
-  { id: 'demo-amaya', uid: 'demo-amaya', fullName: 'Amaya Fernando', username: 'amaya.f', bio: 'Computer science student and open-source learner.', role: 'University Student', verified: true, points: 2410, followersCount: 224, followingCount: 98 },
-  { id: 'demo-nimal', uid: 'demo-nimal', fullName: 'Nimal Perera', username: 'nimal.p', bio: 'A/L science learner. Curious about space and electronics.', role: 'School Student', verified: false, points: 1930, followersCount: 167, followingCount: 83 },
-  { id: 'demo-sara', uid: 'demo-sara', fullName: 'Sara Williams', username: 'sara.learns', bio: 'Biology and public health.', role: 'Student', verified: false, points: 1675, followersCount: 145, followingCount: 101 },
-  { id: 'demo-admin', uid: 'demo-admin', fullName: 'Tefsen Team', username: 'tefsen', bio: 'Official Tefsen updates and community support.', role: 'Admin', verified: true, points: 4500, followersCount: 1200, followingCount: 22 }
+  { id: 'demo-kasuni', uid: 'demo-kasuni', fullName: 'Kasuni Mahesha', username: 'kasuni', email: 'kasuni@example.com', bio: 'Physical science student exploring ideas across physics, chemistry and technology.', role: 'University Student', verified: true, points: 2840 },
+  { id: 'demo-amaya', uid: 'demo-amaya', fullName: 'Amaya Fernando', username: 'amaya.f', bio: 'Computer science student and open-source learner.', role: 'University Student', verified: true, points: 2410 },
+  { id: 'demo-nimal', uid: 'demo-nimal', fullName: 'Nimal Perera', username: 'nimal.p', bio: 'A/L science learner. Curious about space and electronics.', role: 'School Student', verified: false, points: 1930 },
+  { id: 'demo-sara', uid: 'demo-sara', fullName: 'Sara Williams', username: 'sara.learns', bio: 'Biology and public health.', role: 'Student', verified: false, points: 1675 },
+  { id: 'demo-admin', uid: 'demo-admin', fullName: 'Tefsen Team', username: 'tefsen', bio: 'Official Tefsen updates and community support.', role: 'Admin', verified: true, points: 4500 }
 ];
 
 export const DEMO_POSTS = [
