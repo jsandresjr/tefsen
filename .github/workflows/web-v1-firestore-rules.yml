@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'firebase-tests/**'
+      - 'app/index.html'
+      - 'app/sw.js'
       - '.github/workflows/web-v1-firestore-rules.yml'
       - 'app/js/services/student-passport-service.js'
       - 'app/js/services/journey-service.js'
