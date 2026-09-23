@@ -26,8 +26,10 @@ test('document defines a restrictive CSP for the actual Firebase dependency set'
   assert.match(index,/manifest-src 'self'/);
   assert.match(index,/form-action 'self'/);
   assert.match(index,/upgrade-insecure-requests/);
-  assert.doesNotMatch(index,/script-src[^"]*'unsafe-inline'/);
-  assert.doesNotMatch(index,/script-src[^"]*'unsafe-eval'/);
+  const csp=index.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] || '';
+  const scriptDirective=csp.split(';').map(part=>part.trim()).find(part=>part.startsWith('script-src')) || '';
+  assert.doesNotMatch(scriptDirective,/'unsafe-inline'/);
+  assert.doesNotMatch(scriptDirective,/'unsafe-eval'/);
 });
 
 test('strict referrer policy remains present beside CSP',()=>{
