@@ -158,9 +158,7 @@ export function normalizeUser(raw = {}, id = '') {
     subscriptionExpiresAt: subscription.expiresAt,
     username: raw.username || raw.handle || (email ? String(email).split('@')[0] : ''),
     bio: raw.bio || raw.about || '',
-    points: Number(raw.points || raw.score || raw.reputation || 0),
-    followersCount: Number(raw.followersCount || raw.followerCount || 0),
-    followingCount: Number(raw.followingCount || 0)
+    points: Number(raw.points || raw.score || raw.reputation || 0)
   };
 }
 
@@ -1013,19 +1011,5 @@ export async function reportPost(mode, userId, postId, reason, details = '') {
     updatedAt: serverTimestamp()
   });
   return { id: requestRef.id };
-}
-
-export async function getFollowState(mode, currentUserId, targetUserId) {
-  if (!targetUserId) return { following: false, followersCount: 0, followingCount: 0 };
-  const profile = await getUserById(mode, targetUserId).catch(() => null);
-  return {
-    following: false,
-    followersCount: Number(profile?.followersCount || 0),
-    followingCount: Number(profile?.followingCount || 0)
-  };
-}
-
-export async function toggleFollow() {
-  throw new Error('Following is not enabled in the current Tefsen app data model.');
 }
 

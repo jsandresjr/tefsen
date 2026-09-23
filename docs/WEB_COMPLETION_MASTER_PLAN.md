@@ -486,4 +486,23 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - public-profile capability test continues to require `message:false`
 - service-worker cache bumped to V49
 
-**Next: Step 23 — Follow/follower implementation or removal**
+**Step 23: Follow/follower decision — removed from Web on branch `tefsen-web-completion-23-remove-following`**
+- chose removal instead of presenting a social relationship feature with no functioning relationship data model or secure write path
+- removed the unused Follow click handler and optimistic Follow/Following button logic
+- removed `getFollowState()`, which always returned `following:false`
+- removed `toggleFollow()`, which only threw an error at runtime
+- visitor public profiles continue to expose public activity navigation instead of fake Follow controls
+- follower/following counts removed from the public profile model
+- follower/following counts removed from public user projections used by visitor profiles, search and leaderboard retrieval
+- invented follower/following counts removed from demo user fixtures
+- normal user normalization no longer manufactures follower/following aliases for Web features
+- legacy raw Firestore fields are not deleted or migrated in this step; Web simply stops treating them as supported social graph data
+- contribution points/leaderboard remain separate from Follow/follower concepts and are not changed by this milestone
+- obsolete `currentProfileView` state removed after both private messaging and follow visitor actions were removed
+- public-profile capabilities explicitly continue to report `follow:false`
+- regression tests prevent active Follow controls, fake Follow service APIs, public follower counts or invented demo follower metrics from being reintroduced
+- service-worker cache bumped to V50
+
+A future Follow feature would require an explicit follower relationship collection, idempotent follow/unfollow writes, count consistency strategy, privacy/blocking rules, abuse controls, notification behavior, deletion behavior and production security tests before any UI is enabled.
+
+**Next: Step 24 — Saved Community posts**

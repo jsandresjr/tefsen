@@ -27,7 +27,9 @@ test('public profile model separates public identity from private student worksp
   });
 
   assert.equal(model.publicStats.posts,2);
-  assert.equal(model.publicStats.followers,12);
+  assert.deepEqual(model.publicStats,{posts:2});
+  assert.equal('followers' in model.publicStats,false);
+  assert.equal('following' in model.publicStats,false);
   assert.equal(model.privateWorkspace.passportCompleteness,80);
   assert.equal(model.privateWorkspace.activeJourneys,2);
   assert.equal(model.privateWorkspace.savedOpportunities,4);
@@ -136,6 +138,8 @@ test('public projection removes private account fields from visitor objects',()=
     role:'UNI_STUDENT',
     verified:true,
     points:42,
+    followersCount:77,
+    followingCount:55,
     email:'private@example.org',
     subscriptionActive:true,
     subscriptionPlan:'paid',
@@ -148,6 +152,8 @@ test('public projection removes private account fields from visitor objects',()=
   assert.equal(projected.uid,'student-1');
   assert.equal(projected.fullName,'Alex Student');
   assert.equal(projected.verified,true);
+  assert.equal('followersCount' in projected,false);
+  assert.equal('followingCount' in projected,false);
   assert.equal('email' in projected,false);
   assert.equal('subscriptionActive' in projected,false);
   assert.equal('subscriptionPlan' in projected,false);
