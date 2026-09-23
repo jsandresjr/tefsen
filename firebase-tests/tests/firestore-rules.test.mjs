@@ -161,6 +161,28 @@ test('Private user account document is readable only by its owner or admin', asy
   await assertFails(deleteDoc(doc(owner,'users','user-a')));
 });
 
+test('Owner account creation cannot seed privileged or subscription fields', async () => {
+  const owner=env.authenticatedContext('user-c').firestore();
+  const valid={
+    uid:'user-c',
+    email:'user-c@example.test',
+    fullName:'New Student',
+    displayName:'New Student',
+    username:'',
+    bio:'',
+    role:'student',
+    profileImageUrl:'',
+    photoURL:'',
+    verified:false,
+    createdAt:123,
+    updatedAt:123
+  };
+  await assertSucceeds(setDoc(doc(owner,'users','user-c'),valid));
+  await assertFails(setDoc(doc(owner,'users','user-d'),{...valid,uid:'user-d'}));
+  await assertFails(setDoc(doc(owner,'users','user-c-2'),{...valid,uid:'user-c-2',role:'ADMIN'}));
+  await assertFails(setDoc(doc(owner,'users','user-c-3'),{...valid,uid:'user-c-3',subscriptionActive:true}));
+});
+
 test('Public profile exposes only the dedicated safe public record', async () => {
   const owner=env.authenticatedContext('user-a').firestore();
   const other=env.authenticatedContext('user-b').firestore();
