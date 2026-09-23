@@ -1,4 +1,4 @@
-name: Tefsen Web V1 Firestore Rules
+name: Tefsen Web V1 Firebase Security
 
 on:
   pull_request:
@@ -49,7 +49,7 @@ permissions:
   contents: read
 
 jobs:
-  firestore-rules:
+  firebase-security:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
@@ -86,8 +86,9 @@ jobs:
           node --check ../app/js/services/public-profile-record-service.js
           node --check ../app/js/services/global-search-service.js
           node --check ../app/js/services/opportunity-service.js
+          node --check ../app/js/services/app-check-readiness-service.js
           node --check ../app/js/store.js
           node --check ../app/sw.js
 
-      - name: Run Firestore emulator security tests
+      - name: Run Firestore and Storage emulator security tests
         run: npm run test:emulator
