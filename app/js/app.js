@@ -27,7 +27,8 @@ import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfile
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
-  buildCommunityHomeModel, buildSubjectCommunities, buildSubjectCommunityModel, buildUniversityCommunities,
+  buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
+  buildUniversityCommunities, buildUniversityCommunityModel,
   subjectCommunityData, universityCommunityData, intakeCommunityData
 } from './services/community-service.js';
 import {
@@ -958,35 +959,303 @@ async function renderSubjectCommunity(subjectName) {
   }
 }
 
+function community17OpportunityCard(item, label='LINKED OPPORTUNITY') {
+  const levels = Array.isArray(item.studyLevels) ? item.studyLevels : (item.studyLevel ? [item.studyLevel] : []);
+  return `<button class="community17-opportunity-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
+    <div class="community17-opportunity-top"><span>${escapeHTML(label)}</span><small>${escapeHTML(item.fundingType || 'Funding varies')}</small></div>
+    <h3>${escapeHTML(item.title || 'Opportunity')}</h3>
+    <p>${escapeHTML(item.provider || item.providerName || item.university || 'Provider')}</p>
+    <div class="community17-opportunity-meta">
+      ${item.country ? `<span>${escapeHTML(item.country)}</span>` : ''}
+      ${levels.slice(0,2).map(level => `<span>${escapeHTML(level)}</span>`).join('')}
+      ${item.intake ? `<span>${escapeHTML(item.intake)}</span>` : ''}
+    </div>
+    <small class="community17-open">Review opportunity →</small>
+  </button>`;
+}
+
+function community17OutcomeCard(post) {
+  return `<button class="community17-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}">
+    <span>${post.postType === 'success_story' ? 'SUCCESS STORY' : 'JOURNEY STORY'}</span>
+    <h3>${escapeHTML(post.title || 'Student experience')}</h3>
+    <p>${escapeHTML((post.content || '').slice(0,160))}</p>
+    <small>Student-shared experience →</small>
+  </button>`;
+}
+
+function community17UnansweredMarkup(data, contextLabel) {
+  if (!data.unanswered.length) {
+    return `<section class="community17-calm-note">${icon('check',17)} <span>No unanswered public discussions in this ${escapeHTML(contextLabel)} right now.</span></section>`;
+  }
+  return `<section class="community17-unanswered">
+    <header><div><span class="opportunity-kicker">NEEDS A RESPONSE</span><h2>Questions with no public replies yet</h2><p>Help when you can add useful, grounded knowledge—not guesses.</p></div><span>${data.counts.unanswered}</span></header>
+    <div>
+      ${data.unanswered.slice(0,4).map(post => `<button type="button" data-route="post/${encodeURIComponent(post.id)}">
+        <strong>${escapeHTML(post.title || (post.content || '').slice(0,120) || 'Student question')}</strong>
+        <small>${formatCount(post.likeCount || 0)} likes · ${formatCount(post.saveCount || 0)} saves · no public replies</small>
+        <span>Open →</span>
+      </button>`).join('')}
+    </div>
+  </section>`;
+}
+
 async function renderUniversityCommunity(universityName) {
   const university = String(universityName || '').trim();
-  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university || 'University')}</h1><p>Loading university community…</p></div></header><div class="loading-card"></div>`, { wide:true });
-  const opportunities = await getOpportunities(state.mode).catch(() => []);
-  const data = universityCommunityData(university, state.posts, opportunities);
-  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="explore">${icon('back',17)} Community</button>
-    <div class="community-detail-layout" style="margin-top:14px">
-      <main>
-        <section class="community-hero"><span class="opportunity-kicker">UNIVERSITY COMMUNITY</span><h1>${escapeHTML(data.name)}</h1><p>${data.countries.length ? escapeHTML(data.countries.join(', ')) : 'Student community'} · ${data.opportunities.length} linked opportunities · ${data.posts.length} public posts.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(data.name)}">Ask this community</button><button class="btn btn-secondary" data-share-success data-prefill-university="${escapeHTML(data.name)}">Share a success</button></div></section>
-        <header class="page-head"><div><h2 style="margin:0">Student posts</h2></div></header>
-        <div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No university posts yet','Start a useful university discussion or share an outcome.')}</div>
-      </main>
-      <aside class="community-side">
-        <section class="journey-panel"><h2>Linked opportunities</h2>${communityOpportunityList(data.opportunities)}</section>
-        <section class="journey-panel"><h2>Intakes</h2><div class="community-compact-list">${data.intakes.length ? data.intakes.map(intake => `<button class="community-compact-item" type="button" style="text-align:left;color:inherit;cursor:pointer" data-route="intake/${encodeURIComponent(data.name)}/${encodeURIComponent(intake)}"><h4>${escapeHTML(intake)}</h4><p>Open intake community</p></button>`).join('') : '<p style="color:var(--muted)">No intake groups yet.</p>'}</div></section>
-        <div class="community-banner">Official university/provider pages remain authoritative for admissions, fees, visas and scholarship requirements.</div>
-      </aside>
-    </div>`;
-  renderShell(content, { wide:true });
+  renderShell(`<div class="community17-page"><section class="community17-hero loading"><span class="opportunity-kicker">UNIVERSITY COMMUNITY</span><h1>${escapeHTML(university || 'University')}</h1><p>Loading public discussions, intakes and linked opportunities…</p></section></div>`, { wide:true, right:false });
+
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const data = buildUniversityCommunityModel(university, state.posts, opportunities);
+
+    const discussions = data.discussions.length
+      ? data.discussions.map(postCard).join('')
+      : `<section class="community17-empty"><div>${icon('comment',22)}</div><h3>No public university discussions yet.</h3><p>Start with a useful question about study, campus preparation, programs or student experience without posting private application details.</p><button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">Start a university discussion</button></section>`;
+
+    const outcomes = data.outcomes.length
+      ? data.outcomes.slice(0,6).map(community17OutcomeCard).join('')
+      : `<section class="community17-inline-empty"><b>No public outcomes for this university yet.</b><span>Outcome stories appear only when students choose to publish them.</span></section>`;
+
+    const intakeCards = data.intakeSummaries.length
+      ? data.intakeSummaries.map(row => `<button class="community17-intake-card" type="button" data-route="intake/${encodeURIComponent(data.name)}/${encodeURIComponent(row.name)}">
+          <div><span>INTAKE SPACE</span><h3>${escapeHTML(row.name)}</h3><p>${row.discussionCount} discussion${row.discussionCount===1?'':'s'} · ${row.outcomeCount} outcome${row.outcomeCount===1?'':'s'}</p></div>
+          <div><strong>${row.opportunityCount || '—'}</strong><small>intake-linked opportunities</small></div>
+        </button>`).join('')
+      : `<section class="community17-inline-empty"><b>No intake spaces yet.</b><span>Intake communities appear when public student posts or linked opportunity data identifies an intake.</span></section>`;
+
+    const subjectLinks = data.subjects.length
+      ? data.subjects.map(subject => `<button type="button" data-route="subject/${encodeURIComponent(subject)}">${escapeHTML(subject)} <span>→</span></button>`).join('')
+      : '<p>No linked subject data yet.</p>';
+
+    const countryChips = data.countries.length
+      ? data.countries.map(country => `<span>${escapeHTML(country)}</span>`).join('')
+      : '<small>No destination data yet.</small>';
+
+    const fundingChips = data.fundingTypes.length
+      ? data.fundingTypes.map(value => `<span>${escapeHTML(value)}</span>`).join('')
+      : '<small>Funding varies by opportunity.</small>';
+
+    const opportunityCards = data.opportunities.length
+      ? data.opportunities.slice(0,8).map(item => community17OpportunityCard(item)).join('')
+      : `<section class="community17-inline-empty"><b>No linked opportunities yet.</b><span>Use this community for public student context, and explore the global opportunity catalogue separately.</span><button class="btn btn-secondary" type="button" data-route="opportunities">Explore opportunities</button></section>`;
+
+    const content = `${demoBanner()}
+      <div class="community17-page">
+        <button class="btn btn-ghost community17-back" type="button" data-route="explore">${icon('back',17)} Community</button>
+
+        <section class="community17-hero">
+          <div class="community17-hero-copy">
+            <span class="opportunity-kicker">UNIVERSITY COMMUNITY</span>
+            <h1>${escapeHTML(data.name)}</h1>
+            <p>A public student space around ${escapeHTML(data.name)} for questions, study context, intake conversations and voluntarily shared outcomes. This is not an official university channel.</p>
+            <div class="community17-actions">
+              <button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">${icon('plus',16)} Ask this community</button>
+              <button class="btn btn-secondary" type="button" data-share-success data-prefill-university="${escapeHTML(data.name)}">Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story data-prefill-university="${escapeHTML(data.name)}">Share selected Journey milestones</button>
+            </div>
+          </div>
+          <aside class="community17-scope">
+            <span>PUBLIC STUDENT SPACE</span>
+            <div><b>Student context</b><small>Questions, study experiences, preparation and useful peer knowledge.</small></div>
+            <div><b>Not an official channel</b><small>Admissions, fees, funding, visa and enrollment requirements must be confirmed with official sources.</small></div>
+            <div><b>Keep applications private</b><small>Do not post application IDs, passport/visa details, addresses, booking references or private documents.</small></div>
+          </aside>
+        </section>
+
+        <section class="community17-stats" aria-label="${escapeHTML(data.name)} community summary">
+          <article><strong>${data.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${data.counts.opportunities || '—'}</strong><span>Linked opportunities</span></article>
+          <article><strong>${data.counts.intakes || '—'}</strong><span>Intake spaces</span></article>
+          <article><strong>${data.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
+        </section>
+
+        <div class="community17-layout">
+          <main class="community17-main">
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>Student conversations</h2><p>${escapeHTML(data.rankingNote)}</p></div>
+                <button class="btn btn-secondary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">Start discussion</button>
+              </header>
+              <div class="community17-feed">${discussions}</div>
+            </section>
+
+            ${community17UnansweredMarkup(data,'university community')}
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">INTAKES</span><h2>Find your intake space</h2><p>Intake pages narrow public student discussion to a specific intake without exposing private application or travel records.</p></div>
+              </header>
+              <div class="community17-intakes">${intakeCards}</div>
+            </section>
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences around ${escapeHTML(data.name)}</h2><p>Student stories provide context, not proof of current admission, funding or visa requirements.</p></div>
+              </header>
+              <div class="community17-outcomes">${outcomes}</div>
+            </section>
+          </main>
+
+          <aside class="community17-side">
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">DISCOVERY CONTEXT</span>
+              <h2>What connects here</h2>
+              <div class="community17-side-group"><b>Countries</b><div class="community17-chips">${countryChips}</div></div>
+              <div class="community17-side-group"><b>Funding types</b><div class="community17-chips">${fundingChips}</div></div>
+            </section>
+
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">SUBJECTS</span>
+              <h2>Linked study areas</h2>
+              <div class="community17-link-list">${subjectLinks}</div>
+            </section>
+
+            <section class="community17-trust">
+              ${icon('info',17)}
+              <div><b>Official sources remain authoritative</b><p>${escapeHTML(data.sourceNote)}</p></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">OPPORTUNITIES</span><h2>Paths linked to ${escapeHTML(data.name)}</h2><p>Use these for discovery, then verify current requirements on the official provider or university source.</p></div>
+            <button class="btn btn-secondary" type="button" data-route="opportunities">Open full catalogue</button>
+          </header>
+          <div class="community17-opportunities">${opportunityCards}</div>
+        </section>
+      </div>`;
+
+    renderShell(content, { wide:true, right:false });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','University community unavailable','Please try again.')}`, { wide:true, right:false });
+  }
 }
 
 async function renderIntakeCommunity(universityName, intakeName) {
-  const university=String(universityName||'').trim(), intake=String(intakeName||'').trim();
-  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university)}</h1><p>Loading ${escapeHTML(intake)} intake community…</p></div></header><div class="loading-card"></div>`, { wide:true });
-  const opportunities = await getOpportunities(state.mode).catch(() => []);
-  const data = intakeCommunityData(university,intake,state.posts,opportunities);
-  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="university/${encodeURIComponent(university)}">${icon('back',17)} ${escapeHTML(university)}</button>
-    <div class="community-detail-layout" style="margin-top:14px"><main><section class="community-hero"><span class="opportunity-kicker">INTAKE COMMUNITY</span><h1>${escapeHTML(intake)}</h1><p>${escapeHTML(university)} · connect around preparation, orientation and student questions without exposing private application or travel data.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(university)}" data-community-intake="${escapeHTML(intake)}">Ask / share in this intake</button></div></section><header class="page-head"><div><h2 style="margin:0">Intake posts</h2></div></header><div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No intake posts yet','Start the first useful discussion for this intake.')}</div></main><aside class="community-side"><section class="journey-panel"><h2>Relevant opportunities</h2>${communityOpportunityList(data.opportunities)}</section><div class="community-banner">Do not post passport numbers, application IDs, booking references, exact addresses or other sensitive personal information.</div></aside></div>`;
-  renderShell(content,{wide:true});
+  const university=String(universityName||'').trim();
+  const intake=String(intakeName||'').trim();
+  renderShell(`<div class="community17-page"><section class="community17-hero loading intake"><span class="opportunity-kicker">INTAKE COMMUNITY</span><h1>${escapeHTML(intake || 'Intake')}</h1><p>Loading public intake context for ${escapeHTML(university || 'University')}…</p></section></div>`, { wide:true, right:false });
+
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const data = buildIntakeCommunityModel(university,intake,state.posts,opportunities);
+
+    const discussions = data.discussions.length
+      ? data.discussions.map(postCard).join('')
+      : `<section class="community17-empty"><div>${icon('comment',22)}</div><h3>No public intake discussions yet.</h3><p>Start a useful discussion for this intake without sharing private application, identity, booking or travel details.</p><button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">Start intake discussion</button></section>`;
+
+    const outcomes = data.outcomes.length
+      ? data.outcomes.slice(0,6).map(community17OutcomeCard).join('')
+      : `<section class="community17-inline-empty"><b>No public outcomes for this intake yet.</b><span>Stories appear only when students choose to publish intake-specific experiences.</span></section>`;
+
+    const subjectLinks = data.subjects.length
+      ? data.subjects.map(subject => `<button type="button" data-route="subject/${encodeURIComponent(subject)}">${escapeHTML(subject)} <span>→</span></button>`).join('')
+      : '<p>No intake-specific subject data yet.</p>';
+
+    const exactOpportunities = data.opportunities.length
+      ? data.opportunities.slice(0,8).map(item => community17OpportunityCard(item,'INTAKE-LINKED OPPORTUNITY')).join('')
+      : `<section class="community17-inline-empty"><b>No opportunity is explicitly linked to this intake yet.</b><span>Do not assume a general university opportunity applies to this intake. Verify the current intake on the official provider source.</span></section>`;
+
+    const generalOpportunities = data.generalUniversityOpportunities.length
+      ? data.generalUniversityOpportunities.slice(0,6).map(item => community17OpportunityCard(item,'UNIVERSITY OPPORTUNITY · INTAKE NOT SPECIFIED')).join('')
+      : `<section class="community17-inline-empty"><b>No general university opportunities without an intake label.</b><span>Only exact intake matches are treated as intake-linked above.</span></section>`;
+
+    const countryChips = data.countries.length
+      ? data.countries.map(country => `<span>${escapeHTML(country)}</span>`).join('')
+      : '<small>No country context stored yet.</small>';
+
+    const content = `${demoBanner()}
+      <div class="community17-page community17-intake-page">
+        <button class="btn btn-ghost community17-back" type="button" data-route="university/${encodeURIComponent(data.university)}">${icon('back',17)} ${escapeHTML(data.university)}</button>
+
+        <section class="community17-hero intake">
+          <div class="community17-hero-copy">
+            <span class="opportunity-kicker">INTAKE COMMUNITY</span>
+            <h1>${escapeHTML(data.intake)}</h1>
+            <p>${escapeHTML(data.university)} · a public student space for intake-specific questions, preparation context and voluntarily shared experiences. It does not expose or import anyone’s private Tefsen Journey.</p>
+            <div class="community17-actions">
+              <button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">${icon('plus',16)} Ask or share in this intake</button>
+              <button class="btn btn-secondary" type="button" data-share-success data-prefill-university="${escapeHTML(data.university)}" data-prefill-intake="${escapeHTML(data.intake)}">Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story data-prefill-university="${escapeHTML(data.university)}" data-prefill-intake="${escapeHTML(data.intake)}">Share selected Journey milestones</button>
+            </div>
+          </div>
+          <aside class="community17-scope">
+            <span>INTAKE-SPECIFIC · PUBLIC</span>
+            <div><b>Discuss public preparation</b><small>Orientation, study planning, program questions and student context.</small></div>
+            <div><b>Exact intake matching</b><small>Only opportunities carrying this intake label appear as intake-linked opportunities.</small></div>
+            <div><b>Protect sensitive data</b><small>${escapeHTML(data.privacyNote)}</small></div>
+          </aside>
+        </section>
+
+        <section class="community17-stats" aria-label="${escapeHTML(data.intake)} intake community summary">
+          <article><strong>${data.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${data.counts.opportunities || '—'}</strong><span>Exact intake opportunities</span></article>
+          <article><strong>${data.counts.subjects || '—'}</strong><span>Linked subjects</span></article>
+          <article><strong>${data.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
+        </section>
+
+        <div class="community17-layout">
+          <main class="community17-main">
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>${escapeHTML(data.intake)} conversations</h2><p>${escapeHTML(data.rankingNote)}</p></div>
+                <button class="btn btn-secondary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">Start discussion</button>
+              </header>
+              <div class="community17-feed">${discussions}</div>
+            </section>
+
+            ${community17UnansweredMarkup(data,'intake')}
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences from this intake</h2><p>Voluntary public stories only. They do not establish current requirements or predict another student's result.</p></div>
+              </header>
+              <div class="community17-outcomes">${outcomes}</div>
+            </section>
+          </main>
+
+          <aside class="community17-side">
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">INTAKE CONTEXT</span>
+              <h2>Stored public context</h2>
+              <div class="community17-side-group"><b>Countries</b><div class="community17-chips">${countryChips}</div></div>
+            </section>
+
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">SUBJECTS</span>
+              <h2>Linked study areas</h2>
+              <div class="community17-link-list">${subjectLinks}</div>
+            </section>
+
+            <section class="community17-trust">
+              ${icon('info',17)}
+              <div><b>Verify every intake detail</b><p>${escapeHTML(data.sourceNote)}</p></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">EXACT INTAKE MATCHES</span><h2>Opportunities explicitly linked to ${escapeHTML(data.intake)}</h2><p>These records carry this intake label, but the official provider source still controls current dates, eligibility, funding and application requirements.</p></div>
+          </header>
+          <div class="community17-opportunities">${exactOpportunities}</div>
+        </section>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">UNIVERSITY-WIDE OPPORTUNITIES</span><h2>Intake not specified</h2><p>These are linked to ${escapeHTML(data.university)} but do not carry an intake value. They are intentionally not treated as ${escapeHTML(data.intake)} opportunities.</p></div>
+            <button class="btn btn-secondary" type="button" data-route="university/${encodeURIComponent(data.university)}">University community</button>
+          </header>
+          <div class="community17-opportunities">${generalOpportunities}</div>
+        </section>
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Intake community unavailable','Please try again.')}`, { wide:true, right:false });
+  }
 }
 
 
