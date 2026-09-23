@@ -3163,6 +3163,120 @@ function success18DetailMarkup(post, model, comments) {
   </div>`;
 }
 
+function journey19ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function journey19MonthLabel(value) {
+  const match=/^(\d{4})-(\d{2})$/.exec(String(value||''));
+  if(!match) return String(value||'');
+  const date=new Date(Number(match[1]),Number(match[2])-1,1);
+  return date.toLocaleDateString(undefined,{year:'numeric',month:'short'});
+}
+
+function journey19DetailMarkup(post,model,comments) {
+  const liked=reactionState.liked.has(post.id);
+  const contextLinks=journey19ContextLinks(model);
+
+  const timeline=model.milestones.length
+    ? model.milestones.map((item,index)=>`<article class="journey19-timeline-item">
+        <div class="journey19-timeline-rail"><span></span>${index<model.milestones.length-1?'<i></i>':''}</div>
+        <div class="journey19-timeline-content">
+          <small>${item.month ? escapeHTML(journey19MonthLabel(item.month)) : 'Month not shared'}</small>
+          <h3>${escapeHTML(item.stage || 'Milestone')}</h3>
+          ${item.note ? `<p>${nl2br(item.note)}</p>` : '<p class="muted">No additional public note.</p>'}
+        </div>
+      </article>`).join('')
+    : '<div class="journey19-no-milestones">No public milestones were included in this story.</div>';
+
+  return `<div class="journey19-reader">
+    <button class="btn btn-ghost journey19-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="journey19-detail">
+      <header class="journey19-hero">
+        <div class="journey19-hero-main">
+          <span class="story-type journey">Journey story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>A student-selected public timeline. It is not the student's private Tefsen Journey record, official admissions guidance or a recommended path for someone else.</p>
+          <div class="journey19-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified,model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="journey19-hero-aside">
+          <span>WHAT THIS SHOWS</span>
+          <div><b>Selected milestones only</b><small>The student chose which milestones and notes to publish.</small></div>
+          <div><b>Month-level timing</b><small>Exact private dates are not requested by the public Journey-story form.</small></div>
+          <div><b>Not a blueprint</b><small>Timelines and requirements can differ by student, provider, country and intake.</small></div>
+        </aside>
+      </header>
+
+      <section class="journey19-context-strip">
+        <div><small>Subject</small><b>${escapeHTML(model.subject || 'Not specified')}</b></div>
+        <div><small>University</small><b>${escapeHTML(model.university || 'Not specified')}</b></div>
+        <div><small>Intake</small><b>${escapeHTML(model.intake || 'Not specified')}</b></div>
+        <div><small>Public milestones</small><b>${model.milestones.length}</b></div>
+      </section>
+
+      <div class="journey19-body-layout">
+        <main class="journey19-main">
+          <section class="journey19-intro">
+            <span class="opportunity-kicker">STORY CONTEXT</span>
+            <div class="journey19-intro-copy">${nl2br(model.content || 'This student did not add a longer introduction.')}</div>
+          </section>
+
+          <section class="journey19-timeline-section">
+            <header><span class="opportunity-kicker">PUBLIC TIMELINE</span><h2>Milestones this student chose to share</h2><p>These entries are a public story, not a live view of the student's private Journey workspace.</p></header>
+            <div class="journey19-timeline">${timeline}</div>
+          </section>
+
+          ${model.tags.length ? `<div class="tag-row journey19-tags">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="journey19-reader-side">
+          <section class="journey19-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Private Journey stays private</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card">
+            ${icon('info',17)}
+            <div><b>Personal timeline, not a recommendation</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current requirements</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="journey19-context-links">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this public story</h2><p>Community spaces provide student context. Official institution/provider sources control formal requirements.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions journey19-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like Journey story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="journey19-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Ask about the public story or add helpful context. Do not request private application, identity, visa, travel or financial details.</p></div></header>
+      <form class="journey19-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="journey19-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
 async function renderPostDetail(postId) {
   stopComments?.(); stopComments = null;
   let post = state.posts.find(p => p.id === postId);
@@ -3192,6 +3306,27 @@ async function renderPostDetail(postId) {
     stopComments=subscribeComments(state.mode,postId,comments=>{
       currentComments=comments;
       drawSuccess();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
+  if (post.postType === 'journey_story') {
+    const model=buildJourneyStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=String(state.profile?.role || '').trim().toLowerCase()==='admin';
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Journey story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawJourney=()=>{
+      renderShell(journey19DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawJourney();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawJourney();
     },e=>toast(humanError(e),'error'));
     return;
   }
