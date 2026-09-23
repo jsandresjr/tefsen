@@ -233,6 +233,13 @@ function cleanPublicText(value, max = 180) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, max);
 }
 
+function isSaveablePublicPost(mode, post) {
+  if (!post) return false;
+  if (mode === 'demo') return isPublicProfileActivity(post);
+  return String(post.status || '').toLowerCase() === 'published'
+    && String(post.visibility || '').toLowerCase() === 'public';
+}
+
 function normalizePublicPostMetadata(raw = {}) {
   const allowedTypes = new Set(['discussion', 'success_story', 'journey_story']);
   const postType = allowedTypes.has(raw.postType) ? raw.postType : 'discussion';
@@ -651,7 +658,7 @@ export async function getSavedCommunityPosts(mode, userId, knownPosts = []) {
     if(!post){
       post=await getPost(mode,postId).catch(()=>null);
     }
-    if(!post || !isPublicProfileActivity(post)) return null;
+    if(!post || !isSaveablePublicPost(mode,post)) return null;
 
     return {
       ...post,
@@ -729,7 +736,7 @@ export async function toggleSave(mode, userId, postId) {
 
   if (mode === 'demo') {
     const post=demoPosts.find(row=>String(row.id)===canonicalPostId);
-    if(!post || !isPublicProfileActivity(post)) throw new Error('Only public Community posts can be saved.');
+    if(!post || !isSaveablePublicPost(mode,post)) throw new Error('Only public Community posts can be saved.');
     const saved=readSavedCache(userId);
     const active=saved.has(canonicalPostId);
     updateSavedCache(userId,canonicalPostId,!active,Date.now());
@@ -747,7 +754,7 @@ export async function toggleSave(mode, userId, postId) {
   }
 
   const post=await getPost(mode,canonicalPostId).catch(()=>null);
-  if(!post || !isPublicProfileActivity(post)) throw new Error('Only public Community posts can be saved.');
+  if(!post || !isSaveablePublicPost(mode,post)) throw new Error('Only public Community posts can be saved.');
 
   const savedAtMillis=Date.now();
   await setDoc(saveRef,{
