@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {
   buildProfilePresentation,
   publicProfileCompletion,
-  validatePublicProfileDraft
+  validatePublicProfileDraft,
+  resolveProfilePhotoForUpdate
 } from '../../app/js/services/profile-presentation-service.js';
 
 test('public profile completion is separate from Student Passport completion',()=>{
@@ -92,4 +93,29 @@ test('username and bio remain optional with warnings',()=>{
   assert.equal(result.valid,true);
   assert.equal(result.warnings.some(item=>item.code==='missing_username'),true);
   assert.equal(result.warnings.some(item=>item.code==='missing_bio'),true);
+});
+
+
+test('explicitly removed stored photo stays removed instead of restoring auth photo',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {profileImageUrl:'',photoURL:''},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'');
+});
+
+test('auth photo is used only when no stored photo preference exists',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {fullName:'A Student'},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'https://accounts.example.org/google-photo.jpg');
+});
+
+test('stored profile photo wins over auth photo',()=>{
+  const photo=resolveProfilePhotoForUpdate(
+    {profileImageUrl:'https://cdn.example.org/custom.jpg'},
+    'https://accounts.example.org/google-photo.jpg'
+  );
+  assert.equal(photo,'https://cdn.example.org/custom.jpg');
 });
