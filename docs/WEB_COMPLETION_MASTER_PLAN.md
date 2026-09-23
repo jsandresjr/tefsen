@@ -366,4 +366,28 @@ without encountering dead ends, fake controls, disabled placeholder features, br
 - desktop/tablet/mobile university and intake redesign added
 - service-worker cache bumped to V44
 
-**Next: Step 18 — Success story publishing and reading experience**
+**Step 18: Success story publishing and reading experience — complete on branch `tefsen-web-completion-18-success-stories`**
+- dedicated success-story validation/model service added instead of keeping publishing rules only inside UI handlers
+- required institution, scholarship/program/offer and subject fields are validated before publishing
+- success narrative requires useful minimum context instead of accepting near-empty outcome posts
+- headline falls back safely to the opportunity name when omitted
+- supported funding labels are normalized before storage
+- obvious sensitive-identifier phrases such as application IDs, passport/visa numbers, booking references, financial account/card numbers, identity numbers and home/residential addresses are blocked before publishing
+- sensitive-text detection is explicitly a heuristic safety layer, not comprehensive data-loss prevention; students are still instructed to review public content before publishing
+- data-service enforces the same success-story validation as a defense-in-depth check before writes
+- success publishing UI now explains what happened / useful context / private-data boundaries before the form
+- public-story warning explains that structured facts and narrative may appear across matching Community/subject/university/intake surfaces
+- success-story feed previews are compact instead of rendering every structured fact and full trust banner in ordinary post cards
+- success-story posts now open a dedicated reader instead of the generic discussion detail layout
+- dedicated reader separates author, outcome facts, narrative, context navigation, trust guidance and community replies
+- reader links back to matching subject, university and intake community spaces when those public context fields exist
+- reader explicitly states that a student outcome is not proof of current eligibility, funding, admission requirements or future outcomes
+- reader delegates current scholarship/university/funding/deadline/visa/enrollment requirements to official provider or institution sources
+- reader explains that private Tefsen Journey data and private documents are not part of the public story
+- non-public success stories are blocked at the app reader layer for non-owners/non-admins; production network-level enforcement remains part of Step 35
+- dedicated Success-story regression tests added
+- desktop/tablet/mobile publishing and reader redesign added
+- CI now watches the success-story and data-service paths
+- service-worker cache bumped to V45
+
+**Next: Step 19 — Journey story publishing and reading experience**
