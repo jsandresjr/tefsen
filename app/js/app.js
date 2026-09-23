@@ -2426,10 +2426,12 @@ async function renderJourneyDetail(opportunityId) {
     const completedTasks = model.tasks.completed;
     const nextTask = model.tasks.next;
 
-    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask ? 'next' : ''}">
-      <button class="journey-task-check" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : ''}</button>
+    const taskMarkup = task => `<div class="journey-detail-task ${task.completed ? 'done' : ''} ${task === nextTask ? 'next' : ''} ${model.terminal ? 'readonly' : ''}">
+      ${model.terminal
+        ? `<span class="journey-task-check static" aria-hidden="true">${task.completed ? '✓' : '○'}</span>`
+        : `<button class="journey-task-check" type="button" data-journey-task-toggle="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}">${task.completed ? '✓' : ''}</button>`}
       <div><b>${escapeHTML(task.label)}</b><small>${task.source === 'system' ? 'From structured opportunity requirements' : 'Your private custom task'}</small></div>
-      ${task.source === 'custom' ? `<button class="journey-task-remove" type="button" data-journey-task-delete="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}">Remove</button>` : ''}
+      ${!model.terminal && task.source === 'custom' ? `<button class="journey-task-remove" type="button" data-journey-task-delete="${escapeHTML(task.id)}" data-opportunity-id="${escapeHTML(opportunityId)}">Remove</button>` : ''}
     </div>`;
 
     const deadlinePanel = model.preSubmission
