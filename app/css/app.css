@@ -391,10 +391,6 @@ img { max-width: 100%; }
   .auth-page { grid-template-columns: 1fr; }
   .auth-art { display: none; }
   .auth-panel { min-height: 100vh; border-left: 0; }
-  .messages-layout { grid-template-columns: 1fr; height: calc(100vh - var(--top) - 90px); }
-  .conversation-list { border-right: 0; }
-  .messages-layout.chat-open .conversation-list { display: none; }
-  .messages-layout:not(.chat-open) .chat-pane { display: none; }
   .settings-grid { grid-template-columns: 1fr; }
   .settings-nav { display: flex; overflow-x: auto; }
   .settings-nav button { white-space: nowrap; width: auto; }
