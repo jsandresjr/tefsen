@@ -266,8 +266,7 @@ export function normalizeUser(raw = {}, id = '') {
     subscriptionPlan: subscription.plan,
     subscriptionExpiresAt: subscription.expiresAt,
     username: raw.username || raw.handle || (email ? String(email).split('@')[0] : ''),
-    bio: raw.bio || raw.about || '',
-    points: Number(raw.points || raw.score || raw.reputation || 0)
+    bio: raw.bio || raw.about || ''
   };
 }
 
@@ -1078,19 +1077,6 @@ export async function markNotificationRead(mode, userId, notification = {}) {
   return markNotificationsRead(mode, userId, [notification]);
 }
 
-export async function getLeaderboard(mode) {
-  if (mode === 'demo') {
-    return [...DEMO_USERS]
-      .sort((a, b) => Number(b.points || 0) - Number(a.points || 0))
-      .map(row => projectPublicUser(normalizeUser(row, row.uid || row.id), row.uid || row.id));
-  }
-
-  const snap = await getDocs(query(collection(db, C.users), limit(60)));
-  return snap.docs
-    .map(row => projectPublicUser(normalizeUser(row.data(), row.id), row.id))
-    .sort((a, b) => b.points - a.points)
-    .slice(0, 30);
-}
 
 function searchCandidateMatches(term, values = []) {
   const normalizeSearch = value => String(value || '')
