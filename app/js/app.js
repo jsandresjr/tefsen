@@ -27,6 +27,7 @@ import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfile
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
 import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
+import { buildGlobalSearchModel } from './services/global-search-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
   buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
@@ -3745,14 +3746,146 @@ async function renderAdmin() {
   }
 }
 
+function global20KindLabel(kind='') {
+  return ({
+    person:'Student',
+    discussion:'Discussion',
+    success:'Success story',
+    journey:'Journey story',
+    opportunity:'Opportunity',
+    subject:'Subject',
+    university:'University',
+    intake:'Intake'
+  })[kind] || 'Result';
+}
+
+function global20ResultMarkup(result) {
+  const person=result.kind==='person';
+  const badge=person
+    ? avatar({fullName:result.title,photoUrl:result.photoUrl},'sm')
+    : `<span class="global20-result-mark ${escapeHTML(result.kind)}">${escapeHTML(global20KindLabel(result.kind).slice(0,3).toUpperCase())}</span>`;
+  const verification=result.kind==='opportunity' && result.verified
+    ? '<span class="global20-verified">Verified source record</span>'
+    : '';
+  return `<button class="global20-result" type="button" data-route="${escapeHTML(result.route)}">
+    <span class="global20-result-visual">${badge}</span>
+    <span class="global20-result-copy">
+      <span class="global20-result-type">${escapeHTML(global20KindLabel(result.kind))}${verification}</span>
+      <strong>${escapeHTML(result.title)}</strong>
+      ${result.subtitle ? `<small>${escapeHTML(result.subtitle)}</small>` : ''}
+      ${result.excerpt ? `<p>${escapeHTML(result.excerpt)}</p>` : ''}
+    </span>
+    <span class="global20-result-open">→</span>
+  </button>`;
+}
+
+function global20Section(title,eyebrow,rows,description='') {
+  if(!rows?.length) return '';
+  return `<section class="global20-section">
+    <header class="global20-section-head">
+      <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2>${description ? `<p>${escapeHTML(description)}</p>` : ''}</div>
+      <span>${rows.length} result${rows.length===1?'':'s'}</span>
+    </header>
+    <div class="global20-results">${rows.slice(0,8).map(global20ResultMarkup).join('')}</div>
+  </section>`;
+}
+
+function global20DiscoveryMarkup(model) {
+  const subjects=model.discover.subjects||[];
+  const universities=model.discover.universities||[];
+  const opportunities=model.discover.opportunities||[];
+  return `<div class="global20-discovery">
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">START WITH A SUBJECT</span><h2>Explore learning spaces</h2><p>Open a subject community to see public student context and linked opportunities.</p></header>
+      <div class="global20-discovery-grid">
+        ${subjects.length ? subjects.map(row=>`<button type="button" data-route="subject/${encodeURIComponent(row.name)}"><span>SUBJECT</span><b>${escapeHTML(row.name)}</b><small>${row.postCount} public posts · ${row.opportunityCount} opportunities</small></button>`).join('') : '<div class="global20-discovery-empty">Subject spaces appear as public Community and opportunity data grows.</div>'}
+      </div>
+    </section>
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">UNIVERSITY SPACES</span><h2>Browse student context</h2><p>Community information is student context, not an official university channel.</p></header>
+      <div class="global20-discovery-grid">
+        ${universities.length ? universities.map(row=>`<button type="button" data-route="university/${encodeURIComponent(row.name)}"><span>UNIVERSITY</span><b>${escapeHTML(row.name)}</b><small>${escapeHTML((row.countries||[]).slice(0,2).join(' · ') || 'Global community')}</small></button>`).join('') : '<div class="global20-discovery-empty">University spaces appear when public community or opportunity records link to them.</div>'}
+      </div>
+    </section>
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">OPPORTUNITIES</span><h2>Discover verified-source paths</h2><p>Open a record to review eligibility context and the official provider source.</p></header>
+      <div class="global20-discovery-grid opportunities">
+        ${opportunities.length ? opportunities.map(item=>`<button type="button" data-route="opportunity/${encodeURIComponent(item.id)}"><span>OPPORTUNITY</span><b>${escapeHTML(item.title)}</b><small>${escapeHTML([item.provider,item.country].filter(Boolean).join(' · '))}</small></button>`).join('') : '<div class="global20-discovery-empty">No public opportunity records are available for discovery yet.</div>'}
+      </div>
+    </section>
+  </div>`;
+}
+
 async function renderSearch(term = '') {
-  state.searchQuery = term;
-  renderShell(`<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header><div class="loading-card"></div>`);
-  currentSearch = term ? await searchAll(state.mode, term).catch(()=>({users:[],posts:[]})) : {users:[],posts:[]};
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header>
-    ${currentSearch.users.length ? `<section class="panel section-card" style="margin-bottom:16px"><div class="panel-title"><h2>People</h2><small>${currentSearch.users.length} results</small></div><div class="search-results">${currentSearch.users.map(u=>`<button class="search-user" type="button" style="width:100%;border:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small style="display:block;color:var(--muted)">${escapeHTML(normalizeRole(u.role))}</small></span></button>`).join('')}</div></section>`:''}
-    <div class="feed-list">${currentSearch.posts.length ? currentSearch.posts.map(postCard).join('') : emptyState('search',term?'No matching discussions':'Start searching','Try a name, subject or question keyword.')}</div>`;
-  renderShell(content);
+  const query=String(term||'').trim().slice(0,120);
+  state.searchQuery=query;
+
+  renderShell(`<div class="global20-page"><section class="global20-hero loading"><span class="opportunity-kicker">GLOBAL SEARCH</span><h1>${query ? `Searching for “${escapeHTML(query)}”` : 'Search across Tefsen'}</h1><p>Looking across public students, Community, opportunities and learning spaces.</p></section></div>`,{wide:true,right:false});
+
+  try{
+    const [rawSearch,opportunities]=await Promise.all([
+      query ? searchAll(state.mode,query).catch(()=>({users:[],posts:[]})) : Promise.resolve({users:[],posts:[]}),
+      getOpportunities(state.mode).catch(()=>[])
+    ]);
+
+    currentSearch=buildGlobalSearchModel({
+      term:query,
+      users:rawSearch.users,
+      posts:state.posts.length ? state.posts : rawSearch.posts,
+      opportunities
+    });
+
+    const countItems=query ? [
+      ['All',currentSearch.counts.all],
+      ['People',currentSearch.counts.people],
+      ['Community',currentSearch.counts.community],
+      ['Opportunities',currentSearch.counts.opportunities],
+      ['Subjects',currentSearch.counts.subjects],
+      ['Universities',currentSearch.counts.universities],
+      ['Intakes',currentSearch.counts.intakes]
+    ] : [];
+
+    const content=`${demoBanner()}
+      <div class="global20-page">
+        <section class="global20-hero">
+          <div>
+            <span class="opportunity-kicker">GLOBAL SEARCH</span>
+            <h1>${query ? `Results for “${escapeHTML(query)}”` : 'Find the right place to continue'}</h1>
+            <p>Search public student profiles, discussions, Success and Journey stories, official-source opportunity records, subjects, universities and intake spaces from one place.</p>
+            <form class="global20-search-form" data-global-search-form>
+              <input class="input" name="q" maxlength="120" value="${escapeHTML(query)}" placeholder="Try Computer Science, scholarship, university, student name…" aria-label="Search Tefsen">
+              <button class="btn btn-primary" type="submit">${icon('search',17)} Search</button>
+            </form>
+          </div>
+          <aside class="global20-scope">
+            <span>WHAT SEARCH INCLUDES</span>
+            <div><b>Public student context</b><small>Public profile identity and published Community content only.</small></div>
+            <div><b>Opportunity discovery</b><small>Public opportunity metadata with official-source trust boundaries.</small></div>
+            <div><b>Community spaces</b><small>Subjects, universities and intake spaces derived from public data.</small></div>
+          </aside>
+        </section>
+
+        ${query ? `<section class="global20-counts" aria-label="Search result counts">${countItems.map(([label,value])=>`<article><strong>${value}</strong><span>${label}</span></article>`).join('')}</section>` : ''}
+
+        ${query ? `
+          <section class="global20-ranking-note">${icon('info',16)}<span>${escapeHTML(currentSearch.rankingNote)}</span></section>
+          ${currentSearch.empty ? `<section class="global20-empty"><div>${icon('search',24)}</div><h2>No public matches for “${escapeHTML(query)}”</h2><p>Try a broader subject, university, country, scholarship name, program, student name or intake.</p><button class="btn btn-secondary" type="button" data-route="search">Clear search</button></section>` : `
+            ${global20Section('Best matching public results','TOP MATCHES',currentSearch.top,'A mixed view across Tefsen. Result order is deterministic text matching, not a recommendation or quality score.')}
+            ${global20Section('People','PUBLIC STUDENTS',currentSearch.people,'Only public profile fields are shown here.')}
+            ${global20Section('Community posts and stories','PUBLIC COMMUNITY',currentSearch.community,'Published discussions and student-shared Success/Journey stories.')}
+            ${global20Section('Opportunities','OFFICIAL-SOURCE DISCOVERY',currentSearch.opportunities,'Open each result to verify eligibility, deadline and application details on the official provider source.')}
+            ${global20Section('Subject spaces','LEARNING COMMUNITIES',currentSearch.subjects)}
+            ${global20Section('University spaces','STUDENT CONTEXT',currentSearch.universities,'These are student community spaces, not official university channels.')}
+            ${global20Section('Intake spaces','INTAKE CONTEXT',currentSearch.intakes,'Intake pages show public student context and exact intake-linked data where available.')}
+          `}`
+          : global20DiscoveryMarkup(currentSearch)}
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Search unavailable','Please try again.')}`,{wide:true,right:false});
+  }
 }
 
 function renderRoute() {
