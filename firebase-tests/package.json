@@ -1,5 +1,5 @@
 {
-  "name": "tefsen-web-v1-firestore-rules-tests",
+  "name": "tefsen-web-v1-firebase-rules-tests",
   "private": true,
   "type": "module",
   "engines": {
