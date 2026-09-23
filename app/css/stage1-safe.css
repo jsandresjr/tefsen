@@ -1,0 +1,74 @@
+/* Stage 1 safe UX additions: no Firebase/data-model changes. */
+html, body { overflow-x: hidden; }
+
+.stage1-share-sheet {
+  width: min(560px, calc(100vw - 24px));
+}
+.stage1-share-sheet .modal-head p {
+  margin: 6px 0 0;
+  color: var(--muted, #9fb1b0);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.stage1-share-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.stage1-share-grid button {
+  min-width: 0;
+  min-height: 82px;
+  padding: 14px;
+  border: 1px solid rgba(126, 190, 187, .18);
+  border-radius: 16px;
+  background: rgba(8, 39, 42, .82);
+  color: var(--text, #eefafa);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, background .16s ease;
+}
+.stage1-share-grid button:hover,
+.stage1-share-grid button:focus-visible {
+  border-color: rgba(34, 244, 166, .55);
+  background: rgba(9, 52, 55, .96);
+  outline: none;
+}
+.stage1-share-grid button:active { transform: scale(.985); }
+.stage1-share-grid span {
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+}
+.stage1-share-grid small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted, #9fb1b0);
+  line-height: 1.35;
+}
+.stage1-toast { pointer-events: none; }
+
+@media (max-width: 900px) {
+  .main-area,
+  .content-wrap,
+  .feed-list,
+  .post-card,
+  .panel { max-width: 100%; }
+  .post-body,
+  .post-body p,
+  .post-body h1,
+  .post-body h2,
+  .post-body h3 { overflow-wrap: anywhere; }
+  .post-image,
+  .post-image-grid img { max-width: 100%; height: auto; }
+  .modal { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px); overflow: auto; }
+}
+
+@media (max-width: 520px) {
+  .stage1-share-grid { grid-template-columns: 1fr; }
+  .stage1-share-grid button { min-height: 68px; }
+  .stage1-share-sheet { width: calc(100vw - 16px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage1-share-grid button { transition: none; }
+}

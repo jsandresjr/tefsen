@@ -7,6 +7,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
 const C = SCHEMA.collections;
+const SEARCH_OPPORTUNITY_SCAN_LIMIT = 180;
 
 function starterDeadlineOpen(item, now = new Date()) {
   const raw = String(item?.deadline || '').trim();
@@ -21,6 +22,40 @@ function currentStarterOpportunities() {
   return STARTER_OPPORTUNITIES
     .filter(item => starterDeadlineOpen(item))
     .map(item => normalizeOpportunity(item, item.id));
+}
+
+function normalizedSourceKey(item) {
+  return String(item?.officialSourceUrl || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\/$/, '');
+}
+
+function normalizedTitleProviderKey(item) {
+  return [
+    String(item?.title || '').trim().toLowerCase(),
+    String(item?.provider || '').trim().toLowerCase()
+  ].join('|');
+}
+
+function mergePublishedWithStarters(liveItems = [], starterItems = currentStarterOpportunities()) {
+  const live = liveItems.map(item => normalizeOpportunity(item, item.id));
+  const liveIds = new Set(live.map(item => String(item.id || '').trim()).filter(Boolean));
+  const liveSources = new Set(live.map(normalizedSourceKey).filter(Boolean));
+  const liveTitleProviders = new Set(live.map(normalizedTitleProviderKey).filter(key => key !== '|'));
+
+  const starterOnly = starterItems.filter(item => {
+    const id = String(item.id || '').trim();
+    const source = normalizedSourceKey(item);
+    const titleProvider = normalizedTitleProviderKey(item);
+
+    if (id && liveIds.has(id)) return false;
+    if (source && liveSources.has(source)) return false;
+    if (titleProvider !== '|' && liveTitleProviders.has(titleProvider)) return false;
+    return true;
+  });
+
+  return [...live, ...starterOnly];
 }
 
 function stringArray(value) {
@@ -78,9 +113,40 @@ export async function getOpportunities(mode) {
     .map(row => normalizeOpportunity(row.data(), row.id))
     .filter(item => item.visibility === 'public');
 
-  if (live.length) return live;
+  return mergePublishedWithStarters(live);
+}
 
-  return currentStarterOpportunities();
+export async function getOpportunitySearchCorpus(mode) {
+  if (mode === 'demo') {
+    const items = DEMO_OPPORTUNITIES.map(item => normalizeOpportunity(item, item.id));
+    return {
+      items,
+      coverage:{ scanned:items.length, limit:SEARCH_OPPORTUNITY_SCAN_LIMIT, complete:true }
+    };
+  }
+
+  const q = query(
+    collection(db, C.opportunities),
+    where('status', '==', 'published'),
+    where('visibility', '==', 'public'),
+    limit(SEARCH_OPPORTUNITY_SCAN_LIMIT + 1)
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.slice(0, SEARCH_OPPORTUNITY_SCAN_LIMIT);
+  const items = docs
+    .map(row => normalizeOpportunity(row.data(), row.id))
+    .filter(item => item.status === 'published' && item.visibility === 'public');
+
+  const merged = mergePublishedWithStarters(items);
+  return {
+    items:merged,
+    coverage:{
+      scanned:docs.length,
+      limit:SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      complete:snap.docs.length <= SEARCH_OPPORTUNITY_SCAN_LIMIT,
+      starterIncluded:true
+    }
+  };
 }
 
 export async function getOpportunityById(mode, opportunityId) {

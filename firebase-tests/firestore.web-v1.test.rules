@@ -16,12 +16,624 @@ service cloud.firestore {
           || request.auth.token.role == "ADMIN");
     }
 
+    match /users/{uid} {
+      function safeOwnerAccountUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ]);
+      }
+
+      function validOwnerAccountCreate() {
+        return request.resource.data.keys().hasAll([
+          "uid",
+          "email",
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "role",
+          "profileImageUrl",
+          "photoURL",
+          "verified",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "uid",
+          "email",
+          "fullName",
+          "displayName",
+          "username",
+          "bio",
+          "role",
+          "profileImageUrl",
+          "photoURL",
+          "verified",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.role == "student"
+        && request.resource.data.verified == false;
+      }
+
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() || (isOwner(uid) && validOwnerAccountCreate());
+      allow update: if isAdmin() || (isOwner(uid) && safeOwnerAccountUpdate());
+      allow delete: if false;
+    }
+
+    match /public_profiles/{uid} {
+      function validPublicProfile() {
+        return request.resource.data.keys().hasAll([
+          "uid",
+          "schemaVersion",
+          "fullName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "uid",
+          "schemaVersion",
+          "fullName",
+          "username",
+          "bio",
+          "profileImageUrl",
+          "photoURL",
+          "updatedAt"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 80
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 40
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 500
+        && request.resource.data.profileImageUrl is string
+        && request.resource.data.profileImageUrl.size() <= 1200
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 1200;
+      }
+
+      allow read: if true;
+      allow create, update: if (isOwner(uid) || isAdmin()) && validPublicProfile();
+      allow delete: if false;
+    }
+
     match /student_passports/{uid} {
       allow read, create, update, delete: if isOwner(uid);
     }
 
     match /journeys/{uid}/opportunities/{opportunityId} {
       allow read, create, update, delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/savedPosts/{postId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.userId == uid
+        && request.resource.data.postId == postId;
+    }
+
+    match /users/{uid}/settings/{settingsId} {
+      function validPreferences() {
+        return settingsId == "preferences"
+          && request.resource.data.keys().hasAll([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "theme",
+            "compactFeed",
+            "reducedMotion",
+            "language",
+            "region",
+            "timeZone",
+            "notificationOpportunityDeadlines",
+            "notificationJourneyReminders",
+            "notificationCommunityActivity",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "theme",
+            "compactFeed",
+            "reducedMotion",
+            "language",
+            "region",
+            "timeZone",
+            "notificationOpportunityDeadlines",
+            "notificationJourneyReminders",
+            "notificationCommunityActivity",
+            "updatedAt"
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.userId == uid
+          && request.resource.data.documentType == "preferences"
+          && request.resource.data.schemaVersion == 1
+          && request.resource.data.theme == "dark"
+          && request.resource.data.language == "en"
+          && request.resource.data.compactFeed is bool
+          && request.resource.data.reducedMotion is bool
+          && request.resource.data.notificationOpportunityDeadlines is bool
+          && request.resource.data.notificationJourneyReminders is bool
+          && request.resource.data.notificationCommunityActivity is bool
+          && request.resource.data.region is string
+          && request.resource.data.region.size() <= 80
+          && request.resource.data.timeZone is string
+          && request.resource.data.timeZone.size() <= 100;
+      }
+
+      allow read, delete: if isOwner(uid) && settingsId == "preferences";
+      allow create, update: if isOwner(uid) && validPreferences();
+    }
+
+    match /users/{uid}/notificationState/{stateId} {
+      function validReadState() {
+        return stateId == "read"
+          && request.resource.data.keys().hasAll([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "readIds",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "uid",
+            "userId",
+            "documentType",
+            "schemaVersion",
+            "readIds",
+            "updatedAt"
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.userId == uid
+          && request.resource.data.documentType == "notification_read_state"
+          && request.resource.data.schemaVersion == 1
+          && request.resource.data.readIds is list
+          && request.resource.data.readIds.size() <= 600;
+      }
+
+      allow read, delete: if isOwner(uid) && stateId == "read";
+      allow create, update: if isOwner(uid) && validReadState();
+    }
+
+    match /notifications/{notificationId} {
+      function notificationOwner(data) {
+        return signedIn()
+          && (
+            (data.keys().hasAny(["userId"]) && data.userId == request.auth.uid)
+            || (data.keys().hasAny(["recipientId"]) && data.recipientId == request.auth.uid)
+          );
+      }
+
+      allow read: if notificationOwner(resource.data);
+      allow update: if notificationOwner(resource.data)
+        && notificationOwner(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "read",
+          "isRead",
+          "readAt",
+          "updatedAt"
+        ]);
+      allow create, delete: if false;
+    }
+
+    match /posts/{postId} {
+      function publicPost() {
+        return resource.data.status == "published"
+          && resource.data.visibility == "public";
+      }
+
+      function parentPostIsPublic() {
+        return get(/databases/$(database)/documents/posts/$(postId)).data.status == "published"
+          && get(/databases/$(database)/documents/posts/$(postId)).data.visibility == "public";
+      }
+
+      function publicProfileExists(uid) {
+        return exists(/databases/$(database)/documents/public_profiles/$(uid));
+      }
+
+      function validWebPostCreate() {
+        return signedIn()
+          && publicProfileExists(request.auth.uid)
+          && request.resource.data.keys().hasAll([
+            "title",
+            "questionTitle",
+            "content",
+            "description",
+            "subject",
+            "tags",
+            "postType",
+            "successData",
+            "publicMilestones",
+            "communityUniversity",
+            "communityIntake",
+            "communitySubject",
+            "imageUrl",
+            "imageUrls",
+            "imageCount",
+            "totalImageBytes",
+            "authorId",
+            "firebaseUid",
+            "userId",
+            "authorName",
+            "authorPhotoUrl",
+            "type",
+            "status",
+            "visibility",
+            "sourcePlatform",
+            "webPost",
+            "likeCount",
+            "commentCount",
+            "answerCount",
+            "saveCount",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "title",
+            "questionTitle",
+            "content",
+            "description",
+            "subject",
+            "tags",
+            "postType",
+            "successData",
+            "publicMilestones",
+            "communityUniversity",
+            "communityIntake",
+            "communitySubject",
+            "imageUrl",
+            "imageUrls",
+            "imageCount",
+            "totalImageBytes",
+            "authorId",
+            "firebaseUid",
+            "userId",
+            "authorName",
+            "authorPhotoUrl",
+            "type",
+            "status",
+            "visibility",
+            "sourcePlatform",
+            "webPost",
+            "likeCount",
+            "commentCount",
+            "answerCount",
+            "saveCount",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.firebaseUid == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.authorName
+            == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.fullName
+          && request.resource.data.authorPhotoUrl
+            == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+          && request.resource.data.questionTitle == request.resource.data.title
+          && request.resource.data.description == request.resource.data.content
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 240
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 10000
+          && request.resource.data.subject is string
+          && request.resource.data.subject.size() <= 120
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 12
+          && request.resource.data.postType in ["discussion", "success_story", "journey_story"]
+          && request.resource.data.successData is map
+          && request.resource.data.successData.keys().hasOnly([
+            "university",
+            "opportunityName",
+            "country",
+            "subject",
+            "studyLevel",
+            "intake",
+            "fundingType"
+          ])
+          && request.resource.data.publicMilestones is list
+          && request.resource.data.publicMilestones.size() <= 8
+          && request.resource.data.imageUrls is list
+          && request.resource.data.imageUrls.size() <= 2
+          && request.resource.data.imageCount == request.resource.data.imageUrls.size()
+          && request.resource.data.totalImageBytes >= 0
+          && request.resource.data.totalImageBytes <= 6291456
+          && request.resource.data.type == "question"
+          && request.resource.data.status == "published"
+          && request.resource.data.visibility == "public"
+          && request.resource.data.sourcePlatform == "web"
+          && request.resource.data.webPost == true
+          && request.resource.data.likeCount == 0
+          && request.resource.data.commentCount == 0
+          && request.resource.data.answerCount == 0
+          && request.resource.data.saveCount == 0;
+      }
+
+      allow read: if isAdmin() || publicPost();
+      allow create: if validWebPostCreate();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "visibility",
+          "moderationStatus",
+          "moderatedAt",
+          "moderatedByAdminUid",
+          "updatedAt"
+        ]);
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.authorId == request.auth.uid);
+
+      match /likes/{uid} {
+        function validLikeCreate() {
+          return isOwner(uid)
+            && parentPostIsPublic()
+            && request.resource.data.keys().hasAll([
+              "uid",
+              "userId",
+              "postId",
+              "createdAt"
+            ])
+            && request.resource.data.keys().hasOnly([
+              "uid",
+              "userId",
+              "postId",
+              "createdAt"
+            ])
+            && request.resource.data.uid == uid
+            && request.resource.data.userId == uid
+            && request.resource.data.postId == postId;
+        }
+
+        allow read: if isAdmin() || isOwner(uid);
+        allow create: if validLikeCreate();
+        allow update: if false;
+        allow delete: if isAdmin() || isOwner(uid);
+      }
+
+      match /answers/{answerId} {
+        function publicAnswer() {
+          return resource.data.status == "published"
+            && resource.data.visibility == "public";
+        }
+
+        function validWebAnswerCreate() {
+          return signedIn()
+            && parentPostIsPublic()
+            && publicProfileExists(request.auth.uid)
+            && request.resource.data.keys().hasAll([
+              "id",
+              "postId",
+              "questionId",
+              "parentPostId",
+              "authorId",
+              "firebaseUid",
+              "userId",
+              "uid",
+              "authorName",
+              "authorPhotoUrl",
+              "profileImageUrl",
+              "content",
+              "text",
+              "answer",
+              "reply",
+              "type",
+              "status",
+              "visibility",
+              "sourcePlatform",
+              "likeCount",
+              "createdAtMillis",
+              "createdAt",
+              "updatedAt"
+            ])
+            && request.resource.data.keys().hasOnly([
+              "id",
+              "postId",
+              "questionId",
+              "parentPostId",
+              "authorId",
+              "firebaseUid",
+              "userId",
+              "uid",
+              "authorName",
+              "authorPhotoUrl",
+              "profileImageUrl",
+              "content",
+              "text",
+              "answer",
+              "reply",
+              "type",
+              "status",
+              "visibility",
+              "sourcePlatform",
+              "likeCount",
+              "createdAtMillis",
+              "createdAt",
+              "updatedAt"
+            ])
+            && request.resource.data.id == answerId
+            && request.resource.data.postId == postId
+            && request.resource.data.questionId == postId
+            && request.resource.data.parentPostId == postId
+            && request.resource.data.authorId == request.auth.uid
+            && request.resource.data.firebaseUid == request.auth.uid
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.authorName
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.fullName
+            && request.resource.data.authorPhotoUrl
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+            && request.resource.data.profileImageUrl
+              == get(/databases/$(database)/documents/public_profiles/$(request.auth.uid)).data.profileImageUrl
+            && request.resource.data.content == request.resource.data.text
+            && request.resource.data.content == request.resource.data.answer
+            && request.resource.data.content == request.resource.data.reply
+            && request.resource.data.content is string
+            && request.resource.data.content.size() > 0
+            && request.resource.data.content.size() <= 5000
+            && request.resource.data.type == "answer"
+            && request.resource.data.status == "published"
+            && request.resource.data.visibility == "public"
+            && request.resource.data.sourcePlatform == "web"
+            && request.resource.data.likeCount == 0;
+        }
+
+        allow read: if isAdmin() || publicAnswer();
+        allow create: if validWebAnswerCreate();
+        allow update: if false;
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.authorId == request.auth.uid);
+      }
+    }
+
+    match /reports/{reportId} {
+      function reportReasonAllowed() {
+        return request.resource.data.reason in [
+          "Spam",
+          "Harassment",
+          "Harmful or unsafe content",
+          "Misinformation concern",
+          "Copyright concern",
+          "Other"
+        ];
+      }
+
+      function validPostReportCreate() {
+        return signedIn()
+          && request.resource.data.keys().hasAll([
+            "targetType",
+            "postId",
+            "targetTitle",
+            "targetAuthorId",
+            "targetExcerpt",
+            "reporterUid",
+            "userId",
+            "reason",
+            "details",
+            "status",
+            "sourcePlatform",
+            "createdAtMillis",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "targetType",
+            "postId",
+            "targetTitle",
+            "targetAuthorId",
+            "targetExcerpt",
+            "reporterUid",
+            "userId",
+            "reason",
+            "details",
+            "status",
+            "sourcePlatform",
+            "createdAtMillis",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.targetType == "post"
+          && request.resource.data.reporterUid == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == "open"
+          && request.resource.data.sourcePlatform == "web"
+          && request.resource.data.postId is string
+          && request.resource.data.postId.size() > 0
+          && request.resource.data.targetTitle is string
+          && request.resource.data.targetTitle.size() <= 180
+          && request.resource.data.targetAuthorId is string
+          && request.resource.data.targetAuthorId.size() <= 180
+          && request.resource.data.targetExcerpt is string
+          && request.resource.data.targetExcerpt.size() <= 300
+          && request.resource.data.details is string
+          && request.resource.data.details.size() <= 1000
+          && reportReasonAllowed()
+          && get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.status == "published"
+          && get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.visibility == "public";
+      }
+
+      allow create: if validPostReportCreate();
+      allow read: if isAdmin();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "resolution",
+          "reviewedAt",
+          "reviewedByAdminUid",
+          "updatedAt"
+        ]);
+      allow delete: if false;
+    }
+
+    match /support_requests/{requestId} {
+      allow read: if isAdmin() && resource.data.type == "post_report";
+      allow update: if isAdmin()
+        && resource.data.type == "post_report"
+        && request.resource.data.type == "post_report"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "resolution",
+          "reviewedAt",
+          "reviewedByAdminUid",
+          "updatedAt"
+        ]);
+      allow create, delete: if false;
+    }
+
+    match /moderation_audit/{auditId} {
+      function validModerationAudit() {
+        return request.resource.data.keys().hasAll([
+          "action",
+          "reportId",
+          "reportSource",
+          "postId",
+          "adminUid",
+          "reason",
+          "createdAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "action",
+          "reportId",
+          "reportSource",
+          "postId",
+          "adminUid",
+          "reason",
+          "createdAt"
+        ])
+        && request.resource.data.adminUid == request.auth.uid
+        && request.resource.data.action in [
+          "hide_reported_post",
+          "resolve_report",
+          "dismiss_report"
+        ]
+        && request.resource.data.reportSource in [
+          "reports",
+          "support_requests"
+        ];
+      }
+
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validModerationAudit();
+      allow update, delete: if false;
     }
 
     match /opportunities/{opportunityId} {
@@ -37,8 +649,8 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // This isolated test ruleset intentionally denies every legacy collection.
-    // It exists only to mechanically test the new Web V1 privacy/admin contract.
+    // This isolated test ruleset intentionally denies legacy collections except
+    // the explicit Web V1 owner-private/admin contracts above.
     match /{document=**} {
       allow read, write: if false;
     }

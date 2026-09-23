@@ -1,14 +1,15 @@
-import { initFirebase } from './firebase-client.js';
+import { initFirebase, appCheck } from './firebase-client.js';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
-  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, toggleLike, toggleSave,
-  subscribeComments, addComment, getNotifications, markNotificationRead, getConversations,
-  subscribeMessages, sendMessage, getLeaderboard, searchAll, updateUserProfile, removeProfilePhoto, reportPost,
-  startConversation, normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
-  getFollowState, toggleFollow, hydratePostLikeState
+  getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
+  subscribeComments, addComment, getNotifications, getNotificationReadIds, getSyncedNotificationReadIds, markNotificationRead, markNotificationsRead,
+  getUserSettings, saveUserSettings,
+  searchAll, updateUserProfile, removeProfilePhoto,
+  normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
+  hydratePostLikeState
 } from './services/data-service.js';
-import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
+import { getOpportunities, getOpportunityById, getOpportunitySearchCorpus } from './services/opportunity-service.js';
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
@@ -22,13 +23,24 @@ import { deadlineInfo } from './services/deadline-engine.js';
 import { buildHomeDashboardModel } from './services/home-dashboard-service.js';
 import { buildSavedOpportunityWorkspace, buildSavedComparison } from './services/saved-opportunity-service.js';
 import { buildJourneyPriorityWorkspace } from './services/journey-priority-service.js';
-import { buildProfilePresentation, validatePublicProfileDraft } from './services/profile-presentation-service.js';
-import { profileFinalPageMarkup } from './profile-view.js';
 import { buildJourneyDetailModel, validateJourneyPlanningDraft } from './services/journey-detail-service.js';
+import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfileDraft } from './services/public-profile-service.js';
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
+import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
+import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
+import { buildGlobalSearchModel, mergeSearchPublicPosts } from './services/global-search-service.js';
+import { buildNotificationCenterModel } from './services/notification-service.js';
+import { buildSavedCommunityModel } from './services/saved-community-service.js';
+import { buildAppCheckReadiness } from './services/app-check-readiness-service.js';
+import { buildPrivacyRequestMailto } from './services/privacy-request-service.js';
+import {
+  defaultUserSettings, normalizeUserSettings, buildSettingsModel,
+  applyNotificationPreferences, applyRuntimeSettings
+} from './services/settings-service.js';
 import { postAcceptancePanelMarkup } from './post-acceptance-view.js';
 import {
-  buildSubjectCommunities, buildUniversityCommunities,
+  buildCommunityHomeModel, buildIntakeCommunityModel, buildSubjectCommunities, buildSubjectCommunityModel,
+  buildUniversityCommunities, buildUniversityCommunityModel,
   subjectCommunityData, universityCommunityData, intakeCommunityData
 } from './services/community-service.js';
 import {
@@ -36,6 +48,8 @@ import {
   markImportDuplicates, listAdminOpportunities, reviewOpportunity,
   importOpportunityRecords
 } from './services/opportunity-admin-service.js';
+import { REPORT_REASONS, buildModerationQueue } from './services/moderation-model.js';
+import { submitPostReport, listAdminReports, reviewReport } from './services/moderation-service.js';
 import {
   icon, escapeHTML, nl2br, initials, safeUrl, relativeTime, formatCount, debounce,
   routeParts, go, toast, copyText, roleClass, normalizeRole
@@ -43,15 +57,143 @@ import {
 
 const root = document.getElementById('app-root');
 const modalRoot = document.getElementById('modal-root');
+const skipLink = document.querySelector('.skip-link');
+const DIALOG_FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let modalReturnFocus = null;
+let modalActive = false;
+let modalHeadingCounter = 0;
+
+function currentDialog() {
+  return modalRoot.querySelector('.modal');
+}
+
+let accessibleFieldCounter = 0;
+
+function normalizeRenderedAccessibility(scope) {
+  if (!scope?.querySelectorAll) return;
+
+  scope.querySelectorAll('.field').forEach(field => {
+    const label = field.querySelector('label');
+    const control = field.querySelector('input:not([type="hidden"]), select, textarea');
+    if (!label || !control) return;
+
+    if (!control.id) control.id = `tefsen-field-${++accessibleFieldCounter}`;
+    if (!label.hasAttribute('for')) label.setAttribute('for', control.id);
+  });
+
+  scope.querySelectorAll('.form-error, .field-error').forEach(error => {
+    if (!error.hasAttribute('role')) error.setAttribute('role','status');
+    if (!error.hasAttribute('aria-live')) error.setAttribute('aria-live','polite');
+  });
+}
+
+function dialogFocusableElements(dialog = currentDialog()) {
+  if (!dialog) return [];
+  return [...dialog.querySelectorAll(DIALOG_FOCUSABLE_SELECTOR)]
+    .filter(element => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+}
+
+function normalizeDialogAccessibility(dialog) {
+  if (!dialog) return;
+  dialog.setAttribute('role','dialog');
+  dialog.setAttribute('aria-modal','true');
+
+  const heading = dialog.querySelector('h1, h2, h3');
+  if (!dialog.hasAttribute('aria-label') && !dialog.hasAttribute('aria-labelledby') && heading) {
+    if (!heading.id) heading.id = `tefsen-dialog-title-${++modalHeadingCounter}`;
+    dialog.setAttribute('aria-labelledby', heading.id);
+  }
+
+  dialog.querySelectorAll('[data-close-modal]').forEach(button => {
+    if (button.tagName === 'BUTTON' && !button.hasAttribute('type')) button.setAttribute('type','button');
+    if (button.classList.contains('close-btn') && !button.hasAttribute('aria-label')) {
+      button.setAttribute('aria-label','Close dialog');
+    }
+  });
+
+  if (!dialog.hasAttribute('tabindex')) dialog.setAttribute('tabindex','-1');
+}
+
+function activateModalAccessibility() {
+  const dialog = currentDialog();
+  if (!dialog) return;
+  if (!modalActive) {
+    modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalActive = true;
+  }
+  root.inert = true;
+  if (skipLink) skipLink.inert = true;
+  normalizeDialogAccessibility(dialog);
+  normalizeRenderedAccessibility(dialog);
+
+  queueMicrotask(() => {
+    const activeDialog = currentDialog();
+    if (!activeDialog) return;
+    const preferred = activeDialog.querySelector('[autofocus], input:not([type="hidden"]), select, textarea, button, a[href]');
+    (preferred || activeDialog).focus({ preventScroll:true });
+  });
+}
+
+function deactivateModalAccessibility() {
+  if (!modalActive) return;
+  modalActive = false;
+  root.inert = false;
+  if (skipLink) skipLink.inert = false;
+  const returnTarget = modalReturnFocus;
+  modalReturnFocus = null;
+  queueMicrotask(() => {
+    if (returnTarget instanceof HTMLElement && returnTarget.isConnected) {
+      returnTarget.focus({ preventScroll:true });
+    }
+  });
+}
+
+function trapModalKeyboard(event) {
+  const dialog = currentDialog();
+  if (!dialog) return false;
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    modalRoot.innerHTML = '';
+    return true;
+  }
+
+  if (event.key !== 'Tab') return false;
+  const focusable = dialogFocusableElements(dialog);
+  if (!focusable.length) {
+    event.preventDefault();
+    dialog.focus();
+    return true;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+
+  if (event.shiftKey && (active === first || !dialog.contains(active))) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
+}
+
+const modalAccessibilityObserver = new MutationObserver(() => {
+  currentDialog() ? activateModalAccessibility() : deactivateModalAccessibility();
+});
+modalAccessibilityObserver.observe(modalRoot,{ childList:true });
 let stopAuth = null;
 let stopPosts = null;
 let stopComments = null;
-let stopMessages = null;
 let reactionState = { saved: new Set(), liked: new Set() };
 let currentComments = [];
 let currentSearch = { users: [], posts: [] };
 const likeRequests = new Set();
-let currentProfileView = null;
 let currentStudentPassport = null;
 let passportOnboardingJustCompleted = false;
 let currentJourneyStates = new Map();
@@ -69,10 +211,12 @@ const DEFAULT_OPPORTUNITY_FILTERS = Object.freeze({
 let opportunityDiscoveryFilters = { ...DEFAULT_OPPORTUNITY_FILTERS };
 let adminCapability = false;
 let currentAdminOpportunities = [];
+let currentAdminReports = [];
 let adminPreviewRows = [];
 let adminImportSource = '';
 let adminTab = 'review';
-let settingsTab = 'profile';
+let settingsTab = 'overview';
+let currentUserSettings = defaultUserSettings();
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
@@ -87,9 +231,7 @@ const navItems = [
   ['journeys', 'Journey', 'check'],
   ['explore', 'Community', 'compass'],
   ['notifications', 'Notifications', 'bell'],
-  ['messages', 'Messages', 'message'],
-  ['leaderboard', 'Leaderboard', 'trophy'],
-  ['saved', 'Saved', 'bookmark'],
+  ['saved', 'Saved community', 'bookmark'],
   ['subscription', 'Subscription', 'info'],
   ['profile', 'Profile', 'user'],
   ['settings', 'Settings', 'settings']
@@ -120,6 +262,11 @@ function verifiedMark(value, role = 'Student') {
 }
 
 function currentRoute() { return routeParts()[0] || 'home'; }
+
+function browserTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+  catch { return ''; }
+}
 
 function humanError(error) {
   const code = error?.code || '';
@@ -156,7 +303,6 @@ async function boot() {
 async function handleAuthChange(user) {
   stopPosts?.(); stopPosts = null;
   stopComments?.(); stopComments = null;
-  stopMessages?.(); stopMessages = null;
   reactionState = { saved: new Set(), liked: new Set() };
   currentStudentPassport = null;
   passportOnboardingJustCompleted = false;
@@ -164,9 +310,12 @@ async function handleAuthChange(user) {
   savedOpportunityCompareIds = new Set();
   adminCapability = false;
   currentAdminOpportunities = [];
+  currentAdminReports = [];
   adminPreviewRows = [];
   adminImportSource = '';
-  setState({ user, profile: null, posts: [], notifications: [], conversations: [], messages: [], unreadCount: 0 });
+  currentUserSettings = defaultUserSettings({ timeZone: browserTimeZone() });
+  applyRuntimeSettings(currentUserSettings);
+  setState({ user, profile: null, posts: [], notifications: [], unreadCount: 0 });
 
   if (!user) {
     renderAuth('login');
@@ -175,20 +324,31 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, reactions, notifications, conversations, passport] = await Promise.all([
+    const [profile, userSettings, reactions, activityNotifications, notificationReadIds, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
+      getUserSettings(state.mode, user.uid).catch(() => defaultUserSettings({ timeZone: browserTimeZone() })),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
-      getConversations(state.mode, user.uid).catch(() => []),
-      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid))
+      getSyncedNotificationReadIds(state.mode, user.uid).catch(() => getNotificationReadIds(user.uid)),
+      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid)),
+      listJourneyStates(state.mode, user.uid).catch(() => []),
+      getOpportunities(state.mode).catch(() => [])
     ]);
+    currentUserSettings = normalizeUserSettings(userSettings, { timeZone: browserTimeZone() });
+    applyRuntimeSettings(currentUserSettings);
+    const notificationModel = applyNotificationPreferences(buildNotificationCenterModel({
+      activityNotifications,
+      journeys:notificationJourneys,
+      opportunities:notificationOpportunities,
+      readIds:notificationReadIds,
+      now:new Date()
+    }), currentUserSettings);
     currentStudentPassport = passport;
     reactionState = reactions;
     setState({
       profile,
-      notifications,
-      conversations,
-      unreadCount: notifications.filter(n => !n.read).length
+      notifications:notificationModel.items,
+      unreadCount:notificationModel.unreadCount
     });
     adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
     stopPosts = subscribePosts(state.mode, posts => {
@@ -232,13 +392,13 @@ async function handleAuthChange(user) {
 }
 
 function loadingScreen(text = 'Opening Tefsen Web…') {
-  return `<div style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></div>`;
+  return `<main id="app-main" tabindex="-1" style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></main>`;
 }
 
 function renderAuth(mode = 'login') {
   const isRegister = mode === 'register';
   root.innerHTML = `
-    <main class="auth-page">
+    <main id="app-main" class="auth-page" tabindex="-1">
       <section class="auth-art">
         <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
         <div class="auth-message">
@@ -267,6 +427,7 @@ function renderAuth(mode = 'login') {
         </div>
       </section>
     </main>`;
+  normalizeRenderedAccessibility(root);
 }
 
 function demoBanner() {
@@ -286,12 +447,12 @@ function renderShell(content, options = {}) {
           <form class="global-search" data-global-search-form>
             <span class="mobile-top-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></span>
             <span class="search-icon">${icon('search',18)}</span>
-            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen">
-            <span class="search-kbd">Ctrl K</span>
+            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen" aria-keyshortcuts="Control+K Meta+K">
+            <span class="search-kbd" aria-hidden="true">Ctrl/⌘ K</span>
           </form>
         </div>
         <div class="topbar-actions">
-          <button class="icon-button desktop-only" type="button" data-route="messages" aria-label="Messages">${icon('message',19)}</button>
+          ${quickThemeButtonMarkup()}
           <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
           <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
         </div>
@@ -303,8 +464,8 @@ function renderShell(content, options = {}) {
         </nav>
         <div class="nav-divider"></div>
         <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
-        <nav class="nav-list">
-          ${navItems.filter(([id]) => ['notifications','messages','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
+        <nav class="nav-list" aria-label="Account and saved navigation">
+          ${navItems.filter(([id]) => ['saved','notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
         </nav>
         <button class="sidebar-profile" type="button" data-route="profile">
           ${avatar(p,'sm')}
@@ -314,7 +475,7 @@ function renderShell(content, options = {}) {
 
       ${rightContent ? `<aside class="rightbar">${rightContent}</aside>` : ''}
 
-      <main class="main-area"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
+      <main id="app-main" class="main-area" tabindex="-1"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
 
       <nav class="mobile-bottom" aria-label="Mobile navigation">
         ${mobileNavButton('home','home',route,'Home')}
@@ -325,21 +486,24 @@ function renderShell(content, options = {}) {
       </nav>
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
+  normalizeRenderedAccessibility(root);
 }
 
 function navButton(id, label, ic, route) {
   const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
-  return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
+  return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"${active ? ' aria-current="page"' : ''}><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
 }
 
 function mobileNavButton(id, ic, route, label) {
-  return `<button class="${route === id ? 'active' : ''}" type="button" data-route="${id}" aria-label="${label}">${icon(ic,21)}</button>`;
+  const active = route === id;
+  return `<button class="${active ? 'active' : ''}" type="button" data-route="${id}" aria-label="${label}"${active ? ' aria-current="page"' : ''}>${icon(ic,21)}</button>`;
 }
 
 function renderProfileDropdown() {
   const p = state.profile || {};
-  const role = normalizeRole(p.role || 'Student');
-  const isAdmin = String(p.role || '').trim().toLowerCase() === 'admin';
+  const rawRole = String(p.role || 'Student');
+  const isAdmin = adminCapability === true;
+  const role = isAdmin ? 'Admin' : (rawRole.trim().toLowerCase() === 'admin' ? 'Student' : normalizeRole(rawRole));
   const plan = isAdmin ? 'Admin Full Access' : (p.subscriptionActive ? 'Student Plus' : 'Free Student');
   return `<div class="profile-menu-backdrop" data-profile-menu-dismiss aria-hidden="true"></div>
     <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Tefsen account menu">
@@ -355,7 +519,7 @@ function renderProfileDropdown() {
       <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved community posts</span><small>Discussions and student stories you saved</small></button>
       <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
       <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
-      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Profile and preferences</small></button>
+      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Account, privacy and preferences</small></button>
       ${adminCapability ? `<button type="button" data-route="admin" role="menuitem">${icon('check',17)} <span>Admin review</span><small>Verify and manage opportunities</small></button>` : ''}
       <div class="dropdown-separator"></div>
       <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
@@ -389,7 +553,7 @@ function renderRightbar() {
       <div class="widget-link"><span class="notification-icon">${icon('check',17)}</span><div><b>${successCount} success stor${successCount===1?'y':'ies'}</b><small>Shared voluntarily by students</small></div></div>
       <button class="widget-link" style="width:100%;background:none;color:inherit;text-align:left;cursor:pointer" type="button" data-route="explore"><span class="notification-icon">${icon('compass',17)}</span><div><b>Open Community</b><small>Subjects, universities and intakes</small></div></button>
     </section>
-    <div class="footer-mini"><a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
+    <div class="footer-mini"><a href="../privacy-policy/">Privacy</a> · <a href="../terms.html">Terms</a> · <a href="../delete-account/">Delete account</a><br>© ${new Date().getFullYear()} Tefsen</div>`;
 }
 
 function scorePost(p) { return Number(p.trendingScore || 0) || Number(p.likeCount || 0) * 2 + Number(p.commentCount || 0) * 3; }
@@ -420,27 +584,22 @@ function postTypeBadgeMarkup(post) {
 
 function structuredPostMarkup(post) {
   if (post.postType === 'success_story') {
-    const s = post.successData || {};
-    const facts = [
-      ['University', s.university],
-      ['Opportunity', s.opportunityName],
-      ['Country', s.country],
-      ['Subject', s.subject],
-      ['Study level', s.studyLevel],
-      ['Intake', s.intake],
-      ['Funding', s.fundingType]
-    ].filter(([,value]) => value);
+    const model=buildSuccessStoryModel(post);
+    const previewFacts=(model?.facts || [])
+      .filter(([label])=>['University','Scholarship / program / offer','Funding','Intake / year'].includes(label))
+      .slice(0,4);
     return `
-      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
-      ${facts.length ? `<div class="success-facts">${facts.map(([label,value]) => `<div class="success-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
-      <div class="community-banner">This is a student's shared experience, not an official statement of current scholarship or admission requirements.</div>`;
+      <div class="success18-card-top">${postTypeBadgeMarkup(post)}<span>Student-shared outcome</span></div>
+      ${previewFacts.length ? `<div class="success18-card-facts">${previewFacts.map(([label,value]) => `<div><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')}</div>` : ''}
+      <div class="success18-card-note">Personal experience · open the story for full context and verification guidance.</div>`;
   }
   if (post.postType === 'journey_story') {
-    const milestones = post.publicMilestones || [];
+    const model=buildJourneyStoryModel(post);
+    const milestones=(model?.milestones || []).slice(0,3);
     return `
-      <div style="margin:0 0 10px">${postTypeBadgeMarkup(post)}</div>
-      ${milestones.length ? `<div class="public-milestones">${milestones.map(item => `<div class="public-milestone"><span class="public-milestone-dot"></span><div><b>${escapeHTML(item.stage || 'Milestone')}${item.month ? ` · ${escapeHTML(item.month)}` : ''}</b>${item.note ? `<p>${escapeHTML(item.note)}</p>` : ''}</div></div>`).join('')}</div>` : ''}
-      <div class="community-banner">Only milestones this student explicitly chose to publish are shown. Private Tefsen Journey data is not displayed here automatically.</div>`;
+      <div class="journey19-card-top">${postTypeBadgeMarkup(post)}<span>Selected public milestones</span></div>
+      ${milestones.length ? `<div class="journey19-card-timeline">${milestones.map(item => `<div><span></span><p><b>${escapeHTML(item.stage || 'Milestone')}</b>${item.month ? `<small>${escapeHTML(item.month)}</small>` : ''}</p></div>`).join('')}</div>` : ''}
+      <div class="journey19-card-note">Public story only · private Tefsen Journey data is not shown automatically.</div>`;
   }
   return '';
 }
@@ -684,53 +843,184 @@ async function renderHome() {
   }
 }
 
-function renderSavedCommunity() {
-  const posts = getFilteredPosts('saved');
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Saved community posts</h1><p>Your saved discussions and student stories.</p></div><button class="btn btn-secondary" type="button" data-route="explore">Community</button></header><div class="feed-list">${posts.length ? posts.map(postCard).join('') : emptyState('bookmark','No saved community posts','Save useful discussions or student stories and they will appear here.')}</div>`;
-  renderShell(content);
+async function renderSavedCommunity() {
+  renderShell(`<div class="saved24-page"><section class="saved24-hero loading"><span class="opportunity-kicker">SAVED COMMUNITY</span><h1>Loading your saved posts…</h1><p>Checking your private saved list independently of the current Community feed.</p></section></div>`,{wide:true,right:false});
+
+  try{
+    const loaded=await getSavedCommunityPosts(state.mode,state.user.uid,state.posts);
+    reactionState.saved=new Set(loaded.savedIds||[]);
+    const model=buildSavedCommunityModel({
+      posts:loaded.posts,
+      referenceCount:loaded.referenceCount,
+      staleCount:loaded.staleCount
+    });
+
+    const section=(title,eyebrow,posts,description)=>posts.length ? `<section class="saved24-section">
+      <header class="saved24-section-head">
+        <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p></div>
+        <span>${posts.length}</span>
+      </header>
+      <div class="saved24-list">${posts.map(postCard).join('')}</div>
+    </section>` : '';
+
+    const content=`${demoBanner()}
+      <div class="saved24-page">
+        <section class="saved24-hero">
+          <div>
+            <span class="opportunity-kicker">PRIVATE COMMUNITY LIBRARY</span>
+            <h1>Keep useful Community posts without losing them in the feed.</h1>
+            <p>Save public discussions, Success stories and Journey stories for your own later review. Your saved list is private account data and is separate from saved opportunities.</p>
+            <div class="saved24-hero-actions">
+              <button class="btn btn-primary" type="button" data-route="explore">${icon('compass',17)} Explore Community</button>
+              <button class="btn btn-secondary" type="button" data-route="journeys">Saved opportunities & Journeys</button>
+            </div>
+          </div>
+          <aside class="saved24-scope">
+            <span>WHAT SAVING MEANS</span>
+            <div><b>Private to your account</b><small>${escapeHTML(model.privacyNote)}</small></div>
+            <div><b>Separate from applications</b><small>${escapeHTML(model.distinctionNote)}</small></div>
+            <div><b>Public content can change</b><small>If a post is hidden or deleted later, Tefsen will not expose it just because you saved it earlier.</small></div>
+          </aside>
+        </section>
+
+        <section class="saved24-stats" aria-label="Saved Community summary">
+          <article><strong>${model.counts.saved}</strong><span>Available saved posts</span></article>
+          <article><strong>${model.counts.discussions}</strong><span>Discussions</span></article>
+          <article><strong>${model.counts.successStories}</strong><span>Success stories</span></article>
+          <article><strong>${model.counts.journeyStories}</strong><span>Journey stories</span></article>
+        </section>
+
+        ${model.staleCount ? `<section class="saved24-unavailable">${icon('info',16)}<span>${model.staleCount} saved reference${model.staleCount===1?' is':'s are'} unavailable because the post no longer resolves as public content.</span></section>` : ''}
+
+        ${model.empty ? `<section class="saved24-empty">
+          <div>${icon('bookmark',25)}</div>
+          <h2>No saved Community posts yet</h2>
+          <p>Use Save on a useful public discussion, Success story or Journey story. Saved Opportunities remain in your separate Journey workspace.</p>
+          <button class="btn btn-primary" type="button" data-route="explore">Find useful Community posts</button>
+        </section>` : `
+          ${section('Saved discussions','LEARNING & QUESTIONS',model.discussions,'Public discussions you chose to keep for later review.')}
+          ${section('Saved student outcomes','STUDENT EXPERIENCES',model.outcomes,'Success and Journey stories add context, but they do not replace official provider information.')}
+        `}
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Saved Community unavailable','Please try again.')}`,{wide:true,right:false});
+  }
 }
 
 async function renderExplore() {
-  renderShell(`<header class="page-head"><div><h1>Community</h1><p>Loading student communities and shared experiences…</p></div></header><div class="loading-card"></div>`, { wide:true });
+  renderShell(`<div class="community15-page"><section class="community15-hero loading"><div><span class="opportunity-kicker">STUDENT COMMUNITY</span><h1>Loading useful discussions…</h1><p>Preparing public discussions, communities and student outcomes.</p></div></section></div>`, { wide:true, right:false });
   try {
     const opportunities = await getOpportunities(state.mode).catch(() => []);
-    const subjects = buildSubjectCommunities(state.posts, opportunities).filter(row => row.name !== 'General').slice(0, 12);
-    const universities = buildUniversityCommunities(state.posts, opportunities).slice(0, 12);
-    const successes = state.posts.filter(post => post.postType === 'success_story');
-    const journeys = state.posts.filter(post => post.postType === 'journey_story');
+    const model = buildCommunityHomeModel(state.posts, opportunities);
+
+    const discussionCards = model.discussions.length
+      ? model.discussions.map(post => postCard(post)).join('')
+      : `<section class="community15-empty"><div>${icon('comment',22)}</div><h3>No public discussions yet.</h3><p>Start with a real question, explanation or study insight that could help another student.</p><button class="btn btn-primary" type="button" data-action="compose">Start a discussion</button></section>`;
+
+    const unanswered = model.unanswered.length
+      ? `<section class="community15-response-panel">
+          <header><div><span class="opportunity-kicker">NEEDS A RESPONSE</span><h2>Questions with no public replies yet</h2><p>Help another student if you genuinely know something useful.</p></div></header>
+          <div class="community15-response-list">
+            ${model.unanswered.map(post => `<button type="button" data-route="post/${encodeURIComponent(post.id)}">
+              <span>${escapeHTML(post.subject || 'General')}</span>
+              <strong>${escapeHTML(post.title || (post.content || '').slice(0,110) || 'Student question')}</strong>
+              <small>Open discussion →</small>
+            </button>`).join('')}
+          </div>
+        </section>`
+      : '';
+
+    const subjectCards = model.subjects.length
+      ? model.subjects.map(row => `<button class="community15-topic-card" type="button" data-route="subject/${encodeURIComponent(row.name)}">
+          <span class="community15-topic-icon">${icon('compass',18)}</span>
+          <div><h3>${escapeHTML(row.name)}</h3><p>${row.postCount} public post${row.postCount===1?'':'s'} · ${row.opportunityCount} linked opportunit${row.opportunityCount===1?'y':'ies'}</p></div>
+          <span>→</span>
+        </button>`).join('')
+      : `<div class="community15-inline-empty">Subject spaces will appear as public discussions and verified opportunities grow.</div>`;
+
+    const universityCards = model.universities.length
+      ? model.universities.map(row => `<button class="community15-university-card" type="button" data-route="university/${encodeURIComponent(row.name)}">
+          <div><span>UNIVERSITY COMMUNITY</span><h3>${escapeHTML(row.name)}</h3><p>${row.countries.length ? escapeHTML(row.countries.join(', ')) : 'Global student community'}</p></div>
+          <small>${row.postCount} posts · ${row.opportunityCount} opportunities →</small>
+        </button>`).join('')
+      : `<div class="community15-inline-empty">University spaces appear when verified opportunity or public student data links to them.</div>`;
+
+    const outcomes = model.outcomes.length
+      ? model.outcomes.map(post => `<button class="community15-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}">
+          <span>${post.postType === 'success_story' ? 'SUCCESS STORY' : 'JOURNEY STORY'}</span>
+          <h3>${escapeHTML(post.title || 'Student experience')}</h3>
+          <p>${escapeHTML((post.content || '').slice(0,170))}</p>
+          <small>Shared voluntarily by a student →</small>
+        </button>`).join('')
+      : `<section class="community15-inline-empty"><b>No public outcome stories yet.</b><span>Students can choose to share success stories or selected Journey milestones.</span></section>`;
 
     const content = `${demoBanner()}
-      <div class="community-hub">
-        <section class="community-hero">
-          <span class="opportunity-kicker">OUTCOME-FOCUSED COMMUNITY</span>
-          <h1>Learn from students who are moving forward.</h1>
-          <p>Explore subject communities, university and intake spaces, scholarship success stories, and public journey experiences. Community experiences never replace official provider information.</p>
-          <div class="community-action-row">
-            <button class="btn btn-primary" type="button" data-share-success>Share a success</button>
-            <button class="btn btn-secondary" type="button" data-share-journey-story>Share a journey story</button>
-            <button class="btn btn-ghost" type="button" data-action="compose">${icon('plus',16)} General discussion</button>
+      <div class="community15-page">
+        <section class="community15-hero">
+          <div class="community15-hero-copy">
+            <span class="opportunity-kicker">STUDENT COMMUNITY</span>
+            <h1>Ask better questions. Share what actually helps.</h1>
+            <p>Tefsen Community connects student discussions, subject spaces, university communities and voluntarily shared outcomes. Experiences add context; official provider sources still control requirements, deadlines and eligibility.</p>
+            <div class="community15-hero-actions">
+              <button class="btn btn-primary" type="button" data-action="compose">${icon('plus',16)} Ask or share knowledge</button>
+              <button class="btn btn-secondary" type="button" data-share-success>Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story>Share selected Journey milestones</button>
+            </div>
           </div>
+          <aside class="community15-purpose">
+            <span>WHAT BELONGS HERE</span>
+            <div><b>Questions</b><small>Specific things you are trying to understand.</small></div>
+            <div><b>Explanations</b><small>Useful knowledge, study methods and lessons learned.</small></div>
+            <div><b>Student experiences</b><small>Voluntary outcomes and selected Journey stories—not official guidance.</small></div>
+          </aside>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">Subject communities</h2><p>Opportunities and student conversations grouped by field.</p></div></header>
-          <div class="community-grid">${subjects.length ? subjects.map(row => `<button class="community-card" type="button" data-route="subject/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.opportunityCount} opportunities · ${row.postCount} community posts</p><div class="community-card-meta">${row.successCount ? `<span class="story-type success">${row.successCount} success stor${row.successCount===1?'y':'ies'}</span>` : ''}</div></button>`).join('') : '<div class="panel opportunity-empty">Subject communities will appear as opportunities and posts are added.</div>'}</div>
+        <section class="community15-stats" aria-label="Community summary">
+          <article><strong>${model.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${model.counts.subjectCommunities || '—'}</strong><span>Subject spaces</span></article>
+          <article><strong>${model.counts.universityCommunities || '—'}</strong><span>University spaces</span></article>
+          <article><strong>${model.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">University communities</h2><p>Find opportunities, success stories and intake conversations around a university.</p></div></header>
-          <div class="community-grid">${universities.length ? universities.map(row => `<button class="community-card" type="button" data-route="university/${encodeURIComponent(row.name)}"><h3>${escapeHTML(row.name)}</h3><p>${row.countries.length ? escapeHTML(row.countries.join(', ')) : 'Community university'}</p><div class="community-card-meta"><span class="opportunity-chip">${row.opportunityCount} opportunities</span><span class="opportunity-chip">${row.postCount} posts</span>${row.intakes.slice(0,2).map(intake => `<span class="opportunity-chip">${escapeHTML(intake)}</span>`).join('')}</div></button>`).join('') : '<div class="panel opportunity-empty">University communities will appear as verified opportunity and student data grows.</div>'}</div>
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>Active student conversations</h2><p>Ordered using public engagement signals such as replies, saves and likes—not an accuracy or quality score.</p></div>
+            <button class="btn btn-secondary" type="button" data-action="compose">Start discussion</button>
+          </header>
+          <div class="community15-feed">${discussionCards}</div>
         </section>
 
-        <section>
-          <header class="page-head"><div><h2 style="margin:0">Student outcomes</h2><p>Shared voluntarily by students.</p></div><span class="opportunity-chip">${successes.length} success · ${journeys.length} journey</span></header>
-          <div class="feed-list">${[...successes,...journeys].sort((x,y)=>scorePost(y)-scorePost(x)).slice(0,12).map(postCard).join('') || emptyState('compass','No outcome stories yet','Students can choose to share a success or selected public journey milestones.')}</div>
+        ${unanswered}
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">EXPLORE BY SUBJECT</span><h2>Find the field you care about</h2><p>Subject spaces connect student conversations with relevant verified-source opportunities.</p></div>
+          </header>
+          <div class="community15-topic-grid">${subjectCards}</div>
+        </section>
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">UNIVERSITY SPACES</span><h2>Explore student context around institutions</h2><p>See public conversations and linked opportunities without treating community posts as official university information.</p></div>
+          </header>
+          <div class="community15-university-grid">${universityCards}</div>
+        </section>
+
+        <section class="community15-section">
+          <header class="community15-section-head">
+            <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences, not promises</h2><p>Success and Journey stories are voluntarily shared by students. They do not prove current eligibility, funding or admission requirements.</p></div>
+            <div class="community15-outcome-actions"><button class="btn btn-secondary" type="button" data-share-success>Share success</button><button class="btn btn-ghost" type="button" data-share-journey-story>Share Journey story</button></div>
+          </header>
+          <div class="community15-outcome-grid">${outcomes}</div>
         </section>
       </div>`;
-    renderShell(content, { wide:true });
+    renderShell(content, { wide:true, right:false });
   } catch (error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Community unavailable','Please try again.')}`, { wide:true });
+    renderShell(`${demoBanner()}${emptyState('info','Community unavailable','Please try again.')}`, { wide:true, right:false });
   }
 }
 
@@ -740,50 +1030,452 @@ function communityOpportunityList(items = []) {
 
 async function renderSubjectCommunity(subjectName) {
   const subject = String(subjectName || '').trim();
-  renderShell(`<header class="page-head"><div><h1>${escapeHTML(subject || 'Subject')}</h1><p>Loading subject community…</p></div></header><div class="loading-card"></div>`, { wide:true });
-  const opportunities = await getOpportunities(state.mode).catch(() => []);
-  const data = subjectCommunityData(subject, state.posts, opportunities);
-  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="explore">${icon('back',17)} Community</button>
-    <div class="community-detail-layout" style="margin-top:14px">
-      <main>
-        <section class="community-hero"><span class="opportunity-kicker">SUBJECT COMMUNITY</span><h1>${escapeHTML(data.name)}</h1><p>${data.opportunities.length} linked opportunities and ${data.posts.length} public community posts.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-subject="${escapeHTML(data.name)}">Ask / share in this subject</button><button class="btn btn-secondary" data-share-success data-prefill-subject="${escapeHTML(data.name)}">Share a success</button></div></section>
-        <header class="page-head"><div><h2 style="margin:0">Community posts</h2></div></header>
-        <div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No posts yet','Start a useful discussion for this subject.')}</div>
-      </main>
-      <aside class="community-side"><section class="journey-panel"><h2>Opportunities</h2>${communityOpportunityList(data.opportunities)}</section><div class="community-banner">Community posts reflect student experiences and discussion. Verify scholarship and university requirements on official sources.</div></aside>
-    </div>`;
-  renderShell(content, { wide:true });
+  renderShell(`<div class="community16-page"><section class="community16-hero loading"><span class="opportunity-kicker">SUBJECT COMMUNITY</span><h1>${escapeHTML(subject || 'Subject')}</h1><p>Loading public discussions and linked opportunities…</p></section></div>`, { wide:true, right:false });
+
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const data = buildSubjectCommunityModel(subject, state.posts, opportunities);
+
+    const discussions = data.discussions.length
+      ? data.discussions.map(postCard).join('')
+      : `<section class="community16-empty"><div>${icon('comment',22)}</div><h3>No public discussions in ${escapeHTML(data.name)} yet.</h3><p>Start with a specific question, explanation or study insight that could help another student in this field.</p><button class="btn btn-primary" type="button" data-community-discussion data-community-subject="${escapeHTML(data.name)}">Start a subject discussion</button></section>`;
+
+    const unanswered = data.unanswered.length
+      ? `<section class="community16-unanswered">
+          <header><div><span class="opportunity-kicker">NEEDS A RESPONSE</span><h2>Help with an unanswered ${escapeHTML(data.name)} question</h2><p>Reply only when you can add useful knowledge or a clear learning path.</p></div><span>${data.counts.unanswered}</span></header>
+          <div>
+            ${data.unanswered.slice(0,4).map(post => `<button type="button" data-route="post/${encodeURIComponent(post.id)}">
+              <strong>${escapeHTML(post.title || (post.content || '').slice(0,120) || 'Student question')}</strong>
+              <small>${formatCount(post.likeCount || 0)} likes · ${formatCount(post.saveCount || 0)} saves · no public replies</small>
+              <span>Open →</span>
+            </button>`).join('')}
+          </div>
+        </section>`
+      : `<section class="community16-calm-note">${icon('check',17)} <span>There are no unanswered public discussions in this subject right now.</span></section>`;
+
+    const opportunityCards = data.opportunities.length
+      ? data.opportunities.slice(0,8).map(item => `<button class="community16-opportunity-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
+          <div class="community16-opportunity-top">
+            <span>LINKED OPPORTUNITY</span>
+            <small>${escapeHTML(item.fundingType || 'Funding varies')}</small>
+          </div>
+          <h3>${escapeHTML(item.title || 'Opportunity')}</h3>
+          <p>${escapeHTML(item.provider || item.providerName || item.university || 'Provider')}</p>
+          <div class="community16-opportunity-meta">
+            ${item.country ? `<span>${escapeHTML(item.country)}</span>` : ''}
+            ${item.studyLevel ? `<span>${escapeHTML(item.studyLevel)}</span>` : ''}
+            ${item.intake ? `<span>${escapeHTML(item.intake)}</span>` : ''}
+          </div>
+          <small class="community16-open">Review opportunity →</small>
+        </button>`).join('')
+      : `<section class="community16-inline-empty"><b>No linked opportunities yet.</b><span>You can still use this subject space for useful public discussion. Open the global catalogue to explore broader options.</span><button class="btn btn-secondary" type="button" data-route="opportunities">Explore opportunities</button></section>`;
+
+    const outcomes = data.outcomes.length
+      ? data.outcomes.slice(0,6).map(post => `<button class="community16-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}">
+          <span>${post.postType === 'success_story' ? 'SUCCESS STORY' : 'JOURNEY STORY'}</span>
+          <h3>${escapeHTML(post.title || 'Student experience')}</h3>
+          <p>${escapeHTML((post.content || '').slice(0,150))}</p>
+          <small>Student-shared experience →</small>
+        </button>`).join('')
+      : `<section class="community16-inline-empty"><b>No public outcomes for this subject yet.</b><span>Outcome stories appear only when students choose to publish them.</span></section>`;
+
+    const universityLinks = data.universities.length
+      ? data.universities.map(name => `<button type="button" data-route="university/${encodeURIComponent(name)}">${escapeHTML(name)} <span>→</span></button>`).join('')
+      : '<p>No linked universities yet.</p>';
+
+    const destinationChips = data.destinations.length
+      ? data.destinations.map(country => `<span>${escapeHTML(country)}</span>`).join('')
+      : '<small>No destination data yet.</small>';
+
+    const fundingChips = data.fundingTypes.length
+      ? data.fundingTypes.map(value => `<span>${escapeHTML(value)}</span>`).join('')
+      : '<small>Funding varies by opportunity.</small>';
+
+    const content = `${demoBanner()}
+      <div class="community16-page">
+        <button class="btn btn-ghost community16-back" type="button" data-route="explore">${icon('back',17)} Community</button>
+
+        <section class="community16-hero">
+          <div class="community16-hero-copy">
+            <span class="opportunity-kicker">SUBJECT COMMUNITY</span>
+            <h1>${escapeHTML(data.name)}</h1>
+            <p>A public learning space for questions, explanations, student experiences and opportunity discovery in ${escapeHTML(data.name)}. Community posts add context; they do not replace official academic, scholarship or admissions information.</p>
+            <div class="community16-actions">
+              <button class="btn btn-primary" type="button" data-community-discussion data-community-subject="${escapeHTML(data.name)}">${icon('plus',16)} Ask or share in ${escapeHTML(data.name)}</button>
+              <button class="btn btn-secondary" type="button" data-share-success data-prefill-subject="${escapeHTML(data.name)}">Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story data-prefill-subject="${escapeHTML(data.name)}">Share selected Journey milestones</button>
+            </div>
+          </div>
+          <aside class="community16-scope">
+            <span>PUBLIC SUBJECT SPACE</span>
+            <div><b>Discuss the subject</b><small>Questions, explanations, study methods and useful learning resources.</small></div>
+            <div><b>Discover paths</b><small>See linked opportunities and institutions without treating community posts as official requirements.</small></div>
+            <div><b>Protect private data</b><small>Keep application IDs, identity documents, addresses and private Journey details out of posts.</small></div>
+          </aside>
+        </section>
+
+        <section class="community16-stats" aria-label="${escapeHTML(data.name)} community summary">
+          <article><strong>${data.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${data.counts.opportunities || '—'}</strong><span>Linked opportunities</span></article>
+          <article><strong>${data.counts.universities || '—'}</strong><span>Linked universities</span></article>
+          <article><strong>${data.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
+        </section>
+
+        <div class="community16-layout">
+          <main class="community16-main">
+            <section class="community16-section">
+              <header class="community16-section-head">
+                <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>Learn with other students</h2><p>${escapeHTML(data.rankingNote)}</p></div>
+                <button class="btn btn-secondary" type="button" data-community-discussion data-community-subject="${escapeHTML(data.name)}">Start discussion</button>
+              </header>
+              <div class="community16-feed">${discussions}</div>
+            </section>
+
+            ${unanswered}
+
+            <section class="community16-section">
+              <header class="community16-section-head">
+                <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences in ${escapeHTML(data.name)}</h2><p>Useful context from students, not evidence that the same result or requirements apply to someone else.</p></div>
+              </header>
+              <div class="community16-outcomes">${outcomes}</div>
+            </section>
+          </main>
+
+          <aside class="community16-side">
+            <section class="community16-side-card">
+              <span class="opportunity-kicker">DISCOVERY CONTEXT</span>
+              <h2>Where this subject connects</h2>
+              <div class="community16-side-group"><b>Destinations</b><div class="community16-chips">${destinationChips}</div></div>
+              <div class="community16-side-group"><b>Funding types</b><div class="community16-chips">${fundingChips}</div></div>
+            </section>
+
+            <section class="community16-side-card">
+              <span class="opportunity-kicker">UNIVERSITIES</span>
+              <h2>Linked institutions</h2>
+              <div class="community16-university-links">${universityLinks}</div>
+              <p class="community16-side-note">University pages here are community discovery spaces. Official institution sources remain authoritative.</p>
+            </section>
+
+            <section class="community16-trust">
+              ${icon('info',17)}
+              <div><b>Official sources control requirements</b><p>${escapeHTML(data.sourceNote)}</p></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="community16-section">
+          <header class="community16-section-head">
+            <div><span class="opportunity-kicker">OPPORTUNITIES</span><h2>Paths linked to ${escapeHTML(data.name)}</h2><p>Use these listings for discovery, then verify current eligibility, funding, deadlines and application steps on the official provider source.</p></div>
+            <button class="btn btn-secondary" type="button" data-route="opportunities">Open full catalogue</button>
+          </header>
+          <div class="community16-opportunities">${opportunityCards}</div>
+        </section>
+      </div>`;
+
+    renderShell(content, { wide:true, right:false });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Subject community unavailable','Please try again.')}`, { wide:true, right:false });
+  }
+}
+
+function community17OpportunityCard(item, label='LINKED OPPORTUNITY') {
+  const levels = Array.isArray(item.studyLevels) ? item.studyLevels : (item.studyLevel ? [item.studyLevel] : []);
+  return `<button class="community17-opportunity-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
+    <div class="community17-opportunity-top"><span>${escapeHTML(label)}</span><small>${escapeHTML(item.fundingType || 'Funding varies')}</small></div>
+    <h3>${escapeHTML(item.title || 'Opportunity')}</h3>
+    <p>${escapeHTML(item.provider || item.providerName || item.university || 'Provider')}</p>
+    <div class="community17-opportunity-meta">
+      ${item.country ? `<span>${escapeHTML(item.country)}</span>` : ''}
+      ${levels.slice(0,2).map(level => `<span>${escapeHTML(level)}</span>`).join('')}
+      ${item.intake ? `<span>${escapeHTML(item.intake)}</span>` : ''}
+    </div>
+    <small class="community17-open">Review opportunity →</small>
+  </button>`;
+}
+
+function community17OutcomeCard(post) {
+  return `<button class="community17-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}">
+    <span>${post.postType === 'success_story' ? 'SUCCESS STORY' : 'JOURNEY STORY'}</span>
+    <h3>${escapeHTML(post.title || 'Student experience')}</h3>
+    <p>${escapeHTML((post.content || '').slice(0,160))}</p>
+    <small>Student-shared experience →</small>
+  </button>`;
+}
+
+function community17UnansweredMarkup(data, contextLabel) {
+  if (!data.unanswered.length) {
+    return `<section class="community17-calm-note">${icon('check',17)} <span>No unanswered public discussions in this ${escapeHTML(contextLabel)} right now.</span></section>`;
+  }
+  return `<section class="community17-unanswered">
+    <header><div><span class="opportunity-kicker">NEEDS A RESPONSE</span><h2>Questions with no public replies yet</h2><p>Help when you can add useful, grounded knowledge—not guesses.</p></div><span>${data.counts.unanswered}</span></header>
+    <div>
+      ${data.unanswered.slice(0,4).map(post => `<button type="button" data-route="post/${encodeURIComponent(post.id)}">
+        <strong>${escapeHTML(post.title || (post.content || '').slice(0,120) || 'Student question')}</strong>
+        <small>${formatCount(post.likeCount || 0)} likes · ${formatCount(post.saveCount || 0)} saves · no public replies</small>
+        <span>Open →</span>
+      </button>`).join('')}
+    </div>
+  </section>`;
 }
 
 async function renderUniversityCommunity(universityName) {
   const university = String(universityName || '').trim();
-  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university || 'University')}</h1><p>Loading university community…</p></div></header><div class="loading-card"></div>`, { wide:true });
-  const opportunities = await getOpportunities(state.mode).catch(() => []);
-  const data = universityCommunityData(university, state.posts, opportunities);
-  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="explore">${icon('back',17)} Community</button>
-    <div class="community-detail-layout" style="margin-top:14px">
-      <main>
-        <section class="community-hero"><span class="opportunity-kicker">UNIVERSITY COMMUNITY</span><h1>${escapeHTML(data.name)}</h1><p>${data.countries.length ? escapeHTML(data.countries.join(', ')) : 'Student community'} · ${data.opportunities.length} linked opportunities · ${data.posts.length} public posts.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(data.name)}">Ask this community</button><button class="btn btn-secondary" data-share-success data-prefill-university="${escapeHTML(data.name)}">Share a success</button></div></section>
-        <header class="page-head"><div><h2 style="margin:0">Student posts</h2></div></header>
-        <div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No university posts yet','Start a useful university discussion or share an outcome.')}</div>
-      </main>
-      <aside class="community-side">
-        <section class="journey-panel"><h2>Linked opportunities</h2>${communityOpportunityList(data.opportunities)}</section>
-        <section class="journey-panel"><h2>Intakes</h2><div class="community-compact-list">${data.intakes.length ? data.intakes.map(intake => `<button class="community-compact-item" type="button" style="text-align:left;color:inherit;cursor:pointer" data-route="intake/${encodeURIComponent(data.name)}/${encodeURIComponent(intake)}"><h4>${escapeHTML(intake)}</h4><p>Open intake community</p></button>`).join('') : '<p style="color:var(--muted)">No intake groups yet.</p>'}</div></section>
-        <div class="community-banner">Official university/provider pages remain authoritative for admissions, fees, visas and scholarship requirements.</div>
-      </aside>
-    </div>`;
-  renderShell(content, { wide:true });
+  renderShell(`<div class="community17-page"><section class="community17-hero loading"><span class="opportunity-kicker">UNIVERSITY COMMUNITY</span><h1>${escapeHTML(university || 'University')}</h1><p>Loading public discussions, intakes and linked opportunities…</p></section></div>`, { wide:true, right:false });
+
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const data = buildUniversityCommunityModel(university, state.posts, opportunities);
+
+    const discussions = data.discussions.length
+      ? data.discussions.map(postCard).join('')
+      : `<section class="community17-empty"><div>${icon('comment',22)}</div><h3>No public university discussions yet.</h3><p>Start with a useful question about study, campus preparation, programs or student experience without posting private application details.</p><button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">Start a university discussion</button></section>`;
+
+    const outcomes = data.outcomes.length
+      ? data.outcomes.slice(0,6).map(community17OutcomeCard).join('')
+      : `<section class="community17-inline-empty"><b>No public outcomes for this university yet.</b><span>Outcome stories appear only when students choose to publish them.</span></section>`;
+
+    const intakeCards = data.intakeSummaries.length
+      ? data.intakeSummaries.map(row => `<button class="community17-intake-card" type="button" data-route="intake/${encodeURIComponent(data.name)}/${encodeURIComponent(row.name)}">
+          <div><span>INTAKE SPACE</span><h3>${escapeHTML(row.name)}</h3><p>${row.discussionCount} discussion${row.discussionCount===1?'':'s'} · ${row.outcomeCount} outcome${row.outcomeCount===1?'':'s'}</p></div>
+          <div><strong>${row.opportunityCount || '—'}</strong><small>intake-linked opportunities</small></div>
+        </button>`).join('')
+      : `<section class="community17-inline-empty"><b>No intake spaces yet.</b><span>Intake communities appear when public student posts or linked opportunity data identifies an intake.</span></section>`;
+
+    const subjectLinks = data.subjects.length
+      ? data.subjects.map(subject => `<button type="button" data-route="subject/${encodeURIComponent(subject)}">${escapeHTML(subject)} <span>→</span></button>`).join('')
+      : '<p>No linked subject data yet.</p>';
+
+    const countryChips = data.countries.length
+      ? data.countries.map(country => `<span>${escapeHTML(country)}</span>`).join('')
+      : '<small>No destination data yet.</small>';
+
+    const fundingChips = data.fundingTypes.length
+      ? data.fundingTypes.map(value => `<span>${escapeHTML(value)}</span>`).join('')
+      : '<small>Funding varies by opportunity.</small>';
+
+    const opportunityCards = data.opportunities.length
+      ? data.opportunities.slice(0,8).map(item => community17OpportunityCard(item)).join('')
+      : `<section class="community17-inline-empty"><b>No linked opportunities yet.</b><span>Use this community for public student context, and explore the global opportunity catalogue separately.</span><button class="btn btn-secondary" type="button" data-route="opportunities">Explore opportunities</button></section>`;
+
+    const content = `${demoBanner()}
+      <div class="community17-page">
+        <button class="btn btn-ghost community17-back" type="button" data-route="explore">${icon('back',17)} Community</button>
+
+        <section class="community17-hero">
+          <div class="community17-hero-copy">
+            <span class="opportunity-kicker">UNIVERSITY COMMUNITY</span>
+            <h1>${escapeHTML(data.name)}</h1>
+            <p>A public student space around ${escapeHTML(data.name)} for questions, study context, intake conversations and voluntarily shared outcomes. This is not an official university channel.</p>
+            <div class="community17-actions">
+              <button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">${icon('plus',16)} Ask this community</button>
+              <button class="btn btn-secondary" type="button" data-share-success data-prefill-university="${escapeHTML(data.name)}">Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story data-prefill-university="${escapeHTML(data.name)}">Share selected Journey milestones</button>
+            </div>
+          </div>
+          <aside class="community17-scope">
+            <span>PUBLIC STUDENT SPACE</span>
+            <div><b>Student context</b><small>Questions, study experiences, preparation and useful peer knowledge.</small></div>
+            <div><b>Not an official channel</b><small>Admissions, fees, funding, visa and enrollment requirements must be confirmed with official sources.</small></div>
+            <div><b>Keep applications private</b><small>Do not post application IDs, passport/visa details, addresses, booking references or private documents.</small></div>
+          </aside>
+        </section>
+
+        <section class="community17-stats" aria-label="${escapeHTML(data.name)} community summary">
+          <article><strong>${data.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${data.counts.opportunities || '—'}</strong><span>Linked opportunities</span></article>
+          <article><strong>${data.counts.intakes || '—'}</strong><span>Intake spaces</span></article>
+          <article><strong>${data.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
+        </section>
+
+        <div class="community17-layout">
+          <main class="community17-main">
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>Student conversations</h2><p>${escapeHTML(data.rankingNote)}</p></div>
+                <button class="btn btn-secondary" type="button" data-community-discussion data-community-university="${escapeHTML(data.name)}">Start discussion</button>
+              </header>
+              <div class="community17-feed">${discussions}</div>
+            </section>
+
+            ${community17UnansweredMarkup(data,'university community')}
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">INTAKES</span><h2>Find your intake space</h2><p>Intake pages narrow public student discussion to a specific intake without exposing private application or travel records.</p></div>
+              </header>
+              <div class="community17-intakes">${intakeCards}</div>
+            </section>
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences around ${escapeHTML(data.name)}</h2><p>Student stories provide context, not proof of current admission, funding or visa requirements.</p></div>
+              </header>
+              <div class="community17-outcomes">${outcomes}</div>
+            </section>
+          </main>
+
+          <aside class="community17-side">
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">DISCOVERY CONTEXT</span>
+              <h2>What connects here</h2>
+              <div class="community17-side-group"><b>Countries</b><div class="community17-chips">${countryChips}</div></div>
+              <div class="community17-side-group"><b>Funding types</b><div class="community17-chips">${fundingChips}</div></div>
+            </section>
+
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">SUBJECTS</span>
+              <h2>Linked study areas</h2>
+              <div class="community17-link-list">${subjectLinks}</div>
+            </section>
+
+            <section class="community17-trust">
+              ${icon('info',17)}
+              <div><b>Official sources remain authoritative</b><p>${escapeHTML(data.sourceNote)}</p></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">OPPORTUNITIES</span><h2>Paths linked to ${escapeHTML(data.name)}</h2><p>Use these for discovery, then verify current requirements on the official provider or university source.</p></div>
+            <button class="btn btn-secondary" type="button" data-route="opportunities">Open full catalogue</button>
+          </header>
+          <div class="community17-opportunities">${opportunityCards}</div>
+        </section>
+      </div>`;
+
+    renderShell(content, { wide:true, right:false });
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','University community unavailable','Please try again.')}`, { wide:true, right:false });
+  }
 }
 
 async function renderIntakeCommunity(universityName, intakeName) {
-  const university=String(universityName||'').trim(), intake=String(intakeName||'').trim();
-  renderShell(`<header class="page-head"><div><h1>${escapeHTML(university)}</h1><p>Loading ${escapeHTML(intake)} intake community…</p></div></header><div class="loading-card"></div>`, { wide:true });
-  const opportunities = await getOpportunities(state.mode).catch(() => []);
-  const data = intakeCommunityData(university,intake,state.posts,opportunities);
-  const content = `${demoBanner()}<button class="btn btn-ghost" data-route="university/${encodeURIComponent(university)}">${icon('back',17)} ${escapeHTML(university)}</button>
-    <div class="community-detail-layout" style="margin-top:14px"><main><section class="community-hero"><span class="opportunity-kicker">INTAKE COMMUNITY</span><h1>${escapeHTML(intake)}</h1><p>${escapeHTML(university)} · connect around preparation, orientation and student questions without exposing private application or travel data.</p><div class="community-action-row"><button class="btn btn-primary" data-community-discussion data-community-university="${escapeHTML(university)}" data-community-intake="${escapeHTML(intake)}">Ask / share in this intake</button></div></section><header class="page-head"><div><h2 style="margin:0">Intake posts</h2></div></header><div class="feed-list">${data.posts.length ? data.posts.map(postCard).join('') : emptyState('compass','No intake posts yet','Start the first useful discussion for this intake.')}</div></main><aside class="community-side"><section class="journey-panel"><h2>Relevant opportunities</h2>${communityOpportunityList(data.opportunities)}</section><div class="community-banner">Do not post passport numbers, application IDs, booking references, exact addresses or other sensitive personal information.</div></aside></div>`;
-  renderShell(content,{wide:true});
+  const university=String(universityName||'').trim();
+  const intake=String(intakeName||'').trim();
+  renderShell(`<div class="community17-page"><section class="community17-hero loading intake"><span class="opportunity-kicker">INTAKE COMMUNITY</span><h1>${escapeHTML(intake || 'Intake')}</h1><p>Loading public intake context for ${escapeHTML(university || 'University')}…</p></section></div>`, { wide:true, right:false });
+
+  try {
+    const opportunities = await getOpportunities(state.mode).catch(() => []);
+    const data = buildIntakeCommunityModel(university,intake,state.posts,opportunities);
+
+    const discussions = data.discussions.length
+      ? data.discussions.map(postCard).join('')
+      : `<section class="community17-empty"><div>${icon('comment',22)}</div><h3>No public intake discussions yet.</h3><p>Start a useful discussion for this intake without sharing private application, identity, booking or travel details.</p><button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">Start intake discussion</button></section>`;
+
+    const outcomes = data.outcomes.length
+      ? data.outcomes.slice(0,6).map(community17OutcomeCard).join('')
+      : `<section class="community17-inline-empty"><b>No public outcomes for this intake yet.</b><span>Stories appear only when students choose to publish intake-specific experiences.</span></section>`;
+
+    const subjectLinks = data.subjects.length
+      ? data.subjects.map(subject => `<button type="button" data-route="subject/${encodeURIComponent(subject)}">${escapeHTML(subject)} <span>→</span></button>`).join('')
+      : '<p>No intake-specific subject data yet.</p>';
+
+    const exactOpportunities = data.opportunities.length
+      ? data.opportunities.slice(0,8).map(item => community17OpportunityCard(item,'INTAKE-LINKED OPPORTUNITY')).join('')
+      : `<section class="community17-inline-empty"><b>No opportunity is explicitly linked to this intake yet.</b><span>Do not assume a general university opportunity applies to this intake. Verify the current intake on the official provider source.</span></section>`;
+
+    const generalOpportunities = data.generalUniversityOpportunities.length
+      ? data.generalUniversityOpportunities.slice(0,6).map(item => community17OpportunityCard(item,'UNIVERSITY OPPORTUNITY · INTAKE NOT SPECIFIED')).join('')
+      : `<section class="community17-inline-empty"><b>No general university opportunities without an intake label.</b><span>Only exact intake matches are treated as intake-linked above.</span></section>`;
+
+    const countryChips = data.countries.length
+      ? data.countries.map(country => `<span>${escapeHTML(country)}</span>`).join('')
+      : '<small>No country context stored yet.</small>';
+
+    const content = `${demoBanner()}
+      <div class="community17-page community17-intake-page">
+        <button class="btn btn-ghost community17-back" type="button" data-route="university/${encodeURIComponent(data.university)}">${icon('back',17)} ${escapeHTML(data.university)}</button>
+
+        <section class="community17-hero intake">
+          <div class="community17-hero-copy">
+            <span class="opportunity-kicker">INTAKE COMMUNITY</span>
+            <h1>${escapeHTML(data.intake)}</h1>
+            <p>${escapeHTML(data.university)} · a public student space for intake-specific questions, preparation context and voluntarily shared experiences. It does not expose or import anyone’s private Tefsen Journey.</p>
+            <div class="community17-actions">
+              <button class="btn btn-primary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">${icon('plus',16)} Ask or share in this intake</button>
+              <button class="btn btn-secondary" type="button" data-share-success data-prefill-university="${escapeHTML(data.university)}" data-prefill-intake="${escapeHTML(data.intake)}">Share a success</button>
+              <button class="btn btn-ghost" type="button" data-share-journey-story data-prefill-university="${escapeHTML(data.university)}" data-prefill-intake="${escapeHTML(data.intake)}">Share selected Journey milestones</button>
+            </div>
+          </div>
+          <aside class="community17-scope">
+            <span>INTAKE-SPECIFIC · PUBLIC</span>
+            <div><b>Discuss public preparation</b><small>Orientation, study planning, program questions and student context.</small></div>
+            <div><b>Exact intake matching</b><small>Only opportunities carrying this intake label appear as intake-linked opportunities.</small></div>
+            <div><b>Protect sensitive data</b><small>${escapeHTML(data.privacyNote)}</small></div>
+          </aside>
+        </section>
+
+        <section class="community17-stats" aria-label="${escapeHTML(data.intake)} intake community summary">
+          <article><strong>${data.counts.discussions || '—'}</strong><span>Public discussions</span></article>
+          <article><strong>${data.counts.opportunities || '—'}</strong><span>Exact intake opportunities</span></article>
+          <article><strong>${data.counts.subjects || '—'}</strong><span>Linked subjects</span></article>
+          <article><strong>${data.counts.outcomes || '—'}</strong><span>Shared outcomes</span></article>
+        </section>
+
+        <div class="community17-layout">
+          <main class="community17-main">
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">DISCUSSIONS</span><h2>${escapeHTML(data.intake)} conversations</h2><p>${escapeHTML(data.rankingNote)}</p></div>
+                <button class="btn btn-secondary" type="button" data-community-discussion data-community-university="${escapeHTML(data.university)}" data-community-intake="${escapeHTML(data.intake)}">Start discussion</button>
+              </header>
+              <div class="community17-feed">${discussions}</div>
+            </section>
+
+            ${community17UnansweredMarkup(data,'intake')}
+
+            <section class="community17-section">
+              <header class="community17-section-head">
+                <div><span class="opportunity-kicker">STUDENT OUTCOMES</span><h2>Experiences from this intake</h2><p>Voluntary public stories only. They do not establish current requirements or predict another student's result.</p></div>
+              </header>
+              <div class="community17-outcomes">${outcomes}</div>
+            </section>
+          </main>
+
+          <aside class="community17-side">
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">INTAKE CONTEXT</span>
+              <h2>Stored public context</h2>
+              <div class="community17-side-group"><b>Countries</b><div class="community17-chips">${countryChips}</div></div>
+            </section>
+
+            <section class="community17-side-card">
+              <span class="opportunity-kicker">SUBJECTS</span>
+              <h2>Linked study areas</h2>
+              <div class="community17-link-list">${subjectLinks}</div>
+            </section>
+
+            <section class="community17-trust">
+              ${icon('info',17)}
+              <div><b>Verify every intake detail</b><p>${escapeHTML(data.sourceNote)}</p></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">EXACT INTAKE MATCHES</span><h2>Opportunities explicitly linked to ${escapeHTML(data.intake)}</h2><p>These records carry this intake label, but the official provider source still controls current dates, eligibility, funding and application requirements.</p></div>
+          </header>
+          <div class="community17-opportunities">${exactOpportunities}</div>
+        </section>
+
+        <section class="community17-section">
+          <header class="community17-section-head">
+            <div><span class="opportunity-kicker">UNIVERSITY-WIDE OPPORTUNITIES</span><h2>Intake not specified</h2><p>These are linked to ${escapeHTML(data.university)} but do not carry an intake value. They are intentionally not treated as ${escapeHTML(data.intake)} opportunities.</p></div>
+            <button class="btn btn-secondary" type="button" data-route="university/${encodeURIComponent(data.university)}">University community</button>
+          </header>
+          <div class="community17-opportunities">${generalOpportunities}</div>
+        </section>
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  } catch (error) {
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Intake community unavailable','Please try again.')}`, { wide:true, right:false });
+  }
 }
 
 
@@ -2608,6 +3300,210 @@ function emptyState(ic, title, text) {
   return `<div class="panel empty-state"><div class="empty-icon">${icon(ic,26)}</div><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`;
 }
 
+function success18ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function success18DetailMarkup(post, model, comments) {
+  const liked=reactionState.liked.has(post.id);
+  const saved=reactionState.saved.has(post.id);
+  const facts=model.facts.length
+    ? model.facts.map(([label,value])=>`<div class="success18-fact"><small>${escapeHTML(label)}</small><b>${escapeHTML(value)}</b></div>`).join('')
+    : '<div class="success18-fact empty"><small>Outcome details</small><b>No structured facts were provided.</b></div>';
+  const contextLinks=success18ContextLinks(model);
+
+  return `<div class="success18-reader">
+    <button class="btn btn-ghost success18-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="success18-detail">
+      <header class="success18-hero">
+        <div class="success18-hero-main">
+          <span class="story-type success">✓ Student success story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>Shared voluntarily by a student as personal experience. It is not an official decision notice or current admissions guidance.</p>
+          <div class="success18-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified, model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="success18-hero-aside">
+          <span>HOW TO READ THIS</span>
+          <div><b>Personal outcome</b><small>This describes what happened to this student.</small></div>
+          <div><b>Not a guarantee</b><small>Another student may face different requirements, timelines or results.</small></div>
+          <div><b>Verify officially</b><small>Use the university/provider source before making application decisions.</small></div>
+        </aside>
+      </header>
+
+      <section class="success18-facts" aria-label="Success story facts">${facts}</section>
+
+      <div class="success18-body-layout">
+        <main class="success18-story">
+          <span class="opportunity-kicker">THE STUDENT'S STORY</span>
+          <div class="success18-story-copy">${nl2br(model.content || 'This student did not add a longer story.')}</div>
+          ${model.tags.length ? `<div class="tag-row">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="success18-reader-side">
+          <section class="success18-trust-card">
+            ${icon('info',17)}
+            <div><b>Experience, not requirements</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current information</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+          <section class="success18-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Public by choice</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="success18-context">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this story</h2><p>Use Tefsen community spaces for student context, then verify formal requirements on official sources.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions success18-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like success story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="success18-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Add helpful context, encouragement or a relevant question. Do not treat the story as official admissions advice.</p></div></header>
+      <form class="success18-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="success18-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
+function journey19ContextLinks(model) {
+  const links=[];
+  if(model.subject) links.push(`<button type="button" data-route="subject/${encodeURIComponent(model.subject)}"><span>Subject</span><b>${escapeHTML(model.subject)}</b><small>Open subject community →</small></button>`);
+  if(model.university) links.push(`<button type="button" data-route="university/${encodeURIComponent(model.university)}"><span>University</span><b>${escapeHTML(model.university)}</b><small>Open university community →</small></button>`);
+  if(model.university && model.intake) links.push(`<button type="button" data-route="intake/${encodeURIComponent(model.university)}/${encodeURIComponent(model.intake)}"><span>Intake</span><b>${escapeHTML(model.intake)}</b><small>Open intake community →</small></button>`);
+  return links.join('');
+}
+
+function journey19MonthLabel(value) {
+  const match=/^(\d{4})-(\d{2})$/.exec(String(value||''));
+  if(!match) return String(value||'');
+  const date=new Date(Number(match[1]),Number(match[2])-1,1);
+  return date.toLocaleDateString(undefined,{year:'numeric',month:'short'});
+}
+
+function journey19DetailMarkup(post,model,comments) {
+  const liked=reactionState.liked.has(post.id);
+  const saved=reactionState.saved.has(post.id);
+  const contextLinks=journey19ContextLinks(model);
+
+  const timeline=model.milestones.length
+    ? model.milestones.map((item,index)=>`<article class="journey19-timeline-item">
+        <div class="journey19-timeline-rail"><span></span>${index<model.milestones.length-1?'<i></i>':''}</div>
+        <div class="journey19-timeline-content">
+          <small>${item.month ? escapeHTML(journey19MonthLabel(item.month)) : 'Month not shared'}</small>
+          <h3>${escapeHTML(item.stage || 'Milestone')}</h3>
+          ${item.note ? `<p>${nl2br(item.note)}</p>` : '<p class="muted">No additional public note.</p>'}
+        </div>
+      </article>`).join('')
+    : '<div class="journey19-no-milestones">No public milestones were included in this story.</div>';
+
+  return `<div class="journey19-reader">
+    <button class="btn btn-ghost journey19-back" type="button" data-back>${icon('back',17)} Back</button>
+
+    <article class="journey19-detail">
+      <header class="journey19-hero">
+        <div class="journey19-hero-main">
+          <span class="story-type journey">Journey story</span>
+          <h1>${escapeHTML(model.title)}</h1>
+          <p>A student-selected public timeline. It is not the student's private Tefsen Journey record, official admissions guidance or a recommended path for someone else.</p>
+          <div class="journey19-author">
+            <button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(model.authorId)}">${avatar({fullName:model.authorName,photoUrl:model.authorPhotoUrl})}</button>
+            <div><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(model.authorId)}"><b>${escapeHTML(model.authorName)} ${verifiedMark(model.verified,model.role)}</b></button><small>${rolePill(model.role)} &nbsp; ${relativeTime(model.createdAt)}</small></div>
+          </div>
+        </div>
+        <aside class="journey19-hero-aside">
+          <span>WHAT THIS SHOWS</span>
+          <div><b>Selected milestones only</b><small>The student chose which milestones and notes to publish.</small></div>
+          <div><b>Month-level timing</b><small>Exact private dates are not requested by the public Journey-story form.</small></div>
+          <div><b>Not a blueprint</b><small>Timelines and requirements can differ by student, provider, country and intake.</small></div>
+        </aside>
+      </header>
+
+      <section class="journey19-context-strip">
+        <div><small>Subject</small><b>${escapeHTML(model.subject || 'Not specified')}</b></div>
+        <div><small>University</small><b>${escapeHTML(model.university || 'Not specified')}</b></div>
+        <div><small>Intake</small><b>${escapeHTML(model.intake || 'Not specified')}</b></div>
+        <div><small>Public milestones</small><b>${model.milestones.length}</b></div>
+      </section>
+
+      <div class="journey19-body-layout">
+        <main class="journey19-main">
+          <section class="journey19-intro">
+            <span class="opportunity-kicker">STORY CONTEXT</span>
+            <div class="journey19-intro-copy">${nl2br(model.content || 'This student did not add a longer introduction.')}</div>
+          </section>
+
+          <section class="journey19-timeline-section">
+            <header><span class="opportunity-kicker">PUBLIC TIMELINE</span><h2>Milestones this student chose to share</h2><p>These entries are a public story, not a live view of the student's private Journey workspace.</p></header>
+            <div class="journey19-timeline">${timeline}</div>
+          </section>
+
+          ${model.tags.length ? `<div class="tag-row journey19-tags">${model.tags.map(tag=>`<span class="tag">#${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
+        </main>
+
+        <aside class="journey19-reader-side">
+          <section class="journey19-trust-card privacy">
+            ${icon('user',17)}
+            <div><b>Private Journey stays private</b><p>${escapeHTML(model.privacyNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card">
+            ${icon('info',17)}
+            <div><b>Personal timeline, not a recommendation</b><p>${escapeHTML(model.trustNotice)}</p></div>
+          </section>
+          <section class="journey19-trust-card official">
+            ${icon('check',17)}
+            <div><b>Verify current requirements</b><p>${escapeHTML(model.sourceNotice)}</p></div>
+          </section>
+        </aside>
+      </div>
+
+      ${contextLinks ? `<section class="journey19-context-links">
+        <header><span class="opportunity-kicker">EXPLORE THE CONTEXT</span><h2>Continue from this public story</h2><p>Community spaces provide student context. Official institution/provider sources control formal requirements.</p></header>
+        <div>${contextLinks}</div>
+      </section>` : ''}
+
+      <footer class="post-actions journey19-actions">
+        <button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like Journey story" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" aria-label="Replies"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(comments.length || post.commentCount)}</span></button>
+        <button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button>
+        <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+        <button class="action-btn" data-post-menu="${escapeHTML(post.id)}"><span>${icon('more',17)}</span>Options</button>
+      </footer>
+    </article>
+
+    <section class="journey19-replies">
+      <header><div><span class="opportunity-kicker">COMMUNITY REPLIES</span><h2>${comments.length} ${comments.length===1?'reply':'replies'}</h2><p>Ask about the public story or add helpful context. Do not request private application, identity, visa, travel or financial details.</p></div></header>
+      <form class="journey19-reply-form" data-comment-form="${escapeHTML(post.id)}">
+        <textarea class="textarea" name="content" placeholder="Write a helpful public reply…" required maxlength="5000"></textarea>
+        <div><button class="btn btn-primary" type="submit">Publish reply</button></div>
+      </form>
+      <div class="journey19-reply-list">${comments.length ? comments.map(answerCard).join('') : emptyState('comment','No replies yet','Add a thoughtful public reply if you can contribute something useful.')}</div>
+    </section>
+  </div>`;
+}
+
 async function renderPostDetail(postId) {
   stopComments?.(); stopComments = null;
   let post = state.posts.find(p => p.id === postId);
@@ -2615,7 +3511,53 @@ async function renderPostDetail(postId) {
     renderShell(`<div class="loading-card"></div>`);
     post = await getPost(state.mode, postId).catch(() => null);
   }
-  if (!post) { renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.')); return; }
+  if (!post) {
+    renderShell(emptyState('info','Post not found','It may have been removed or you may not have permission to view it.'));
+    return;
+  }
+
+  if (post.postType === 'success_story') {
+    const model=buildSuccessStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=adminCapability === true;
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Success story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawSuccess=()=>{
+      renderShell(success18DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawSuccess();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawSuccess();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
+  if (post.postType === 'journey_story') {
+    const model=buildJourneyStoryModel(post);
+    const own=String(post.authorId || '')===String(state.user?.uid || '');
+    const admin=adminCapability === true;
+    if (!model || (!model.isPublic && !own && !admin)) {
+      renderShell(emptyState('info','Journey story unavailable','This story is not publicly available.'));
+      return;
+    }
+
+    currentComments=[];
+    const drawJourney=()=>{
+      renderShell(journey19DetailMarkup(post,model,currentComments),{wide:true,right:false});
+    };
+    drawJourney();
+    stopComments=subscribeComments(state.mode,postId,comments=>{
+      currentComments=comments;
+      drawJourney();
+    },e=>toast(humanError(e),'error'));
+    return;
+  }
+
   currentComments = [];
   const draw = () => {
     const liked = reactionState.liked.has(post.id), saved = reactionState.saved.has(post.id);
@@ -2642,84 +3584,165 @@ function answerCard(answer) {
   return `<article class="panel answer-card"><header class="post-head">${avatarHtml}<div class="post-head-main">${nameHtml}<small>${rolePill(answer.role || answer.authorRole || 'Student')} &nbsp; ${relativeTime(answer.createdAt)}</small></div></header><p>${nl2br(answer.content || answer.text || '')}</p></article>`;
 }
 
+async function refreshNotificationCenterData() {
+  if(!state.user?.uid) return buildNotificationCenterModel();
+  const [activityNotifications,journeys,opportunities,readIds]=await Promise.all([
+    getNotifications(state.mode,state.user.uid).catch(()=>[]),
+    listJourneyStates(state.mode,state.user.uid).catch(()=>[]),
+    getOpportunities(state.mode).catch(()=>[]),
+    getSyncedNotificationReadIds(state.mode,state.user.uid).catch(()=>getNotificationReadIds(state.user.uid))
+  ]);
+  const model=applyNotificationPreferences(buildNotificationCenterModel({
+    activityNotifications,
+    journeys,
+    opportunities,
+    readIds,
+    now:new Date()
+  }), currentUserSettings);
+  setState({notifications:model.items,unreadCount:model.unreadCount});
+  return model;
+}
+
+function notificationIconName(n) {
+  if(n.type==='deadline') return 'clock';
+  if(n.type==='post_acceptance') return 'check';
+  if(n.type==='journey') return 'compass';
+  if(n.type==='reply') return 'comment';
+  if(n.type==='like') return 'heart';
+  return 'bell';
+}
+
+function notification21Item(n) {
+  const time=n.timeLabel || (n.createdAt ? relativeTime(n.createdAt) : '');
+  return `<button class="notification21-item ${n.read?'read':'unread'} priority-${escapeHTML(n.priority||'info')}" type="button"
+    data-notification="${escapeHTML(n.id)}" data-notification-route="${escapeHTML(n.route||'')}">
+    <span class="notification21-icon">${icon(notificationIconName(n),18)}</span>
+    <span class="notification21-copy">
+      <span class="notification21-meta"><b>${escapeHTML(n.category==='attention'?'Needs attention':n.category==='planning'?'Your plan':'Community update')}</b>${time?`<small>${escapeHTML(time)}</small>`:''}</span>
+      <strong>${escapeHTML(n.title||'Tefsen update')}</strong>
+      <p>${escapeHTML(n.message||'')}</p>
+      <small class="notification21-action">${escapeHTML(n.actionLabel||'Open')} →</small>
+    </span>
+    ${n.read?'':'<span class="notification21-dot" aria-label="Unread"></span>'}
+  </button>`;
+}
+
+function notification21Section(title,eyebrow,rows,description='') {
+  if(!rows?.length) return '';
+  const unreadCount=rows.filter(row=>!row.read).length;
+  const category=String(rows[0]?.category||'');
+  return `<section class="notification21-section">
+    <header class="notification21-section-head">
+      <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2>${description?`<p>${escapeHTML(description)}</p>`:''}</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><span>${unreadCount} unread</span>${unreadCount&&category?`<button class="btn btn-ghost" type="button" data-notifications-mark-section="${escapeHTML(category)}">Mark section read</button>`:''}</div>
+    </header>
+    <div class="notification21-list">${rows.map(notification21Item).join('')}</div>
+  </section>`;
+}
+
 async function renderNotifications() {
-  const rows = state.notifications;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Notifications</h1><p>Updates from your questions, answers and community.</p></div></header>
-    <section class="panel">${rows.length ? rows.map(notificationItem).join('') : emptyState('bell','You are all caught up','New activity will appear here.')}</section>`;
-  renderShell(content);
-}
+  renderShell(`<div class="notification21-page"><section class="notification21-hero loading"><span class="opportunity-kicker">NOTIFICATIONS</span><h1>Loading what needs your attention…</h1><p>Checking your Journey dates, opportunity deadlines and Community activity.</p></section></div>`,{wide:true,right:false});
 
-function notificationItem(n) {
-  const typeIcon = n.type === 'like' ? 'heart' : n.type === 'answer' ? 'comment' : 'bell';
-  return `<button class="notification-item ${n.read ? '' : 'unread'}" type="button" style="width:100%;text-align:left;color:inherit;background:${n.read?'transparent':'rgba(22,173,239,.045)'};border-left:0;border-right:0;border-top:0" data-notification="${escapeHTML(n.id)}" data-post="${escapeHTML(n.postId || '')}"><span class="notification-icon">${icon(typeIcon,18)}</span><span><p><b>${escapeHTML(n.actorName || 'Tefsen')}</b> ${escapeHTML(n.text || n.message || 'sent you an update')}</p><small>${relativeTime(n.createdAt)}</small></span></button>`;
-}
+  try{
+    const model=await refreshNotificationCenterData();
+    const content=`${demoBanner()}
+      <div class="notification21-page">
+        <section class="notification21-hero">
+          <div>
+            <span class="opportunity-kicker">YOUR NEXT ACTIONS</span>
+            <h1>Notifications that help you move forward</h1>
+            <p>Tefsen prioritizes deadlines, private Journey planning dates, accepted-offer actions and useful Community activity instead of filling this page with generic engagement noise.</p>
+            <div class="notification21-hero-actions">
+              ${model.unreadCount ? '<button class="btn btn-secondary" type="button" data-notifications-mark-all>Mark all as read</button>' : '<span class="notification21-calm">✓ No unread notifications</span>'}
+              <button class="btn btn-ghost" type="button" data-route="journeys">Open Journey workspace</button><button class="btn btn-ghost" type="button" data-route="settings/notifications">Manage alerts</button>
+            </div>
+          </div>
+          <aside class="notification21-scope">
+            <span>HOW THIS WORKS</span>
+            <div><b>Private planning stays private</b><small>Journey-derived alerts are calculated for you; they are not public Community posts.</small></div>
+            <div><b>Official sources still control dates</b><small>A stored deadline is a planning aid. Verify current dates and requirements on the provider source.</small></div>
+            <div><b>Read state is account-scoped</b><small>Acknowledged items sync through your private notification state when available, with a per-account browser fallback.</small></div>
+          </aside>
+        </section>
 
-async function renderMessages(conversationId = '') {
-  if (!state.conversations.length) {
-    const conversations = await getConversations(state.mode, state.user.uid).catch(() => []);
-    setState({ conversations });
+        <section class="notification21-stats" aria-label="Notification summary">
+          <article><strong>${model.counts.unread}</strong><span>Unread</span></article>
+          <article><strong>${model.counts.attention}</strong><span>Needs attention</span></article>
+          <article><strong>${model.counts.planning}</strong><span>Planning</span></article>
+          <article><strong>${model.counts.activity}</strong><span>Community updates</span></article>
+        </section>
+
+        <section class="notification21-source-note">${icon('info',16)}<span>${escapeHTML(model.sourceNote)}</span></section>
+
+        ${model.empty ? `<section class="notification21-empty"><div>${icon('bell',24)}</div><h2>Nothing needs your attention right now</h2><p>Deadline, Journey and supported Community activity notifications will appear here when there is something useful to review.</p><div><button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button><button class="btn btn-secondary" type="button" data-route="journeys">Open Journeys</button></div></section>` : `
+          ${notification21Section('Deadlines and time-sensitive actions','NEEDS ATTENTION',model.sections.attention,'Stored dates that are close, today or overdue. Verify official deadlines before acting.')}
+          ${notification21Section('Continue your plan','JOURNEY PLANNING',model.sections.planning,'Useful next actions from your private Journey and accepted-offer workspace.')}
+          ${notification21Section('Community activity','PUBLIC ACTIVITY',model.sections.activity,'Replies and supported activity records from the Community notification collection.')}
+        `}
+      </div>`;
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Notifications unavailable','Please try again.')}`,{wide:true,right:false});
   }
-  const selected = state.conversations.find(c => c.id === conversationId) || state.conversations[0] || null;
-  if (selected) {
-    state.selectedConversation = selected;
-    stopMessages?.();
-    stopMessages = subscribeMessages(state.mode, selected.id, messages => {
-      state.messages = messages;
-      drawMessages(selected);
-      requestAnimationFrame(() => document.querySelector('.chat-messages')?.scrollTo(0, 999999));
-    }, e => toast(humanError(e),'error'));
-  } else drawMessages(null);
 }
 
-function drawMessages(selected) {
-  const convs = state.conversations;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Messages</h1><p>Continue learning conversations privately.</p></div></header>
-    <section class="panel messages-layout ${selected ? 'chat-open' : ''}">
-      <div class="conversation-list"><div class="conversation-list-head"><b>Conversations</b></div>${convs.length ? convs.map(c => conversationItem(c,selected)).join('') : `<div class="empty-state"><h3>No conversations</h3><p>Open a user profile and start a conversation.</p></div>`}</div>
-      <div class="chat-pane">${selected ? `<div class="chat-head"><button class="btn btn-icon btn-ghost" data-messages-back>${icon('back',18)}</button>${avatar({fullName:conversationTitle(selected)},'sm')}<b>${escapeHTML(conversationTitle(selected))}</b></div><div class="chat-messages">${state.messages.map(messageBubble).join('') || '<div class="empty-state"><p>Start the conversation.</p></div>'}</div><form class="chat-form" data-message-form="${escapeHTML(selected.id)}"><input class="input" name="text" maxlength="3000" placeholder="Write a message…" required><button class="btn btn-primary btn-icon" type="submit" aria-label="Send">${icon('send',18)}</button></form>` : `<div class="empty-state"><div class="empty-icon">${icon('message',25)}</div><h3>Select a conversation</h3><p>Your messages will appear here.</p></div>`}</div>
+function renderPrivateMessagingUnavailable() {
+  const content=`${demoBanner()}
+    <section class="messages22-retired">
+      <div class="messages22-icon">${icon('message',24)}</div>
+      <span class="opportunity-kicker">PRIVATE MESSAGING</span>
+      <h1>Private messages are not available on Tefsen Web</h1>
+      <p>The unfinished chat screen was removed rather than presenting a feature that cannot securely send or receive messages. Use Community for public learning discussions and keep application, identity, financial, visa and travel details private.</p>
+      <div class="messages22-actions">
+        <button class="btn btn-primary" type="button" data-route="explore">Open Community</button>
+        <button class="btn btn-secondary" type="button" data-route="notifications">Open Notifications</button>
+      </div>
+      <aside>
+        <b>Why this route still exists</b>
+        <span>Old bookmarks may still point to <code>#/messages</code>. This compatibility page prevents a broken route without exposing a fake chat feature.</span>
+      </aside>
     </section>`;
   renderShell(content,{wide:true,right:false});
 }
 
-function conversationTitle(c) {
-  if (c.title) return c.title;
-  if (c.participantNames) {
-    const keys = Object.keys(c.participantNames).filter(k => k !== state.user.uid);
-    if (keys[0]) return c.participantNames[keys[0]] || 'Conversation';
-  }
-  return 'Conversation';
-}
-function conversationItem(c,selected) { return `<button class="conversation-item ${selected?.id===c.id?'active':''}" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;color:inherit;text-align:left" data-conversation="${escapeHTML(c.id)}">${avatar({fullName:conversationTitle(c)},'sm')}<div><b>${escapeHTML(conversationTitle(c))}</b><small>${escapeHTML(c.lastMessage || 'Start a conversation')} · ${relativeTime(c.updatedAt)}</small></div></button>`; }
-function messageBubble(m) { return `<div class="bubble ${m.senderId === state.user.uid ? 'mine' : ''}">${nl2br(m.text || m.content || '')}<small>${relativeTime(m.createdAt)}</small></div>`; }
-
-async function renderLeaderboard() {
-  if (!state.leaderboard.length) setState({ leaderboard: await getLeaderboard(state.mode).catch(()=>[]) });
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Leaderboard</h1><p>Recognising useful contributions across the community.</p></div></header>
-    <section class="panel">${state.leaderboard.length ? state.leaderboard.map((u,i)=>`<button class="leaderboard-row" type="button" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}"><span class="rank ${i<3?'top':''}">${i+1}</span><span class="user-inline">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small>${escapeHTML(normalizeRole(u.role))}</small></span></span><span class="points">${formatCount(u.points)} pts</span></button>`).join('') : emptyState('trophy','Leaderboard is empty','Points will appear as members contribute.')}</section>`;
-  renderShell(content);
+function renderLeaderboardRetired() {
+  const content=`${demoBanner()}<div class="recognition28-page">
+    <section class="recognition28-hero">
+      <div class="recognition28-mark">${icon('trophy',22)}</div>
+      <span class="opportunity-kicker">COMMUNITY RECOGNITION</span>
+      <h1>Tefsen does not rank students with unverified points.</h1>
+      <p>The old leaderboard used a client-side points field and a limited user sample, which could not guarantee a fair or globally correct ranking. That surface has been retired until Tefsen has server-authoritative scoring, anti-abuse controls and a transparent contribution model.</p>
+    </section>
+    <section class="recognition28-grid">
+      <article class="recognition28-card"><span>DISCUSSIONS</span><strong>Help with useful questions and answers</strong><p>Community value should come from helpful learning contributions, not from chasing a score.</p><button class="btn btn-secondary" type="button" data-route="explore">Open Community</button></article>
+      <article class="recognition28-card"><span>STUDENT OUTCOMES</span><strong>Share real success or Journey context</strong><p>Publish only experiences you intentionally want public and that could help another student.</p><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></article>
+      <article class="recognition28-card"><span>YOUR IDENTITY</span><strong>Build a useful public profile</strong><p>Your public profile can show what you study and contribute without assigning you a reputation score.</p><button class="btn btn-secondary" type="button" data-route="profile">Open profile</button></article>
+    </section>
+    <section class="recognition28-principles">
+      <h2>What a future recognition system must guarantee</h2>
+      <ul>
+        <li>Scores are calculated by trusted backend logic, not editable client profile fields.</li>
+        <li>Ranking uses the complete eligible population or a clearly defined cohort—not an arbitrary first-page sample.</li>
+        <li>Students can understand what actions count and how abuse, spam and deleted content affect recognition.</li>
+        <li>Recognition does not expose private Student Passport, Journey, saved-content or account data.</li>
+      </ul>
+    </section>
+  </div>`;
+  renderShell(content,{wide:true,right:false});
 }
 
 async function renderProfile(userId = '') {
   let profile = state.profile;
   if (userId && userId !== state.user.uid) {
     profile = await getUserById(state.mode, userId).catch(() => null);
-    profile = profile || state.leaderboard.find(u => u.uid === userId) || { uid:userId, fullName:'Tefsen User', role:'Student' };
+    profile = profile || { uid:userId, fullName:'Tefsen User', role:'Student' };
   }
 
-  currentProfileView = profile;
   const own = !userId || userId === state.user.uid;
-  const posts = state.posts.filter(post => postBelongsToUser(post, profile?.uid || ''));
-
-  let follow = {
-    following:false,
-    followersCount:Number(profile?.followersCount || 0),
-    followingCount:Number(profile?.followingCount || 0)
-  };
-  try {
-    follow = await getFollowState(state.mode, state.user.uid, profile?.uid || '');
-  } catch {
-    // Public profile remains usable even if relationship metadata is unavailable.
-  }
+  const posts = state.posts.filter(p =>
+    postBelongsToUser(p, profile?.uid || '') && isPublicProfileActivity(p)
+  );
 
   let passport = null;
   let journeys = [];
@@ -2730,72 +3753,134 @@ async function renderProfile(userId = '') {
     ]);
   }
 
-  const passportCompleteness = own ? studentPassportCompleteness(passport || {}) : 0;
+  const completeness = own ? studentPassportCompleteness(passport || {}) : 0;
   const activeJourneys = own
     ? journeys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status))
     : [];
   const savedOpportunities = own ? journeys.filter(row => row.saved).length : 0;
-  const goal = own
-    ? (passport?.studyGoal || (passport?.mainField
-        ? String(passport.targetEducationLevel || 'Study') + ' opportunity in ' + String(passport.mainField)
-        : 'Add your education goal to Student Passport'))
-    : '';
 
-  const model = buildProfilePresentation({
+  const model = buildPublicProfileModel({
     profile,
     own,
-    postCount:posts.length,
-    followersCount:follow.followersCount,
-    followingCount:follow.followingCount,
-    passportCompleteness,
-    savedOpportunities,
+    posts,
+    passportCompleteness:completeness,
     activeJourneys:activeJourneys.length,
-    goal
+    savedOpportunities
   });
 
-  const actionsHtml = own
-    ? '<div class="profile-final-actions"><button class="btn btn-primary" type="button" data-edit-profile>' + icon('edit',17) + ' Edit public profile</button></div>'
-    : '<div class="profile-final-actions"><button class="btn ' + (follow.following ? 'btn-secondary is-following' : 'btn-primary') + '" type="button" data-follow-user="' + escapeHTML(profile?.uid || '') + '" aria-pressed="' + String(follow.following) + '">' + (follow.following ? 'Following' : 'Follow') + '</button><button class="btn btn-secondary" type="button" data-message-user="' + escapeHTML(profile?.uid || '') + '">' + icon('message',17) + ' Message</button></div>';
+  const ownActions = `<div class="profile13-actions">
+    <button class="btn btn-primary" type="button" data-edit-profile>${icon('edit',17)} Edit public profile</button>
+    <button class="btn btn-secondary" type="button" data-route="passport">Student Passport</button>
+  </div>`;
 
-  const photoActionsHtml = own
-    ? '<div class="profile-final-photo-actions"><button type="button" data-profile-photo-edit>' + (model.public.hasPhoto ? 'Change photo' : 'Add photo') + '</button>' +
-      (model.public.hasPhoto ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : '') +
-      '</div>'
-    : '';
+  const otherActions = `<div class="profile13-actions profile14-visitor-actions">
+    <button class="btn btn-primary" type="button" data-profile-activity-jump>${icon('comment',17)} View public activity</button>
+  </div>`;
+
+  const photo = own
+    ? `<div class="profile13-photo-block">
+        <button class="profile13-photo-button" type="button" data-profile-photo-edit aria-label="${model.hasPhoto ? 'Change profile photo' : 'Add profile photo'}">
+          <span class="profile13-avatar">${avatar(profile,'lg')}</span>
+          <span class="profile13-photo-edit">${icon('edit',15)}</span>
+        </button>
+        <div class="profile13-photo-links">
+          <button type="button" data-profile-photo-edit>${model.hasPhoto ? 'Change photo' : 'Add photo'}</button>
+          ${model.hasPhoto ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : ''}
+        </div>
+      </div>`
+    : `<div class="profile13-photo-block public"><span class="profile13-avatar">${avatar(profile,'lg')}</span></div>`;
+
+  const publicStats = `<div class="profile13-public-stats profile14-public-stats">
+    <div><strong>${formatCount(model.publicStats.posts)}</strong><span>Public posts</span></div>
+    <div><strong>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</strong><span>Community role</span></div>
+  </div>`;
+
+  const identityGuide = own ? `<section class="profile13-completion">
+    <div class="profile13-completion-head">
+      <div><span>PUBLIC PROFILE QUALITY</span><strong>${model.identity.percent}%</strong></div>
+      <div class="profile13-completion-track"><i style="width:${model.identity.percent}%"></i></div>
+    </div>
+    <div class="profile13-completion-items">
+      ${model.identity.checks.map(item => `<button type="button" class="${item.complete ? 'complete' : ''}" data-edit-profile>
+        <span>${item.complete ? '✓' : '+'}</span><b>${escapeHTML(item.label)}</b>
+      </button>`).join('')}
+    </div>
+    <p>This score only reflects your public profile completeness. It is not an eligibility, admission or reputation score.</p>
+  </section>` : '';
+
+  const privateWorkspace = own ? `<section class="profile13-private-workspace">
+    <header>
+      <div><span class="opportunity-kicker">PRIVATE WORKSPACE</span><h2>Your student planning stays separate from your public identity.</h2><p>Student Passport, saved opportunities and application Journeys are private account data unless you explicitly publish a community story.</p></div>
+      <span class="profile13-private-chip">${icon('check',14)} Private to you</span>
+    </header>
+    <div class="profile13-private-grid">
+      <button type="button" data-route="passport">
+        <span class="profile13-private-icon">${icon('user',18)}</span>
+        <div><small>STUDENT PASSPORT</small><strong>${model.privateWorkspace.passportCompleteness}% complete</strong><p>Improve the private profile used for opportunity matching.</p></div>
+        <span>→</span>
+      </button>
+      <button type="button" data-route="journeys">
+        <span class="profile13-private-icon">${icon('check',18)}</span>
+        <div><small>ACTIVE JOURNEYS</small><strong>${model.privateWorkspace.activeJourneys || 'No active application'}</strong><p>${model.privateWorkspace.activeJourneys ? 'Continue application preparation and next steps.' : 'Start from a saved opportunity when you are ready.'}</p></div>
+        <span>→</span>
+      </button>
+      <button type="button" data-route="opportunities">
+        <span class="profile13-private-icon">${icon('bookmark',18)}</span>
+        <div><small>SAVED OPPORTUNITIES</small><strong>${model.privateWorkspace.savedOpportunities || 'Nothing saved yet'}</strong><p>Review opportunities privately before starting an application Journey.</p></div>
+        <span>→</span>
+      </button>
+    </div>
+  </section>` : `<section class="profile13-public-privacy-note profile14-public-boundary">
+    ${icon('info',16)}
+    <div><b>Public information only</b><p>This view contains public name, username, bio, photo, role and explicitly public community posts. Email, subscription details, Student Passport, saved opportunities, Journeys and private planning are not part of this profile view.</p></div>
+  </section>`;
 
   const activity = posts.length
     ? posts.map(postCard).join('')
-    : '<section class="profile-final-empty"><div class="profile-final-empty-icon">' + icon('comment',22) + '</div><h3>' +
-      (own ? 'Your public community space is ready.' : 'No public posts yet.') +
-      '</h3><p>' +
-      (own
-        ? 'Share only the discussions, success stories or selected journey details you want other students to see.'
-        : 'This student has not shared any public community posts yet.') +
-      '</p>' +
-      (own ? '<div><button class="btn btn-primary" type="button" data-route="explore">Open Community</button></div>' : '') +
-      '</section>';
+    : `<section class="profile13-empty">
+        <div class="profile13-empty-mark">${icon('comment',22)}</div>
+        <h3>${own ? 'No public activity yet.' : 'No public posts yet.'}</h3>
+        <p>${own ? 'Your profile does not need filler content. Share only useful discussions, success stories or selected Journey experiences when you want them public.' : 'This student has not shared any public community posts yet.'}</p>
+        ${own ? '<div><button class="btn btn-primary" type="button" data-route="explore">Open Community</button><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></div>' : ''}
+      </section>`;
 
-  const activityActionHtml = own
-    ? '<button class="btn btn-secondary" type="button" data-route="explore">Open Community</button>'
-    : '';
+  const content = `${demoBanner()}<div class="profile13-page">
+    <section class="profile13-hero">
+      <div class="profile13-hero-glow"></div>
+      <div class="profile13-identity">
+        ${photo}
+        <div class="profile13-copy">
+          <div class="profile13-eyebrow">
+            <span>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</span>
+            ${profile?.verified ? '<span class="profile13-verified">Verified</span>' : ''}
+          </div>
+          <h1>${escapeHTML(model.fullName)} ${verifiedMark(profile?.verified, profile?.role)}</h1>
+          <button class="profile13-handle ${model.username ? '' : 'missing'}" type="button" ${own ? 'data-edit-profile' : 'disabled'}>${escapeHTML(model.handleLabel)}</button>
+          <p class="profile13-bio ${model.bio ? '' : 'missing'}">${escapeHTML(model.bioLabel)}</p>
+          ${own ? ownActions : otherActions}
+          ${publicStats}
+        </div>
+      </div>
+      ${identityGuide}
+    </section>
 
-  const content = demoBanner() + profileFinalPageMarkup({
-    model,
-    avatarHtml:avatar(profile,'lg'),
-    roleHtml:rolePill(profile?.role || 'Student'),
-    verifiedHtml:verifiedMark(profile?.verified, profile?.role),
-    actionsHtml,
-    activityHtml:activity,
-    activityActionHtml,
-    photoActionsHtml
-  });
+    ${privateWorkspace}
 
-  renderShell(content, { wide:true, right:false });
+    <section class="profile13-activity" id="profile-public-activity">
+      <header class="profile13-section-head">
+        <div><span class="opportunity-kicker">COMMUNITY</span><h2>${own ? 'Your public activity' : 'Public activity'}</h2><p>${own ? 'Only things you intentionally share with the Tefsen community appear here.' : 'Public discussions and outcomes shared by this student.'}</p></div>
+        ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Open Community</button>' : ''}
+      </header>
+      <div class="feed-list">${activity}</div>
+    </section>
+  </div>`;
+
+  renderShell(content,{wide:true,right:false});
 }
 
 async function renderSubscription() {
   const p = state.profile || {};
-  const policy = getWebPostingPolicy(p);
+  const policy = getWebPostingPolicy(p, { admin:adminCapability });
   let usage = { textPosts: 0, imagePosts: 0 };
   try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
 
@@ -2810,7 +3895,7 @@ async function renderSubscription() {
       : 'Learn, ask and share for free — upgrade when you need more image publishing power.';
   const price = isAdmin
     ? `<div class="lux-access-token">${icon('check',18)} Full access</div>`
-    : `<div class="lux-price"><strong>$2.99</strong><span>/ month</span></div>`;
+    : `<div class="lux-price"><strong>Google Play</strong><span>price & offers</span></div>`;
   const primaryAction = isAdmin
     ? `<button class="btn lux-primary" type="button" data-route="settings">Open admin settings</button>`
     : isPlus
@@ -2866,7 +3951,7 @@ async function renderSubscription() {
             ${!isPlus && !isAdmin ? '<span class="lux-current-pill">Current plan</span>' : ''}
           </article>
           <article class="lux-plan-card lux-plan-card-plus ${isPlus ? 'is-current' : ''}">
-            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>$2.99 <small>/ month</small></h3><p>Designed for students who contribute more.</p></div>
+            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>Student Plus <small>Price shown in Google Play</small></h3><p>Designed for students who contribute more. Exact price, taxes and promotional eligibility are shown by Google Play for your account and region.</p></div>
             <ul><li>${icon('check',16)} Unlimited text posts</li><li>${icon('check',16)} 6 image posts per day</li><li>${icon('check',16)} 2 images per post</li><li>${icon('check',16)} Up to 6 MB total</li></ul>
             ${isPlus ? '<span class="lux-current-pill">Active plan</span>' : `<a class="lux-card-cta" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Upgrade with Google Play →</a>`}
           </article>
@@ -2875,29 +3960,197 @@ async function renderSubscription() {
 
       <section class="lux-billing-card">
         <div class="lux-billing-mark">G</div>
-        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here.</p></div>
+        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here. Google Play is the authority for current price, taxes, trial or promotional eligibility, renewal and cancellation terms.</p></div>
         ${isAdmin ? '' : (isPlus ? `<a class="btn lux-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage subscription</a>` : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Open Google Play</a>`)}
       </section>
     </div>`;
   renderShell(content, { wide: true });
 }
 
-function renderSettings() {
-  const p = state.profile || {};
-  const compact = localStorage.getItem('tefsen_pref_compact') === '1';
-  const motion = localStorage.getItem('tefsen_pref_motion') === '1';
-  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" aria-selected="${settingsTab === id}">${label}</button>`;
-  const panelClass = id => `settings-panel ${settingsTab === id ? 'active' : ''}`;
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Settings</h1><p>Manage your profile and web experience.</p></div></header>
-    <div class="settings-grid"><aside class="panel settings-nav" role="tablist">${tabButton('profile','Profile')}${tabButton('preferences','Preferences')}${tabButton('account','Account')}</aside>
-    <section class="panel settings-section">
-      <div class="${panelClass('profile')}" data-settings-panel="profile"><h2 style="margin-top:0">Profile details</h2><form class="form-grid" data-profile-form><div class="field"><label>Full name</label><input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80"></div><div class="field"><label>Username</label><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40"></div><div class="field"><label>Bio</label><textarea class="textarea" name="bio" maxlength="500">${escapeHTML(p.bio || '')}</textarea></div><div><button class="btn btn-primary" type="submit">Save changes</button></div></form></div>
-      <div class="${panelClass('preferences')}" data-settings-panel="preferences"><h2 style="margin-top:0">Preferences</h2><div class="setting-row"><span><b>Compact feed</b><p>Reduce spacing between discussions.</p></span><button class="toggle ${compact ? 'active' : ''}" type="button" data-pref="compact" aria-pressed="${compact}"></button></div><div class="setting-row"><span><b>Reduced motion</b><p>Limit interface animation.</p></span><button class="toggle ${motion ? 'active' : ''}" type="button" data-pref="motion" aria-pressed="${motion}"></button></div></div>
-      <div class="${panelClass('account')}" data-settings-panel="account"><h2 style="margin-top:0">Account</h2><div class="setting-row"><span><b>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Admin Full Access' : (p.subscriptionActive ? 'Subscribed Student' : 'Free Student')}</b><p>${String(p.role || '').trim().toLowerCase() === 'admin' ? 'Administrative web access with no daily posting quota.' : 'Web posting limits sync with your Tefsen account.'}</p></span><button class="btn btn-secondary" type="button" data-route="subscription">View plan</button></div><div class="nav-divider"></div><div class="account-actions"><a class="btn btn-secondary" href="../privacy.html">Privacy policy</a><a class="btn btn-secondary" href="../delete-account/">Delete account</a><button class="btn btn-danger" data-logout>Sign out</button></div></div>
-    </section></div>`;
-  renderShell(content,{wide:true});
+function settingsToggleMarkup(key, checked, label) {
+  return `<button class="settings25-toggle ${checked ? 'active' : ''}" type="button" data-settings-toggle="${key}" aria-label="${escapeHTML(label)}" aria-pressed="${checked}"></button>`;
 }
 
+function settingsThemeMarkup(selected = 'system') {
+  const options = [
+    ['light','Light','Bright white interface'],
+    ['dark','Dark','Low-light interface'],
+    ['system','System','Follow this device']
+  ];
+  return `<div class="settings25-theme-options" role="radiogroup" aria-label="Appearance">
+    ${options.map(([value,label,detail]) => `<button class="settings25-theme-choice ${selected === value ? 'active' : ''}" type="button" data-settings-theme="${value}" role="radio" aria-checked="${selected === value}">
+      <span class="settings25-theme-preview ${value}" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><b>${label}</b><small>${detail}</small></span>
+    </button>`).join('')}
+  </div>`;
+}
+
+function quickThemeButtonMarkup() {
+  const selected = currentUserSettings?.theme || 'system';
+  const resolved = document.documentElement.dataset.appearance || (selected === 'light' ? 'light' : 'dark');
+  const next = selected === 'dark' ? 'light' : selected === 'light' ? 'system' : 'dark';
+  const symbol = resolved === 'light' ? '☀' : '☾';
+  return `<button class="icon-button theme-quick-button" type="button" data-theme-cycle data-theme-next="${next}" aria-label="Appearance: ${escapeHTML(selected)}. Change appearance" title="Appearance: ${escapeHTML(selected)}"><span aria-hidden="true">${symbol}</span></button>`;
+}
+
+async function persistCurrentSettings(patch = {}) {
+  const next = normalizeUserSettings(
+    { ...currentUserSettings, ...patch },
+    { timeZone: browserTimeZone() }
+  );
+  currentUserSettings = await saveUserSettings(state.mode, state.user.uid, next);
+  currentUserSettings = normalizeUserSettings(currentUserSettings, { timeZone: browserTimeZone() });
+  applyRuntimeSettings(currentUserSettings);
+  return currentUserSettings;
+}
+
+async function handleSettingsPreferencesSave(form) {
+  const fd = new FormData(form);
+  const submit = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('[data-settings-save-state]');
+  if (status) status.textContent = 'Saving…';
+  await withButton(submit, async () => {
+    try {
+      await persistCurrentSettings({
+        region:String(fd.get('region') || '').trim(),
+        timeZone:String(fd.get('timeZone') || browserTimeZone()).trim()
+      });
+      if (status) status.textContent = 'Saved';
+      toast('Preferences saved.', 'success');
+      renderSettings();
+    } catch (error) {
+      if (status) status.textContent = 'Couldn’t save';
+      toast(humanError(error), 'error');
+    }
+  });
+}
+
+function renderSettings() {
+  const p = state.profile || {};
+  const model = buildSettingsModel({ profile:p, user:state.user || {}, settings:currentUserSettings, adminAuthorized:adminCapability });
+  const s = model.settings;
+  const privacyIdentity = {
+    fullName:model.identity.name,
+    email:model.identity.email,
+    username:p.username || ''
+  };
+  const deletionRequestHref = buildPrivacyRequestMailto('deletion', privacyIdentity);
+  const accessRequestHref = buildPrivacyRequestMailto('access', privacyIdentity);
+  const portabilityRequestHref = buildPrivacyRequestMailto('portability', privacyIdentity);
+  const tabButton = (id, label) => `<button class="${settingsTab === id ? 'active' : ''}" type="button" data-settings-tab="${id}" role="tab" aria-selected="${settingsTab === id}">${label}</button>`;
+  const panelClass = id => `settings25-panel ${settingsTab === id ? 'active' : ''}`;
+  const providerIsPassword = model.identity.provider === 'Email and password';
+
+  const overview = `
+    <section class="${panelClass('overview')}" data-settings-panel="overview" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Account overview</h2><p>Your private account controls are kept separate from your public student profile.</p></div><button class="btn btn-secondary" type="button" data-route="profile">Open public profile</button></div>
+        <div class="settings25-identity">
+          <div class="settings25-fact"><small>Primary email</small><strong>${escapeHTML(model.identity.email || 'No email available')}</strong></div>
+          <div class="settings25-fact"><small>Sign-in provider</small><strong>${escapeHTML(model.identity.provider)}</strong></div>
+          <div class="settings25-fact"><small>Email status</small><strong>${model.identity.emailVerified ? 'Verified' : 'Not verified / provider managed'}</strong></div>
+          <div class="settings25-fact"><small>Current plan</small><strong>${escapeHTML(model.plan.label)}</strong></div>
+        </div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-plan"><div><span class="opportunity-kicker">PLAN & BILLING</span><strong>${escapeHTML(model.plan.label)}</strong><p>${model.plan.admin ? 'Administrative access is controlled by Tefsen authorization.' : model.plan.subscribed ? 'Your existing Tefsen subscription is active on this account.' : 'Your account currently uses the free student plan.'}</p></div><button class="btn btn-secondary" type="button" data-route="subscription">View subscription</button></div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Public profile is edited separately</h2><p>Name, username, bio and profile photo belong to your public identity. Student Passport, Journeys, saved content and these settings remain private.</p></div><button class="btn btn-primary" type="button" data-edit-profile>Edit public profile</button></div>
+      </article>
+    </section>`;
+
+  const preferences = `
+    <section class="${panelClass('preferences')}" data-settings-panel="preferences" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Web experience</h2><p>These preferences are saved to your private Tefsen account and restored only for you.</p></div></div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Compact Community cards</b><p>Reduce vertical spacing in public Community discussions.</p></div>${settingsToggleMarkup('compactFeed',s.compactFeed,'Compact Community cards')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Reduced motion</b><p>Minimize nonessential animations and transitions across Tefsen Web.</p></div>${settingsToggleMarkup('reducedMotion',s.reducedMotion,'Reduced motion')}</div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Appearance & language</h2><p>Choose Light, Dark, or follow your device. Your choice is saved to this Tefsen account.</p></div></div>
+        ${settingsThemeMarkup(s.theme)}
+        <div class="settings25-identity settings25-language-fact">
+          <div class="settings25-fact"><small>Current appearance</small><strong>${escapeHTML(s.theme === 'light' ? 'Light' : s.theme === 'dark' ? 'Dark' : 'System')}</strong></div>
+          <div class="settings25-fact"><small>Interface language</small><strong>English</strong></div>
+        </div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Region & time zone</h2><p>Tefsen is global. Region context is optional; deadline dates still need verification on each official provider source.</p></div></div>
+        <form class="settings25-form" data-settings-preferences-form>
+          <div class="settings25-form-grid">
+            <div class="field"><label for="settings-region">Country / region</label><input id="settings-region" class="input" name="region" maxlength="80" value="${escapeHTML(s.region)}" placeholder="Optional"><small>Used only as your private preference context.</small></div>
+            <div class="field"><label for="settings-timezone">Time zone</label><input id="settings-timezone" class="input" name="timeZone" maxlength="100" value="${escapeHTML(s.timeZone || browserTimeZone())}"><small>Example: Asia/Colombo, Europe/London, America/New_York.</small></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button class="btn btn-primary" type="submit">Save region settings</button><span class="settings25-saved" data-settings-save-state></span></div>
+        </form>
+      </article>
+    </section>`;
+
+  const notifications = `
+    <section class="${panelClass('notifications')}" data-settings-panel="notifications" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Notification preferences</h2><p>These controls affect the real Tefsen notification center. Turning a category off removes those supported alerts from your notification view.</p></div><button class="btn btn-secondary" type="button" data-route="notifications">Open Notifications</button></div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Opportunity deadline alerts</b><p>Stored public opportunity deadlines that are close enough to need attention.</p></div>${settingsToggleMarkup('notificationOpportunityDeadlines',s.notificationOpportunityDeadlines,'Opportunity deadline alerts')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Journey planning reminders</b><p>Private preparation targets, next Journey tasks and accepted-offer planning reminders.</p></div>${settingsToggleMarkup('notificationJourneyReminders',s.notificationJourneyReminders,'Journey planning reminders')}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Community activity</b><p>Supported replies, likes and public Community activity records for your posts.</p></div>${settingsToggleMarkup('notificationCommunityActivity',s.notificationCommunityActivity,'Community activity notifications')}</div>
+      </article>
+      <article class="settings25-card"><div class="settings25-security-note"><b>Essential account and security messages are not disabled here.</b> If Tefsen needs to communicate an important account or safety issue, it should not be hidden behind an engagement preference.</div></article>
+    </section>`;
+
+  const privacy = `
+    <section class="${panelClass('privacy')}" data-settings-panel="privacy" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Privacy boundaries</h2><p>A simple view of what stays in your account and what can be visible when you deliberately publish it.</p></div></div>
+        <div class="settings25-privacy-grid">
+          <div class="settings25-privacy-box"><span>PRIVATE TO YOUR ACCOUNT</span><ul class="settings25-list">${model.privacy.privateItems.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul></div>
+          <div class="settings25-privacy-box"><span>POTENTIALLY PUBLIC</span><ul class="settings25-list">${model.privacy.publicItems.map(item=>`<li>${escapeHTML(item)}</li>`).join('')}</ul></div>
+        </div>
+      </article>
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Privacy documents & requests</h2><p>Read Tefsen’s published privacy information or start a privacy request from your signed-in account. Requests open your email app; nothing is sent automatically.</p></div></div>
+        <div class="account-actions">
+          <a class="btn btn-secondary" href="../privacy-policy/">Privacy policy</a>
+          <a class="btn btn-secondary" href="${escapeHTML(accessRequestHref)}">Request access to my data</a>
+          <a class="btn btn-secondary" href="${escapeHTML(portabilityRequestHref)}">Request portable data</a>
+          <a class="btn btn-secondary" href="../delete-account/">Account deletion information</a>
+        </div>
+      </article>
+    </section>`;
+
+  const security = `
+    <section class="${panelClass('security')}" data-settings-panel="security" role="tabpanel">
+      <article class="settings25-card">
+        <div class="settings25-card-head"><div><h2>Sign-in & security</h2><p>Tefsen shows the authentication method attached to this session without exposing internal Firebase identifiers.</p></div></div>
+        <div class="settings25-identity">
+          <div class="settings25-fact"><small>Provider</small><strong>${escapeHTML(model.identity.provider)}</strong></div>
+          <div class="settings25-fact"><small>Email</small><strong>${escapeHTML(model.identity.email || 'Unavailable')}</strong></div>
+        </div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Password management</b><p>${providerIsPassword ? 'This account uses email/password authentication. Tefsen can send a secure password-reset email.' : `Your password is managed by ${escapeHTML(model.identity.provider)}. Tefsen does not have access to that provider password.`}</p></div>${providerIsPassword ? '<button class="btn btn-secondary" type="button" data-settings-reset-password>Send reset email</button>' : '<span class="settings25-status good">Provider managed</span>'}</div>
+        <div class="settings25-row"><div class="settings25-row-copy"><b>Current session</b><p>Signing out removes this authenticated session. Private caches are keyed by account so another signed-in student does not inherit your settings.</p></div><button class="btn btn-secondary" type="button" data-logout>Sign out</button></div>
+      </article>
+      <article class="settings25-card settings25-danger">
+        <div class="settings25-card-head"><div><h2>Account deletion</h2><p>Tefsen Web does not delete the account immediately from this browser. You can review the deletion scope and timeline, then send a verified deletion request to Tefsen support.</p></div></div>
+        <div class="settings25-security-note"><b>Google Play subscriptions are separate.</b> Deleting your Tefsen account does not automatically cancel a Google Play subscription. Cancel it in Google Play if you no longer want renewal charges.</div>
+        <div class="account-actions">
+          <a class="btn btn-secondary" href="../delete-account/">Review deletion details</a>
+          <a class="btn btn-danger" href="${escapeHTML(deletionRequestHref)}">Request account deletion</a>
+        </div>
+      </article>
+    </section>`;
+
+  const content = `${demoBanner()}<div class="settings25-page">
+    <section class="settings25-hero">
+      <div class="settings25-hero-main">${avatar(p,'lg')}<div class="settings25-hero-copy"><span>ACCOUNT CONTROL CENTER</span><h1>${escapeHTML(model.identity.name)}</h1><p>Manage private preferences, notifications, privacy, security and your Tefsen plan from one place.</p></div></div>
+      <div class="settings25-hero-actions"><button class="btn btn-secondary" type="button" data-route="profile">Public profile</button><button class="btn btn-primary" type="button" data-route="subscription">Plan & billing</button></div>
+    </section>
+    <div class="settings25-grid">
+      <aside class="settings25-nav" role="tablist" aria-label="Settings sections">${tabButton('overview','Overview')}${tabButton('preferences','Preferences')}${tabButton('notifications','Notifications')}${tabButton('privacy','Privacy')}${tabButton('security','Security')}</aside>
+      <div>${overview}${preferences}${notifications}${privacy}${security}</div>
+    </div>
+  </div>`;
+  renderShell(content,{wide:true,right:false});
+}
 
 function adminStatusMarkup(opportunity) {
   const fresh = opportunityFreshness(opportunity);
@@ -2913,15 +4166,57 @@ function adminPreviewTable(rows = []) {
   }).join('')}</tbody></table></div>`;
 }
 
+function adminReportCard(report) {
+  const active=['open','in_review'].includes(report.status);
+  const sourceLabel=report.source==='support_requests'?'Legacy report':'Canonical report';
+  const created=report.createdAt ? relativeTime(report.createdAt) : '';
+  return `<article class="admin-row moderation27-row">
+    <div>
+      <div class="moderation27-meta">
+        <span class="admin-status ${report.status==='open'?'pending':report.status==='in_review'?'stale':'fresh'}">${escapeHTML(report.status.replace('_',' '))}</span>
+        <span class="opportunity-chip">${escapeHTML(sourceLabel)}</span>
+        <span class="opportunity-chip">${escapeHTML(report.reason)}</span>
+        ${created?`<small>${escapeHTML(created)}</small>`:''}
+      </div>
+      <h3>${escapeHTML(report.targetTitle||'Reported Community post')}</h3>
+      ${report.targetExcerpt?`<p class="moderation27-excerpt">${escapeHTML(report.targetExcerpt)}</p>`:''}
+      ${report.details?`<div class="moderation27-details"><b>Reporter context</b><span>${escapeHTML(report.details)}</span></div>`:''}
+      ${!active&&report.resolution?`<p class="moderation27-resolution">Outcome: ${escapeHTML(report.resolution.replaceAll('_',' '))}</p>`:''}
+    </div>
+    <div class="admin-row-actions">
+      <button class="btn btn-secondary" type="button" data-route="post/${encodeURIComponent(report.postId)}">Review post</button>
+      ${active?`<button class="btn btn-danger" type="button" data-admin-moderation-action="hide_post" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Hide post</button>
+      <button class="btn btn-secondary" type="button" data-admin-moderation-action="resolve" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Resolve</button>
+      <button class="btn btn-ghost" type="button" data-admin-moderation-action="dismiss" data-admin-report-id="${escapeHTML(report.id)}" data-admin-report-source="${escapeHTML(report.source)}">Dismiss</button>`:''}
+    </div>
+  </article>`;
+}
+
 async function renderAdmin() {
   if (!adminCapability) {
-    renderShell(`${emptyState('info','Admin authorization required','This area requires a Firebase Auth admin custom claim. A profile label alone is not enough.')}`, { wide:true, right:false });
+    const adminUid = escapeHTML(state.user?.uid || 'Unavailable');
+    renderShell(`
+      ${emptyState('info','Admin authorization required','Tefsen protects publishing and moderation with a Firebase Auth custom claim. Your public username or profile role cannot grant admin access by itself.')}
+      <section class="panel section-card" style="margin-top:16px">
+        <div class="panel-title"><div><h2>Secure admin setup</h2><small>Firebase Auth custom claim required</small></div></div>
+        <div class="community-banner" style="margin-bottom:14px">
+          <b>Signed-in Firebase UID</b><br>
+          <code style="display:block;margin-top:8px;word-break:break-all;user-select:all">${adminUid}</code>
+        </div>
+        <p style="color:var(--muted);line-height:1.7;margin:0">
+          Grant this exact Firebase Authentication user the custom claim <code>admin: true</code> from a trusted Firebase Admin SDK environment, then sign out and sign back in so the ID token refreshes. Do not grant admin by matching the username <b>JsJr</b> in browser code.
+        </p>
+      </section>`, { wide:true, right:false });
     return;
   }
 
-  renderShell(`<header class="page-head"><div><h1>Opportunity Admin</h1><p>Loading verification and freshness data…</p></div></header><div class="loading-card"></div>`, { wide:true, right:false });
+  renderShell(`<header class="page-head"><div><h1>Admin review</h1><p>Loading authorized review queues…</p></div></header><div class="loading-card"></div>`, { wide:true, right:false });
   try {
     currentAdminOpportunities = await listAdminOpportunities(state.mode, state.user, state.profile);
+    if(adminTab==='reports'){
+      currentAdminReports = await listAdminReports(state.mode,state.user,state.profile);
+    }
+
     const withFreshness = currentAdminOpportunities.map(item => ({ item, freshness: opportunityFreshness(item) }));
     const pending = withFreshness.filter(x => ['pending','unverified'].includes(x.freshness.state)).length;
     const needsReview = withFreshness.filter(x => x.freshness.needsReview).length;
@@ -2930,7 +4225,7 @@ async function renderAdmin() {
       .filter(x => x.freshness.needsReview || x.item.verificationStatus !== 'verified')
       .sort((x,y) => Number(y.freshness.needsReview) - Number(x.freshness.needsReview));
 
-    const reviewPanel = `<section class="admin-list">${reviewRows.length ? reviewRows.map(({item,freshness}) => `<article class="admin-row">
+    const reviewPanel = `<section class="admin-list">${reviewRows.length ? reviewRows.map(({item}) => `<article class="admin-row">
       <div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${adminStatusMarkup(item)}<span class="opportunity-chip">${escapeHTML(item.verificationStatus||'unverified')}</span><span class="opportunity-chip">${escapeHTML(item.status||'draft')}</span></div>
         <h3>${escapeHTML(item.title)}</h3>
@@ -2958,17 +4253,30 @@ async function renderAdmin() {
       ${preview.length ? `<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary" type="button" data-admin-import-confirm ${readyCount ? '' : 'disabled'}>Import ${readyCount} ready record${readyCount===1?'':'s'} as pending</button></div>` : ''}
     </section>`;
 
-    const appCheckConfigured = Boolean(window.TEFSEN_APPCHECK_SITE_KEY);
+    const moderationModel=buildModerationQueue(currentAdminReports);
+    const reportsPanel=`<div class="moderation27-panel">
+      <section class="moderation27-note">${icon('info',16)}<span>Reports are private moderation signals, not proof that content violates policy. Review the post and context before taking action.</span></section>
+      <section class="admin-list">${moderationModel.active.length?moderationModel.active.map(adminReportCard).join(''):'<div class="panel opportunity-empty">No active Community reports need review.</div>'}</section>
+      ${moderationModel.resolved.length?`<section class="moderation27-history"><header><span class="opportunity-kicker">RECENT OUTCOMES</span><h2>Reviewed reports</h2></header><div class="admin-list">${moderationModel.resolved.slice(0,30).map(adminReportCard).join('')}</div></section>`:''}
+    </div>`;
+
+    const appCheckReadiness=buildAppCheckReadiness({
+      mode:state.mode,
+      siteKey:window.TEFSEN_APPCHECK_SITE_KEY,
+      initialized:Boolean(appCheck)
+    });
+    const reportStats=buildModerationQueue(currentAdminReports);
+    const hero=adminTab==='reports'
+      ? `<section class="admin-hero moderation27-hero"><div><span class="opportunity-kicker">TRUST & SAFETY</span><h1>Community moderation</h1><p>Review private student reports, inspect the reported public post, and record every admin action in an append-only audit trail.</p></div><div class="admin-stat"><strong>${reportStats.counts.open}</strong><span>open reports</span></div><div class="admin-stat"><strong>${reportStats.counts.inReview}</strong><span>in review</span></div><div class="admin-stat"><strong>${reportStats.counts.legacy}</strong><span>legacy reports</span></div></section>`
+      : `<section class="admin-hero"><div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div><div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div><div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div><div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div></section>`;
+
     const content = `${demoBanner()}<div class="admin-shell">
-      ${state.mode === 'firebase' && !appCheckConfigured ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check is not configured yet. Add the Web reCAPTCHA/App Check site key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
-      <section class="admin-hero">
-        <div><span class="opportunity-kicker">TRUST & DATA QUALITY</span><h1>Opportunity review</h1><p>Verification requires a real official source. Imported records stay private until an authorized admin reviews and publishes them.</p></div>
-        <div class="admin-stat"><strong>${pending}</strong><span>pending / unverified</span></div>
-        <div class="admin-stat"><strong>${needsReview}</strong><span>need review now</span></div>
-        <div class="admin-stat"><strong>${verified}</strong><span>verified records</span></div>
-      </section>
-      <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Review queue</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Import</button></div>
-      ${adminTab === 'import' ? importPanel : reviewPanel}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='missing-key' ? '<div class="community-banner"><b>Launch blocker:</b> Web App Check site key is missing. Configure the reCAPTCHA v3 App Check key, validate real traffic, then enable enforcement service-by-service in Firebase Console.</div>' : ''}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='initialization-failed' ? '<div class="community-banner"><b>Launch blocker:</b> An App Check key is configured, but App Check did not initialize in this session. Fix initialization before considering enforcement.</div>' : ''}
+      ${state.mode === 'firebase' && appCheckReadiness.state==='client-ready' ? '<div class="community-banner"><b>App Check client initialized.</b> This does not prove enforcement is enabled. Verify valid traffic first, then confirm enforcement separately for Firestore, Storage and other protected Firebase services in Firebase Console.</div>' : ''}
+      ${hero}
+      <div class="admin-tabs"><button class="btn ${adminTab==='review'?'btn-primary':'btn-secondary'}" data-admin-tab="review">Opportunity review</button><button class="btn ${adminTab==='import'?'btn-primary':'btn-secondary'}" data-admin-tab="import">Opportunity import</button><button class="btn ${adminTab==='reports'?'btn-primary':'btn-secondary'}" data-admin-tab="reports">Community reports</button></div>
+      ${adminTab==='reports'?reportsPanel:adminTab==='import'?importPanel:reviewPanel}
     </div>`;
     renderShell(content,{wide:true,right:false});
   } catch (error) {
@@ -2977,14 +4285,174 @@ async function renderAdmin() {
   }
 }
 
+function global20KindLabel(kind='') {
+  return ({
+    person:'Student',
+    discussion:'Discussion',
+    success:'Success story',
+    journey:'Journey story',
+    opportunity:'Opportunity',
+    subject:'Subject',
+    university:'University',
+    intake:'Intake'
+  })[kind] || 'Result';
+}
+
+function global20ResultMarkup(result) {
+  const person=result.kind==='person';
+  const badge=person
+    ? avatar({fullName:result.title,photoUrl:result.photoUrl},'sm')
+    : `<span class="global20-result-mark ${escapeHTML(result.kind)}">${escapeHTML(global20KindLabel(result.kind).slice(0,3).toUpperCase())}</span>`;
+  const verification=result.kind==='opportunity' && result.verified
+    ? '<span class="global20-verified">Verified source record</span>'
+    : '';
+  return `<button class="global20-result" type="button" data-route="${escapeHTML(result.route)}">
+    <span class="global20-result-visual">${badge}</span>
+    <span class="global20-result-copy">
+      <span class="global20-result-type">${escapeHTML(global20KindLabel(result.kind))}${verification}</span>
+      <strong>${escapeHTML(result.title)}</strong>
+      ${result.subtitle ? `<small>${escapeHTML(result.subtitle)}</small>` : ''}
+      ${result.excerpt ? `<p>${escapeHTML(result.excerpt)}</p>` : ''}
+    </span>
+    <span class="global20-result-open">→</span>
+  </button>`;
+}
+
+function global20Section(title,eyebrow,rows,description='') {
+  if(!rows?.length) return '';
+  return `<section class="global20-section">
+    <header class="global20-section-head">
+      <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2>${description ? `<p>${escapeHTML(description)}</p>` : ''}</div>
+      <span>${rows.length} result${rows.length===1?'':'s'}</span>
+    </header>
+    <div class="global20-results">${rows.slice(0,8).map(global20ResultMarkup).join('')}</div>
+  </section>`;
+}
+
+function global20DiscoveryMarkup(model) {
+  const subjects=model.discover.subjects||[];
+  const universities=model.discover.universities||[];
+  const opportunities=model.discover.opportunities||[];
+  return `<div class="global20-discovery">
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">START WITH A SUBJECT</span><h2>Explore learning spaces</h2><p>Open a subject community to see public student context and linked opportunities.</p></header>
+      <div class="global20-discovery-grid">
+        ${subjects.length ? subjects.map(row=>`<button type="button" data-route="subject/${encodeURIComponent(row.name)}"><span>SUBJECT</span><b>${escapeHTML(row.name)}</b><small>${row.postCount} public posts · ${row.opportunityCount} opportunities</small></button>`).join('') : '<div class="global20-discovery-empty">Subject spaces appear as public Community and opportunity data grows.</div>'}
+      </div>
+    </section>
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">UNIVERSITY SPACES</span><h2>Browse student context</h2><p>Community information is student context, not an official university channel.</p></header>
+      <div class="global20-discovery-grid">
+        ${universities.length ? universities.map(row=>`<button type="button" data-route="university/${encodeURIComponent(row.name)}"><span>UNIVERSITY</span><b>${escapeHTML(row.name)}</b><small>${escapeHTML((row.countries||[]).slice(0,2).join(' · ') || 'Global community')}</small></button>`).join('') : '<div class="global20-discovery-empty">University spaces appear when public community or opportunity records link to them.</div>'}
+      </div>
+    </section>
+    <section class="global20-discovery-block">
+      <header><span class="opportunity-kicker">OPPORTUNITIES</span><h2>Discover verified-source paths</h2><p>Open a record to review eligibility context and the official provider source.</p></header>
+      <div class="global20-discovery-grid opportunities">
+        ${opportunities.length ? opportunities.map(item=>`<button type="button" data-route="opportunity/${encodeURIComponent(item.id)}"><span>OPPORTUNITY</span><b>${escapeHTML(item.title)}</b><small>${escapeHTML([item.provider,item.country].filter(Boolean).join(' · '))}</small></button>`).join('') : '<div class="global20-discovery-empty">No public opportunity records are available for discovery yet.</div>'}
+      </div>
+    </section>
+  </div>`;
+}
+
 async function renderSearch(term = '') {
-  state.searchQuery = term;
-  renderShell(`<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header><div class="loading-card"></div>`);
-  currentSearch = term ? await searchAll(state.mode, term).catch(()=>({users:[],posts:[]})) : {users:[],posts:[]};
-  const content = `${demoBanner()}<header class="page-head"><div><h1>Search</h1><p>${term ? `Results for “${escapeHTML(term)}”` : 'Find people, questions and subjects.'}</p></div></header>
-    ${currentSearch.users.length ? `<section class="panel section-card" style="margin-bottom:16px"><div class="panel-title"><h2>People</h2><small>${currentSearch.users.length} results</small></div><div class="search-results">${currentSearch.users.map(u=>`<button class="search-user" type="button" style="width:100%;border:0;background:none;color:inherit;text-align:left" data-route="profile/${encodeURIComponent(u.uid)}">${avatar(u,'sm')}<span><b>${escapeHTML(u.fullName)} ${verifiedMark(u.verified, u.role)}</b><small style="display:block;color:var(--muted)">${escapeHTML(normalizeRole(u.role))}</small></span></button>`).join('')}</div></section>`:''}
-    <div class="feed-list">${currentSearch.posts.length ? currentSearch.posts.map(postCard).join('') : emptyState('search',term?'No matching discussions':'Start searching','Try a name, subject or question keyword.')}</div>`;
-  renderShell(content);
+  const query=String(term||'').trim().slice(0,120);
+  state.searchQuery=query;
+
+  renderShell(`<div class="global20-page"><section class="global20-hero loading"><span class="opportunity-kicker">PUBLIC SEARCH</span><h1>${query ? `Searching for “${escapeHTML(query)}”` : 'Search Tefsen'}</h1><p>Checking public student, Community and opportunity records without exposing private account data.</p></section></div>`,{wide:true,right:false});
+
+  try{
+    let rawSearch={users:[],posts:[],coverage:{people:{scanned:0,limit:0,complete:true},community:{scanned:0,limit:0,complete:true}}};
+    let opportunitySearch={items:[],coverage:{scanned:0,limit:0,complete:true}};
+
+    if(query){
+      [rawSearch,opportunitySearch]=await Promise.all([
+        searchAll(state.mode,query),
+        getOpportunitySearchCorpus(state.mode)
+      ]);
+    }else{
+      const opportunities=await getOpportunities(state.mode).catch(()=>[]);
+      opportunitySearch={items:opportunities,coverage:{scanned:opportunities.length,limit:opportunities.length,complete:true}};
+    }
+
+    const publicPosts=query
+      ? mergeSearchPublicPosts(state.posts,rawSearch.posts)
+      : mergeSearchPublicPosts(state.posts);
+
+    currentSearch=buildGlobalSearchModel({
+      term:query,
+      users:rawSearch.users,
+      posts:publicPosts,
+      opportunities:opportunitySearch.items,
+      coverage:{
+        people:rawSearch.coverage?.people,
+        community:rawSearch.coverage?.community,
+        opportunities:opportunitySearch.coverage
+      }
+    });
+
+    const countItems=query ? [
+      ['All',currentSearch.counts.all],
+      ['People',currentSearch.counts.people],
+      ['Community',currentSearch.counts.community],
+      ['Opportunities',currentSearch.counts.opportunities],
+      ['Subjects',currentSearch.counts.subjects],
+      ['Universities',currentSearch.counts.universities],
+      ['Intakes',currentSearch.counts.intakes]
+    ] : [];
+
+    const emptyTitle=currentSearch.coverage?.complete
+      ? `No public matches for “${escapeHTML(query)}”`
+      : `No match found in the current search coverage for “${escapeHTML(query)}”`;
+    const emptyCopy=currentSearch.coverage?.complete
+      ? 'Try a broader subject, university, country, scholarship name, program, student name or intake.'
+      : 'This search window is bounded, so a matching public record may exist outside the records checked. Try a more specific name, username, university or opportunity title.';
+
+    const content=`${demoBanner()}
+      <div class="global20-page">
+        <section class="global20-hero">
+          <div>
+            <span class="opportunity-kicker">PUBLIC SEARCH</span>
+            <h1>${query ? `Results for “${escapeHTML(query)}”` : 'Find the right public place to continue'}</h1>
+            <p>Search public student profiles, discussions, Success and Journey stories, public opportunity records, subjects, universities and intake spaces. Private Passport, Journey and account data are never part of this search.</p>
+            <form class="global20-search-form" data-global-search-form>
+              <input class="input" name="q" maxlength="120" value="${escapeHTML(query)}" placeholder="Try Computer Science, scholarship, university, student name…" aria-label="Search public Tefsen data">
+              <button class="btn btn-primary" type="submit">${icon('search',17)} Search</button>
+            </form>
+          </div>
+          <aside class="global20-scope">
+            <span>WHAT SEARCH INCLUDES</span>
+            <div><b>Public student context</b><small>Public profile identity and published Community content only.</small></div>
+            <div><b>Opportunity discovery</b><small>Public opportunity metadata with official-source trust boundaries.</small></div>
+            <div><b>Honest coverage</b><small>Search tells you when a result window is bounded instead of presenting partial results as a complete global index.</small></div>
+          </aside>
+        </section>
+
+        ${query ? `<section class="global29-coverage ${currentSearch.coverage.complete?'complete':'partial'}">
+          <div>${icon(currentSearch.coverage.complete?'check':'info',17)}<span><b>${currentSearch.coverage.complete?'Complete current corpus':'Bounded search coverage'}</b><small>${escapeHTML(currentSearch.coverage.note)}</small></span></div>
+          <span class="global29-count-label">${escapeHTML(currentSearch.countLabel)}</span>
+        </section>
+        <section class="global20-counts" aria-label="Matches found in current search coverage">${countItems.map(([label,value])=>`<article><strong>${value}</strong><span>${label}</span></article>`).join('')}</section>` : ''}
+
+        ${query ? `
+          <section class="global20-ranking-note">${icon('info',16)}<span>${escapeHTML(currentSearch.rankingNote)}</span></section>
+          ${currentSearch.empty ? `<section class="global20-empty"><div>${icon('search',24)}</div><h2>${emptyTitle}</h2><p>${emptyCopy}</p><button class="btn btn-secondary" type="button" data-route="search">Clear search</button></section>` : `
+            ${global20Section('Best matching public results','TOP MATCHES',currentSearch.top,'A mixed view across the records checked. Result order is deterministic text matching, not a recommendation or quality score.')}
+            ${global20Section('People','PUBLIC STUDENTS',currentSearch.people,'Only public profile fields are shown here. Counts are matches found in the current search coverage.')}
+            ${global20Section('Community posts and stories','PUBLIC COMMUNITY',currentSearch.community,'Published discussions and student-shared Success/Journey stories in the current search coverage.')}
+            ${global20Section('Opportunities','OFFICIAL-SOURCE DISCOVERY',currentSearch.opportunities,'Open each result to verify eligibility, deadline and application details on the official provider source.')}
+            ${global20Section('Subject spaces','LEARNING COMMUNITIES',currentSearch.subjects)}
+            ${global20Section('University spaces','STUDENT CONTEXT',currentSearch.universities,'These are student community spaces derived from the public records checked, not official university channels.')}
+            ${global20Section('Intake spaces','INTAKE CONTEXT',currentSearch.intakes,'Intake pages show public student context and exact intake-linked data where available.')}
+          `}`
+          : global20DiscoveryMarkup(currentSearch)}
+      </div>`;
+
+    renderShell(content,{wide:true,right:false});
+  }catch(error){
+    console.error(error);
+    renderShell(`${demoBanner()}${emptyState('info','Search unavailable','Tefsen could not safely load the public search corpus. Please try again.')}`,{wide:true,right:false});
+  }
 }
 
 function renderRoute() {
@@ -2994,7 +4462,6 @@ function renderRoute() {
   document.documentElement.classList.remove('profile-menu-open');
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
   if (stopComments && route !== 'post') { stopComments(); stopComments = null; }
-  if (stopMessages && route !== 'messages') { stopMessages(); stopMessages = null; }
   switch (route || 'home') {
     case 'home': renderHome(); break;
     case 'opportunities': renderOpportunities(); break;
@@ -3008,10 +4475,15 @@ function renderRoute() {
     case 'intake': renderIntakeCommunity(param || '', param2 || ''); break;
     case 'saved': renderSavedCommunity(); break;
     case 'notifications': renderNotifications(); break;
-    case 'messages': renderMessages(param || ''); break;
-    case 'leaderboard': renderLeaderboard(); break;
+    case 'messages': renderPrivateMessagingUnavailable(); break;
+    case 'leaderboard': renderLeaderboardRetired(); break;
     case 'profile': renderProfile(param || ''); break;
-    case 'settings': renderSettings(); break;
+    case 'settings': {
+      const allowedSettingsTabs = new Set(['overview','preferences','notifications','privacy','security']);
+      if (param && allowedSettingsTabs.has(param)) settingsTab = param;
+      renderSettings();
+      break;
+    }
     case 'admin': renderAdmin(); break;
     case 'subscription': renderSubscription(); break;
     case 'post': renderPostDetail(param || ''); break;
@@ -3022,33 +4494,69 @@ function renderRoute() {
 
 
 function openSuccessStoryModal(prefill = {}) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share a student success</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
-    <div class="community-banner" style="margin-bottom:14px">Publish only information you choose to make public. Do not include application IDs, passport/visa numbers, addresses, financial account details or private documents.</div>
-    <form class="form-grid" data-success-story-form>
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal success18-modal" role="dialog" aria-modal="true" aria-labelledby="success18-title"><header class="modal-head"><div><span class="success18-modal-kicker">PUBLIC STUDENT EXPERIENCE</span><h2 id="success18-title">Share a student success</h2></div><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <section class="success18-publish-intro">
+      <div><b>Share what happened</b><span>The offer, scholarship, admission or other outcome you personally received.</span></div>
+      <div><b>Add useful context</b><span>What helped, what surprised you, or what another student should verify for themselves.</span></div>
+      <div><b>Keep private data out</b><span>No application IDs, passport/visa numbers, addresses, financial account details, booking references or private documents.</span></div>
+    </section>
+    <form class="form-grid success18-form" data-success-story-form>
       <div class="story-form-grid">
-        <div class="field"><label>University</label><input class="input" name="university" maxlength="180" required value="${escapeHTML(prefill.university||'')}"></div>
-        <div class="field"><label>Scholarship / program / offer</label><input class="input" name="opportunityName" maxlength="180" required></div>
-        <div class="field"><label>Country</label><input class="input" name="country" maxlength="120"></div>
-        <div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}"></div>
-        <div class="field"><label>Study level</label><input class="input" name="studyLevel" maxlength="100" placeholder="Undergraduate, Master…"></div>
-        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="Fall 2027"></div>
+        <div class="field"><label>University / institution <span>Required</span></label><input class="input" name="university" maxlength="180" required value="${escapeHTML(prefill.university||'')}" placeholder="Institution connected to this outcome"></div>
+        <div class="field"><label>Scholarship / program / offer <span>Required</span></label><input class="input" name="opportunityName" maxlength="180" required placeholder="Name of the scholarship, program or offer"></div>
+        <div class="field"><label>Country</label><input class="input" name="country" maxlength="120" placeholder="Optional destination context"></div>
+        <div class="field"><label>Subject / field <span>Required</span></label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}" placeholder="e.g. Computer Science"></div>
+        <div class="field"><label>Study level</label><input class="input" name="studyLevel" maxlength="100" placeholder="Undergraduate, Master's…"></div>
+        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="e.g. Fall 2027"></div>
         <div class="field"><label>Funding</label><select class="select" name="fundingType"><option value="">Not specified</option><option>Fully funded</option><option>Partial funding</option><option>Self funded / offer only</option><option>Other</option></select></div>
-        <div class="field story-form-wide"><label>Headline</label><input class="input" name="title" maxlength="180" placeholder="I received a scholarship offer"></div>
-        <div class="field story-form-wide"><label>Your message</label><textarea class="textarea" name="content" maxlength="3000" required placeholder="Share what happened and what might help the next student."></textarea></div>
+        <div class="field story-form-wide"><label>Headline</label><input class="input" name="title" maxlength="180" placeholder="e.g. I received a scholarship offer"></div>
+        <div class="field story-form-wide"><label>Your story <span>Required · at least 40 characters</span></label><textarea class="textarea success18-story-text" name="content" maxlength="3000" required placeholder="What happened? What helped you? What should another student verify on the official source?"></textarea><small class="form-help">Write from your own experience. Do not present your result as a guarantee for another student.</small></div>
       </div>
-      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish success story</button>
+      <section class="success18-public-note">
+        ${icon('info',16)}
+        <div><b>This will be public</b><p>The structured facts above and your story text can appear in Community, subject, university and intake spaces when they match. Official provider information remains authoritative.</p></div>
+      </section>
+      <div class="form-error" data-story-error></div>
+      <div class="success18-publish-actions"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish success story</button></div>
     </form>
   </div></section></div>`;
 }
 
 function openJourneyStoryModal(prefill = {}) {
-  const rows=[1,2,3,4].map(i=>`<div class="milestone-form-row"><input class="input" name="stage${i}" maxlength="80" placeholder="Milestone, e.g. Applied"><input class="input" name="month${i}" type="month"><input class="input" name="note${i}" maxlength="300" placeholder="What you choose to share"></div>`).join('');
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Share selected journey milestones</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
-    <div class="community-banner" style="margin-bottom:14px">This does not publish your private Tefsen Journey. Only the fields you enter below become public.</div>
-    <form class="form-grid" data-journey-story-form>
-      <div class="story-form-grid"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="120" value="${escapeHTML(prefill.subject||'')}"></div><div class="field"><label>University (optional)</label><input class="input" name="university" maxlength="180" value="${escapeHTML(prefill.university||'')}"></div><div class="field"><label>Intake (optional)</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}"></div><div class="field"><label>Story title</label><input class="input" name="title" maxlength="180" required placeholder="My scholarship application journey"></div><div class="field story-form-wide"><label>Introduction</label><textarea class="textarea" name="content" maxlength="3000" required></textarea></div></div>
-      <h3>Public milestones</h3>${rows}
-      <div class="form-error" data-story-error></div><button class="btn btn-primary" type="submit">Publish journey story</button>
+  const rows=[1,2,3,4].map(i=>`
+    <div class="journey19-milestone-row">
+      <div class="field"><label>Milestone ${i} stage ${i===1?'<span>Required</span>':''}</label><input class="input" name="stage${i}" maxlength="80" placeholder="e.g. Applied, Interview, Offer received"></div>
+      <div class="field"><label>Month</label><input class="input" name="month${i}" type="month"></div>
+      <div class="field journey19-note-field"><label>What you choose to share</label><input class="input" name="note${i}" maxlength="300" placeholder="Optional public context — no IDs, documents or private details"></div>
+    </div>`).join('');
+
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal journey19-modal" role="dialog" aria-modal="true" aria-labelledby="journey19-title"><header class="modal-head"><div><span class="journey19-modal-kicker">PUBLIC JOURNEY STORY</span><h2 id="journey19-title">Share selected Journey milestones</h2></div><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body">
+    <section class="journey19-publish-intro">
+      <div><b>Nothing is imported automatically</b><span>Your private Journey stage, checklist, target dates, notes and post-acceptance plan stay private.</span></div>
+      <div><b>You choose each milestone</b><span>Only the subject, university/intake context, introduction and milestone fields you enter here become public.</span></div>
+      <div><b>Protect sensitive details</b><span>No application IDs, passport/visa numbers, booking references, exact addresses, account/card numbers or private documents.</span></div>
+    </section>
+    <form class="form-grid journey19-form" data-journey-story-form>
+      <div class="story-form-grid">
+        <div class="field"><label>Subject / field <span>Required</span></label><input class="input" name="subject" maxlength="120" required value="${escapeHTML(prefill.subject||'')}" placeholder="e.g. Computer Science"></div>
+        <div class="field"><label>University / institution</label><input class="input" name="university" maxlength="180" value="${escapeHTML(prefill.university||'')}" placeholder="Optional public context"></div>
+        <div class="field"><label>Intake / year</label><input class="input" name="intake" maxlength="80" value="${escapeHTML(prefill.intake||'')}" placeholder="e.g. Fall 2027"></div>
+        <div class="field"><label>Story title <span>Required</span></label><input class="input" name="title" maxlength="180" required placeholder="My scholarship application Journey"></div>
+        <div class="field story-form-wide"><label>Introduction <span>Required · at least 40 characters</span></label><textarea class="textarea journey19-intro-text" name="content" maxlength="3000" required placeholder="What was this Journey about? What context would help another student understand your timeline?"></textarea><small class="form-help">Share personal context, not instructions or guarantees for someone else.</small></div>
+      </div>
+
+      <section class="journey19-milestones">
+        <header><div><span class="opportunity-kicker">PUBLIC MILESTONES</span><h3>Choose up to four moments</h3><p>Month-level timing is enough. Exact dates are intentionally not requested here.</p></div></header>
+        <div class="journey19-milestone-list">${rows}</div>
+      </section>
+
+      <section class="journey19-public-note">
+        ${icon('info',16)}
+        <div><b>This story will be public</b><p>Only the values in this form are published. Tefsen does not copy your private Journey checklist, private notes, target dates, application status history or post-acceptance planning into this story.</p></div>
+      </section>
+
+      <div class="form-error" data-story-error></div>
+      <div class="journey19-publish-actions"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish Journey story</button></div>
     </form>
   </div></section></div>`;
 }
@@ -3058,7 +4566,7 @@ function openCommunityComposer(context = {}) {
 }
 
 function openComposer() {
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
     <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} image posts/day` : 'Unlimited image posts'} · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
@@ -3070,15 +4578,15 @@ function openComposer() {
 }
 
 function openReportModal(postId) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Harmful or unsafe content</option><option>Misinformation concern</option><option>Copyright concern</option><option>Other</option></select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000"></textarea></div><button class="btn btn-danger" type="submit">Submit report</button></form></div></section></div>`;
+  const options=REPORT_REASONS.map(reason=>`<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`).join('');
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="community-banner"><b>Reports are private.</b> They go to authorized Tefsen moderation review and are not shown to the post author or Community.</div><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option>${options}</select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000" placeholder="Add only information needed to explain the concern."></textarea></div><button class="btn btn-danger" type="submit">Submit private report</button></form></div></section></div>`;
 }
 
 function canDeletePost(post) {
   if (!post || !state.user?.uid) return false;
   const ownerId = String(post.authorId || post.userId || post.uid || post.ownerId || post.authorUid || post.creatorId || '');
   const ownPost = Boolean(ownerId) && ownerId === String(state.user.uid);
-  const admin = String(state.profile?.role || '').trim().toLowerCase() === 'admin';
-  return ownPost || admin;
+  return ownPost || adminCapability === true;
 }
 
 async function openPostMenu(postId) {
@@ -3092,49 +4600,64 @@ function openDeletePostModal(postId) {
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" style="max-width:440px" role="dialog" aria-modal="true"><header class="modal-head"><h2>Delete post?</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><p style="margin:0 0 18px;color:var(--muted);line-height:1.6">This will permanently remove your post. This action cannot be undone.</p><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-danger" type="button" data-confirm-delete-post="${escapeHTML(postId)}">Delete post</button></div></div></section></div>`;
 }
 
-function openEditProfile(focusField = '') {
+function openEditProfile() {
   const p = state.profile || {};
   const hasPhoto = Boolean(safeUrl(p.photoUrl || p.profileImageUrl || p.photoURL || ''));
-  modalRoot.innerHTML =
-    '<div class="modal-backdrop" data-modal-backdrop>' +
-      '<section class="modal profile-final-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">' +
-        '<header class="modal-head"><div><span class="profile-final-modal-kicker">PUBLIC IDENTITY</span><h2 id="edit-profile-title">Edit public profile</h2></div><button class="close-btn" data-close-modal aria-label="Close">' + icon('close',19) + '</button></header>' +
-        '<div class="modal-body">' +
-          '<div class="profile-final-public-note">' + icon('info',16) + '<div><b>These fields are public.</b><p>Your Student Passport, saved opportunities, application Journeys and private planning are not edited or published here.</p></div></div>' +
-          '<form class="form-grid" data-profile-form data-profile-modal>' +
-            '<section class="profile-final-photo-editor">' +
-              '<div class="profile-final-photo-preview" data-profile-photo-preview>' + avatar(p,'lg') + '</div>' +
-              '<div class="profile-final-photo-editor-copy">' +
-                '<span>PROFILE PHOTO</span><h3>' + (hasPhoto ? 'Change or remove your photo' : 'Add a profile photo') + '</h3>' +
-                '<p>JPG, PNG or WebP up to 5 MB. The photo appears on your public profile and community content.</p>' +
-                '<input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>' +
-                '<div class="profile-final-photo-editor-actions">' +
-                  '<button class="btn btn-secondary" type="button" data-profile-photo-choose>' + (hasPhoto ? 'Choose new photo' : 'Choose photo') + '</button>' +
-                  '<button class="btn btn-ghost" type="button" data-profile-photo-clear-selection hidden>Cancel selected photo</button>' +
-                  (hasPhoto ? '<button class="btn btn-ghost profile-final-remove-photo" type="button" data-profile-photo-remove>Remove current photo</button>' : '') +
-                '</div>' +
-                '<small class="profile-final-photo-status" data-profile-photo-status>' + (hasPhoto ? 'Current photo will stay until you save a new one or remove it.' : 'Initials are shown until you save a photo.') + '</small>' +
-              '</div>' +
-            '</section>' +
-            '<div class="profile-final-form-grid">' +
-              '<div class="field"><label>Full name <small>Public</small></label><input class="input" name="fullName" value="' + escapeHTML(p.fullName || '') + '" required maxlength="80"><span class="field-error" data-profile-field-error="fullName" hidden></span></div>' +
-              '<div class="field"><label>Username <small>Public · optional</small></label><input class="input" name="username" value="' + escapeHTML(p.username || '') + '" maxlength="40" autocomplete="off" placeholder="your.username"><small>Letters, numbers, dots, underscores and hyphens only.</small><span class="field-error" data-profile-field-error="username" hidden></span></div>' +
-              '<div class="field profile-final-bio-field"><label>Bio <small>Public · optional</small></label><textarea class="textarea" name="bio" maxlength="500" placeholder="Study interests, subjects, goals or context you choose to share publicly.">' + escapeHTML(p.bio || '') + '</textarea><div class="profile-final-bio-meta"><small>Do not add private application IDs, addresses, financial details or document numbers.</small><small><span data-profile-bio-count>' + String(p.bio || '').length + '</span>/500</small></div><span class="field-error" data-profile-field-error="bio" hidden></span></div>' +
-            '</div>' +
-            '<div class="journey-planning-summary profile-final-validation-summary" data-profile-validation-summary hidden></div>' +
-            '<div class="profile-final-modal-footer"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Save public profile</button></div>' +
-          '</form>' +
-        '</div>' +
-      '</section>' +
-    '</div>';
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <section class="modal v4-profile-modal profile13-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+      <header class="modal-head"><div><span class="profile13-modal-kicker">PUBLIC PROFILE</span><h2 id="edit-profile-title">Edit how students see you</h2></div><button class="close-btn" data-close-modal aria-label="Close">${icon('close',19)}</button></header>
+      <div class="modal-body">
+        <form class="form-grid profile13-editor-form" data-profile-form data-profile-modal>
+          <section class="v4-photo-editor profile13-photo-editor">
+            <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
+            <div class="v4-photo-editor-copy">
+              <b>Profile photo</b>
+              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. A selected image stays a preview until you save.</p>
+              <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
+              <div class="v4-photo-editor-actions">
+                <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Choose a new photo' : 'Choose photo'}</button>
+                ${hasPhoto ? '<button class="btn btn-ghost v4-remove-photo" type="button" data-profile-photo-remove>Remove current photo</button>' : ''}
+              </div>
+              <small class="profile13-photo-state" data-profile-photo-state>${hasPhoto ? 'Current public photo' : 'No public photo yet'}</small>
+            </div>
+          </section>
 
-  const targetSelector = {
-    photo:'[data-profile-photo-choose]',
-    username:'[name="username"]',
-    bio:'[name="bio"]',
-    fullName:'[name="fullName"]'
-  }[focusField] || '';
-  if (targetSelector) requestAnimationFrame(() => modalRoot.querySelector(targetSelector)?.focus());
+          <section class="profile13-public-fields">
+            <div class="profile13-editor-note">${icon('info',16)}<p><b>These fields are public.</b> Your Student Passport, saved opportunities and Journey planning are not edited here and remain private.</p></div>
+
+            <div class="field">
+              <label>Public name</label>
+              <input class="input" name="fullName" value="${escapeHTML(p.fullName || '')}" required maxlength="80" autocomplete="name">
+              <small>The name shown on posts and your profile.</small>
+              <span class="field-error" data-profile-error="fullName" hidden></span>
+            </div>
+
+            <div class="field">
+              <label>Username <small>Optional</small></label>
+              <div class="profile13-username-input"><span>@</span><input class="input" name="username" value="${escapeHTML(p.username || '')}" maxlength="40" autocomplete="off" placeholder="yourname"></div>
+              <small>Letters, numbers, dots, underscores and hyphens only.</small>
+              <span class="field-error" data-profile-error="username" hidden></span>
+            </div>
+
+            <div class="field">
+              <div class="profile13-field-label"><label>Bio <small>Optional</small></label><small><span data-profile-bio-count>${String(p.bio || '').length}</span>/500</small></div>
+              <textarea class="textarea" name="bio" maxlength="500" placeholder="What do you study, care about, or share with the community?">${escapeHTML(p.bio || '')}</textarea>
+              <span class="field-error" data-profile-error="bio" hidden></span>
+            </div>
+
+            <div class="journey-planning-summary profile13-editor-summary" data-profile-summary hidden></div>
+          </section>
+
+          <div class="v4-profile-modal-footer">
+            <button class="btn btn-ghost" type="button" data-close-modal>Cancel</button>
+            <button class="btn btn-primary" type="submit">Save public profile</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>`;
+  const form = modalRoot.querySelector('[data-profile-form]');
+  if (form) updatePublicProfileValidation(form);
 }
 
 function openRemoveProfilePhotoModal() {
@@ -3157,15 +4680,64 @@ function openDemoInfo() {
 
 async function handleClick(event) {
   const settingsTabEl = event.target.closest('[data-settings-tab]');
-  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'profile'; renderSettings(); return; }
-  const prefEl = event.target.closest('[data-pref]');
-  if (prefEl) {
-    const key = prefEl.dataset.pref;
-    const storageKey = key === 'compact' ? 'tefsen_pref_compact' : 'tefsen_pref_motion';
-    const next = localStorage.getItem(storageKey) !== '1';
-    localStorage.setItem(storageKey, next ? '1' : '0');
-    document.documentElement.classList.toggle(key === 'compact' ? 'pref-compact' : 'pref-reduced-motion', next);
-    renderSettings();
+  if (settingsTabEl) { settingsTab = settingsTabEl.dataset.settingsTab || 'overview'; renderSettings(); return; }
+
+  const themeChoice = event.target.closest('[data-settings-theme]');
+  if (themeChoice) {
+    const theme = themeChoice.dataset.settingsTheme;
+    if (!['light','dark','system'].includes(theme)) return;
+    themeChoice.disabled = true;
+    try {
+      await persistCurrentSettings({ theme });
+      toast(`${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'} appearance saved.`, 'success');
+      renderSettings();
+    } catch (error) {
+      themeChoice.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+
+  const themeCycle = event.target.closest('[data-theme-cycle]');
+  if (themeCycle) {
+    const theme = themeCycle.dataset.themeNext || 'light';
+    themeCycle.disabled = true;
+    try {
+      await persistCurrentSettings({ theme });
+      toast(`Appearance changed to ${theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'}.`, 'success');
+      renderRoute();
+    } catch (error) {
+      themeCycle.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+
+  const settingsToggle = event.target.closest('[data-settings-toggle]');
+  if (settingsToggle) {
+    const key = settingsToggle.dataset.settingsToggle;
+    const allowed = new Set(['compactFeed','reducedMotion','notificationOpportunityDeadlines','notificationJourneyReminders','notificationCommunityActivity']);
+    if (!allowed.has(key)) return;
+    settingsToggle.disabled = true;
+    try {
+      await persistCurrentSettings({ [key]: !Boolean(currentUserSettings[key]) });
+      toast('Setting saved.', 'success');
+      renderSettings();
+    } catch (error) {
+      settingsToggle.disabled = false;
+      toast(humanError(error), 'error');
+    }
+    return;
+  }
+  if (event.target.closest('[data-settings-reset-password]')) {
+    const email = state.user?.email || state.profile?.email || '';
+    if (!email) { toast('No account email is available for password reset.', 'error'); return; }
+    try {
+      await resetPassword(state.mode, email);
+      toast('Password reset email sent.', 'success');
+    } catch (error) {
+      toast(humanError(error), 'error');
+    }
     return;
   }
   const passportJump = event.target.closest('[data-passport-jump]');
@@ -3228,16 +4800,18 @@ async function handleClick(event) {
   if (shareJourneyStory) { openJourneyStoryModal({ subject:shareJourneyStory.dataset.prefillSubject||'', university:shareJourneyStory.dataset.prefillUniversity||'', intake:shareJourneyStory.dataset.prefillIntake||'' }); return; }
   const communityDiscussion = event.target.closest('[data-community-discussion]');
   if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
-  if (event.target.closest('[data-close-modal]')) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; return; }
-  if (event.target.matches('[data-modal-backdrop]')) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; return; }
+  if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
+  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
   const tab = event.target.closest('[data-feed-tab]');
   if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
   const adminTabButton = event.target.closest('[data-admin-tab]');
-  if (adminTabButton) { adminTab = adminTabButton.dataset.adminTab === 'import' ? 'import' : 'review'; await renderAdmin(); return; }
+  if (adminTabButton) { const next=adminTabButton.dataset.adminTab; adminTab=['review','import','reports'].includes(next)?next:'review'; await renderAdmin(); return; }
   const adminReview = event.target.closest('[data-admin-review-action]');
   if (adminReview) { await handleAdminReview(adminReview); return; }
   const adminImportConfirm = event.target.closest('[data-admin-import-confirm]');
   if (adminImportConfirm) { await handleAdminImportConfirm(adminImportConfirm); return; }
+  const adminModeration = event.target.closest('[data-admin-moderation-action]');
+  if (adminModeration) { await handleAdminModeration(adminModeration); return; }
   const savedCompare = event.target.closest('[data-saved-compare]');
   if (savedCompare) { toggleSavedComparison(savedCompare); return; }
   if (event.target.closest('[data-saved-compare-clear]')) {
@@ -3298,11 +4872,11 @@ async function handleClick(event) {
   if (confirmDeletePost) { await handleDeletePost(confirmDeletePost.dataset.confirmDeletePost, confirmDeletePost); return; }
   const report = event.target.closest('[data-report]');
   if (report) { openReportModal(report.dataset.report); return; }
+  if (event.target.closest('[data-notifications-mark-all]')) { await handleNotificationsMarkAll(event.target.closest('[data-notifications-mark-all]')); return; }
+  const markNotificationSection = event.target.closest('[data-notifications-mark-section]');
+  if (markNotificationSection) { await handleNotificationsMarkSection(markNotificationSection, markNotificationSection.dataset.notificationsMarkSection || ''); return; }
   const notification = event.target.closest('[data-notification]');
   if (notification) { await handleNotification(notification); return; }
-  const conv = event.target.closest('[data-conversation]');
-  if (conv) { go(`messages/${conv.dataset.conversation}`); return; }
-  if (event.target.closest('[data-messages-back]')) { drawMessages(null); return; }
   if (event.target.closest('[data-back]')) { history.length > 1 ? history.back() : go('home'); return; }
   if (event.target.closest('[data-profile-menu]')) { state.ui.profileMenu = !state.ui.profileMenu; syncProfileMenu(); return; }
   if (event.target.closest('[data-profile-menu-dismiss]')) { state.ui.profileMenu = false; syncProfileMenu(); return; }
@@ -3318,19 +4892,14 @@ async function handleClick(event) {
     document.querySelector('[data-profile-photo-input]')?.click();
     return;
   }
-  if (event.target.closest('[data-profile-photo-clear-selection]')) {
-    clearSelectedProfilePhoto();
-    return;
-  }
-  if (event.target.closest('[data-profile-photo-remove]')) { cleanupProfilePhotoPreview(); openRemoveProfilePhotoModal(); return; }
+  if (event.target.closest('[data-profile-photo-remove]')) { openRemoveProfilePhotoModal(); return; }
   const confirmRemoveProfilePhoto = event.target.closest('[data-confirm-remove-profile-photo]');
   if (confirmRemoveProfilePhoto) { await handleProfilePhotoRemove(confirmRemoveProfilePhoto); return; }
-  const editProfile = event.target.closest('[data-edit-profile]');
-  if (editProfile) { openEditProfile(editProfile.dataset.profileFocus || ''); return; }
-  const followUser = event.target.closest('[data-follow-user]');
-  if (followUser) { await handleFollow(followUser); return; }
-  const messageUser = event.target.closest('[data-message-user]');
-  if (messageUser) { await handleStartConversation(currentProfileView); return; }
+  if (event.target.closest('[data-profile-activity-jump]')) {
+    document.getElementById('profile-public-activity')?.scrollIntoView({ behavior:'smooth', block:'start' });
+    return;
+  }
+  if (event.target.closest('[data-edit-profile]')) { openEditProfile(); return; }
   const subject = event.target.closest('[data-subject]');
   if (subject) { state.searchQuery = subject.dataset.subject; go(`search/${encodeURIComponent(subject.dataset.subject)}`); return; }
 }
@@ -3341,7 +4910,7 @@ async function handleSubmit(event) {
   if (form.matches('[data-global-search-form]')) { event.preventDefault(); const term = new FormData(form).get('q')?.trim(); if (term) go(`search/${encodeURIComponent(term)}`); return; }
   if (form.matches('[data-compose-form]')) { event.preventDefault(); await handleCompose(form); return; }
   if (form.matches('[data-comment-form]')) { event.preventDefault(); await handleComment(form); return; }
-  if (form.matches('[data-message-form]')) { event.preventDefault(); await handleMessage(form); return; }
+  if (form.matches('[data-settings-preferences-form]')) { event.preventDefault(); await handleSettingsPreferencesSave(form); return; }
   if (form.matches('[data-profile-form]')) { event.preventDefault(); await handleProfileSave(form); return; }
   if (form.matches('[data-passport-onboarding-form]')) { event.preventDefault(); await handlePassportOnboardingSave(form); return; }
   if (form.matches('[data-student-passport-form]')) { event.preventDefault(); await handleStudentPassportSave(form); return; }
@@ -3386,12 +4955,12 @@ async function handleCompose(form) {
     tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFiles
   };
   if (!payload.title || !payload.content) return;
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const totalBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
   if (imageFiles.length > policy.maxImagesPerPost) { errorEl.textContent = `Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`; return; }
   if (totalBytes > policy.maxTotalImageBytes) { errorEl.textContent = `Your plan allows ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total images per post.`; return; }
   await withButton(submit, async()=>{
-    try { const post = await createPost(state.mode,state.user,state.profile,payload); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
+    try { const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability}); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
     catch(e){ errorEl.textContent=humanError(e); }
   });
 }
@@ -3445,36 +5014,6 @@ async function handleLike(postId) {
     });
   }
 }
-async function handleFollow(button) {
-  const targetUserId = button?.dataset?.followUser || currentProfileView?.uid || '';
-  if (!targetUserId || targetUserId === state.user.uid) return;
-  const previous = button.getAttribute('aria-pressed') === 'true';
-  button.disabled = true;
-  button.textContent = previous ? 'Follow' : 'Following';
-  button.classList.toggle('btn-primary', previous);
-  button.classList.toggle('btn-secondary', !previous);
-  button.classList.toggle('is-following', !previous);
-  button.setAttribute('aria-pressed', String(!previous));
-  try {
-    const active = await toggleFollow(state.mode, state.user.uid, targetUserId);
-    button.textContent = active ? 'Following' : 'Follow';
-    button.classList.toggle('btn-primary', !active);
-    button.classList.toggle('btn-secondary', active);
-    button.classList.toggle('is-following', active);
-    button.setAttribute('aria-pressed', String(active));
-    await renderProfile(targetUserId);
-  } catch (error) {
-    button.textContent = previous ? 'Following' : 'Follow';
-    button.classList.toggle('btn-primary', !previous);
-    button.classList.toggle('btn-secondary', previous);
-    button.classList.toggle('is-following', previous);
-    button.setAttribute('aria-pressed', String(previous));
-    toast(humanError(error), 'error');
-  } finally {
-    button.disabled = false;
-  }
-}
-
 async function handleSave(postId) {
   try { const active=await toggleSave(state.mode,state.user.uid,postId); active?reactionState.saved.add(postId):reactionState.saved.delete(postId); toast(active?'Saved for later':'Removed from saved','success'); renderRoute(); }
   catch(e){ toast(humanError(e),'error'); }
@@ -3848,12 +5387,6 @@ async function handleComment(form) {
   const submit=form.querySelector('button[type="submit"]');
   await withButton(submit,async()=>{ try { const item=await addComment(state.mode,state.user,state.profile,form.dataset.commentForm,text); if(state.mode==='demo'){currentComments=[...currentComments,item]; renderPostDetail(form.dataset.commentForm);} form.reset(); toast('Answer published','success'); } catch(e){toast(humanError(e),'error');} });
 }
-async function handleMessage(form) {
-  const text=String(new FormData(form).get('text')||'').trim(); if(!text)return;
-  const input=form.elements.text; input.value='';
-  try { const item=await sendMessage(state.mode,state.user.uid,form.dataset.messageForm,text); if(state.mode==='demo'){state.messages=[...state.messages,item];drawMessages(state.selectedConversation);} }
-  catch(e){ input.value=text; toast(humanError(e),'error'); }
-}
 function updatePublicProfileValidation(form) {
   const fd = new FormData(form);
   const draft = {
@@ -3863,7 +5396,7 @@ function updatePublicProfileValidation(form) {
   };
   const validation = validatePublicProfileDraft(draft);
 
-  form.querySelectorAll('[data-profile-field-error]').forEach(el => {
+  form.querySelectorAll('[data-profile-error]').forEach(el => {
     el.hidden = true;
     el.textContent = '';
   });
@@ -3872,14 +5405,18 @@ function updatePublicProfileValidation(form) {
   for (const error of validation.errors) {
     const field = form.elements.namedItem(error.field);
     if (field instanceof HTMLElement) field.classList.add('field-error-state');
-    const errorEl = form.querySelector('[data-profile-field-error="' + error.field + '"]');
+    const errorEl = form.querySelector('[data-profile-error="' + error.field + '"]');
     if (errorEl) {
       errorEl.hidden = false;
       errorEl.textContent = error.message;
     }
   }
 
-  const summary = form.querySelector('[data-profile-validation-summary]');
+  const bioCount = form.querySelector('[data-profile-bio-count]');
+  const bio = form.elements.namedItem('bio');
+  if (bioCount && bio instanceof HTMLTextAreaElement) bioCount.textContent = String(bio.value.length);
+
+  const summary = form.querySelector('[data-profile-summary]');
   if (summary) {
     const messages = [
       ...validation.errors.map(item => item.message),
@@ -3890,62 +5427,22 @@ function updatePublicProfileValidation(form) {
     summary.textContent = messages.join(' ');
   }
 
-  const bioCount = form.querySelector('[data-profile-bio-count]');
-  const bioField = form.elements.namedItem('bio');
-  if (bioCount && bioField instanceof HTMLTextAreaElement) bioCount.textContent = String(bioField.value.length);
-
-  return { draft, validation };
-}
-
-function cleanupProfilePhotoPreview() {
-  const input = modalRoot.querySelector('[data-profile-photo-input]');
-  if (input?.dataset?.previewUrl) {
-    URL.revokeObjectURL(input.dataset.previewUrl);
-    delete input.dataset.previewUrl;
-  }
-}
-
-function clearSelectedProfilePhoto() {
-  const form = modalRoot.querySelector('[data-profile-form][data-profile-modal]');
-  const input = form?.querySelector('[data-profile-photo-input]');
-  const preview = form?.querySelector('[data-profile-photo-preview]');
-  if (!form || !input) return;
-
-  if (input.dataset.previewUrl) {
-    URL.revokeObjectURL(input.dataset.previewUrl);
-    delete input.dataset.previewUrl;
-  }
-  input.value = '';
-
-  if (preview) preview.innerHTML = avatar(state.profile || {}, 'lg');
-
-  const clearButton = form.querySelector('[data-profile-photo-clear-selection]');
-  if (clearButton) clearButton.hidden = true;
-
-  const chooseButton = form.querySelector('[data-profile-photo-choose]');
-  const hasPhoto = Boolean(safeUrl(state.profile?.photoUrl || state.profile?.profileImageUrl || state.profile?.photoURL || ''));
-  if (chooseButton) chooseButton.textContent = hasPhoto ? 'Choose new photo' : 'Choose photo';
-
-  const status = form.querySelector('[data-profile-photo-status]');
-  if (status) status.textContent = hasPhoto
-    ? 'Current photo will stay until you save a new one or remove it.'
-    : 'Initials are shown until you save a photo.';
+  return { draft:validation.value, validation };
 }
 
 async function handleProfileSave(form) {
+  const fd = new FormData(form);
   const { draft, validation } = updatePublicProfileValidation(form);
   if (!validation.valid) {
-    const firstError = validation.errors[0];
-    const field = form.elements.namedItem(firstError?.field || '');
+    const first = validation.errors[0];
+    const field = form.elements.namedItem(first?.field || '');
     if (field instanceof HTMLElement) field.focus();
     toast('Check the highlighted public profile field before saving.', 'error');
     return;
   }
 
-  const fd = new FormData(form);
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
-
   await withButton(submit, async () => {
     try {
       const profile = await updateUserProfile(state.mode, state.user.uid, {
@@ -3958,10 +5455,8 @@ async function handleProfileSave(form) {
       state.posts = state.posts.map(post => post.authorId === state.user.uid
         ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
-
       const input = form.querySelector('[data-profile-photo-input]');
       if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
-
       modalRoot.innerHTML = '';
       toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
@@ -4088,44 +5583,136 @@ async function handleStudentPassportSave(form) {
 
 
 async function handleSuccessStorySubmit(form) {
-  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
-  const opportunityName=String(fd.get('opportunityName')||'').trim();
-  const subject=String(fd.get('subject')||'').trim();
-  const university=String(fd.get('university')||'').trim();
+  const fd=new FormData(form);
+  const submit=form.querySelector('button[type="submit"]');
+  const errorEl=form.querySelector('[data-story-error]');
+  const draft=validateSuccessStoryDraft({
+    university:fd.get('university'),
+    opportunityName:fd.get('opportunityName'),
+    country:fd.get('country'),
+    subject:fd.get('subject'),
+    studyLevel:fd.get('studyLevel'),
+    intake:fd.get('intake'),
+    fundingType:fd.get('fundingType'),
+    title:fd.get('title'),
+    content:fd.get('content')
+  });
+
+  errorEl.textContent='';
+  form.querySelectorAll('[aria-invalid="true"]').forEach(el=>el.removeAttribute('aria-invalid'));
+
+  if(!draft.valid){
+    const first=draft.errors[0];
+    const field=form.elements.namedItem(first.field);
+    const fieldEl=field instanceof RadioNodeList ? field[0] : field;
+    fieldEl?.setAttribute?.('aria-invalid','true');
+    fieldEl?.focus?.();
+    errorEl.textContent=first.message;
+    return;
+  }
+
+  const value=draft.value;
   const payload={
-    title:String(fd.get('title')||'').trim() || `I received ${opportunityName}`,
-    content:String(fd.get('content')||'').trim(),
-    subject:subject || 'Student Success',
-    tags:['student-success', subject].filter(Boolean),
+    title:value.title,
+    content:value.content,
+    subject:value.subject || 'Student Success',
+    tags:['student-success', value.subject].filter(Boolean),
     postType:'success_story',
     successData:{
-      university, opportunityName, country:String(fd.get('country')||'').trim(),
-      subject, studyLevel:String(fd.get('studyLevel')||'').trim(),
-      intake:String(fd.get('intake')||'').trim(), fundingType:String(fd.get('fundingType')||'').trim()
+      university:value.university,
+      opportunityName:value.opportunityName,
+      country:value.country,
+      subject:value.subject,
+      studyLevel:value.studyLevel,
+      intake:value.intake,
+      fundingType:value.fundingType
     },
-    communityUniversity:university,
-    communityIntake:String(fd.get('intake')||'').trim(),
-    communitySubject:subject,
+    communityUniversity:value.university,
+    communityIntake:value.intake,
+    communitySubject:value.subject,
     imageFiles:[]
   };
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Success story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+
+  await withButton(submit,async()=>{
+    try{
+      const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
+      modalRoot.innerHTML='';
+      if(state.mode==='demo')state.posts=[post,...state.posts];
+      toast('Success story published.','success');
+      go(`post/${post.id}`);
+    }catch(error){
+      errorEl.textContent=humanError(error);
+    }
+  });
 }
 
 async function handleJourneyStorySubmit(form) {
-  const fd=new FormData(form), submit=form.querySelector('button[type="submit"]'), errorEl=form.querySelector('[data-story-error]');
+  const fd=new FormData(form);
+  const submit=form.querySelector('button[type="submit"]');
+  const errorEl=form.querySelector('[data-story-error]');
   const milestones=[];
-  for(let i=1;i<=4;i++){const stage=String(fd.get(`stage${i}`)||'').trim(),month=String(fd.get(`month${i}`)||'').trim(),note=String(fd.get(`note${i}`)||'').trim();if(stage||note)milestones.push({stage,month,note});}
-  if(!milestones.length){errorEl.textContent='Add at least one public milestone.';return;}
-  const subject=String(fd.get('subject')||'').trim(), university=String(fd.get('university')||'').trim(), intake=String(fd.get('intake')||'').trim();
-  const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'Student Journey',tags:['student-journey',subject].filter(Boolean),postType:'journey_story',publicMilestones:milestones,communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Journey story published.','success');go(`post/${post.id}`);}catch(error){errorEl.textContent=humanError(error);}});
+  for(let i=1;i<=4;i++){
+    milestones.push({
+      stage:fd.get(`stage${i}`),
+      month:fd.get(`month${i}`),
+      note:fd.get(`note${i}`)
+    });
+  }
+
+  const draft=validateJourneyStoryDraft({
+    subject:fd.get('subject'),
+    university:fd.get('university'),
+    intake:fd.get('intake'),
+    title:fd.get('title'),
+    content:fd.get('content'),
+    publicMilestones:milestones
+  });
+
+  errorEl.textContent='';
+  form.querySelectorAll('[aria-invalid="true"]').forEach(el=>el.removeAttribute('aria-invalid'));
+
+  if(!draft.valid){
+    const first=draft.errors[0];
+    const field=form.elements.namedItem(first.field);
+    const fieldEl=field instanceof RadioNodeList ? field[0] : field;
+    fieldEl?.setAttribute?.('aria-invalid','true');
+    fieldEl?.focus?.();
+    errorEl.textContent=first.message;
+    return;
+  }
+
+  const value=draft.value;
+  const payload={
+    title:value.title,
+    content:value.content,
+    subject:value.subject || 'Student Journey',
+    tags:['student-journey',value.subject].filter(Boolean),
+    postType:'journey_story',
+    publicMilestones:value.publicMilestones,
+    communitySubject:value.subject,
+    communityUniversity:value.university,
+    communityIntake:value.intake,
+    imageFiles:[]
+  };
+
+  await withButton(submit,async()=>{
+    try{
+      const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
+      modalRoot.innerHTML='';
+      if(state.mode==='demo')state.posts=[post,...state.posts];
+      toast('Journey story published.','success');
+      go(`post/${post.id}`);
+    }catch(error){
+      errorEl.textContent=humanError(error);
+    }
+  });
 }
 
 async function handleCommunityPostSubmit(form) {
   const fd=new FormData(form),submit=form.querySelector('button[type="submit"]');
   const subject=form.dataset.communitySubject||'', university=form.dataset.communityUniversity||'', intake=form.dataset.communityIntake||'';
   const payload={title:String(fd.get('title')||'').trim(),content:String(fd.get('content')||'').trim(),subject:subject||'General',tags:[subject,university,intake].filter(Boolean).slice(0,6),postType:'discussion',communitySubject:subject,communityUniversity:university,communityIntake:intake,imageFiles:[]};
-  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload);modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
+  await withButton(submit,async()=>{try{const post=await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});modalRoot.innerHTML='';if(state.mode==='demo')state.posts=[post,...state.posts];toast('Community post published.','success');go(`post/${post.id}`);}catch(error){toast(humanError(error),'error');}});
 }
 
 
@@ -4135,6 +5722,21 @@ async function handleAdminReview(button) {
   const opportunity=currentAdminOpportunities.find(item=>item.id===id);
   if(!opportunity){toast('Opportunity not found.','error');return;}
   await withButton(button,async()=>{try{await reviewOpportunity(state.mode,state.user,state.profile,opportunity,action);toast(action==='verify'?'Opportunity verified and published.':'Opportunity review state updated.','success');await renderAdmin();}catch(error){toast(humanError(error),'error');}});
+}
+
+async function handleAdminModeration(button) {
+  if(!adminCapability)return;
+  const id=button.dataset.adminReportId||'', source=button.dataset.adminReportSource||'reports', action=button.dataset.adminModerationAction||'';
+  const report=currentAdminReports.find(row=>row.id===id&&row.source===source);
+  if(!report){toast('Moderation report not found.','error');return;}
+  await withButton(button,async()=>{
+    try{
+      await reviewReport(state.mode,state.user,state.profile,report,action);
+      toast(action==='hide_post'?'Reported post hidden and action audited.':action==='dismiss'?'Report dismissed and audited.':'Report resolved and audited.','success');
+      adminTab='reports';
+      await renderAdmin();
+    }catch(error){toast(humanError(error),'error');}
+  });
 }
 
 async function handleAdminImportPreview(form) {
@@ -4154,15 +5756,46 @@ async function handleAdminImportConfirm(button) {
 }
 
 async function handleReport(form) {
-  const fd=new FormData(form); try { await reportPost(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Report submitted. Thank you.','success'); } catch(e){toast(humanError(e),'error');}
+  const fd=new FormData(form); try { await submitPostReport(state.mode,state.user.uid,form.dataset.reportForm,String(fd.get('reason')||''),String(fd.get('details')||'')); modalRoot.innerHTML=''; toast('Private report submitted for moderation review.','success'); } catch(e){toast(humanError(e),'error');}
 }
 async function handleNotification(el) {
-  try { await markNotificationRead(state.mode,el.dataset.notification); const n=state.notifications.find(x=>x.id===el.dataset.notification); if(n)n.read=true; state.unreadCount=state.notifications.filter(n=>!n.read).length; if(el.dataset.post)go(`post/${el.dataset.post}`);else renderNotifications(); }catch(e){toast(humanError(e),'error');}
+  try{
+    const n=state.notifications.find(x=>x.id===el.dataset.notification);
+    if(!n)return;
+    await markNotificationRead(state.mode,state.user.uid,n);
+    n.read=true;
+    setState({
+      notifications:[...state.notifications],
+      unreadCount:state.notifications.filter(row=>!row.read).length
+    });
+    const route=el.dataset.notificationRoute || n.route || '';
+    if(route) go(route); else renderNotifications();
+  }catch(e){
+    toast(humanError(e),'error');
+  }
 }
-async function handleStartConversation(profile) {
-  if(!profile?.uid)return;
-  try { const conv=await startConversation(state.mode,state.user.uid,profile); if(!state.conversations.some(c=>c.id===conv.id))state.conversations.unshift(conv); go(`messages/${conv.id}`); }
-  catch(e){toast(humanError(e),'error');}
+
+async function handleNotificationsMarkAll(button) {
+  const unread=state.notifications.filter(row=>!row.read);
+  await withButton(button,async()=>{
+    await markNotificationsRead(state.mode,state.user.uid,unread);
+    for(const row of unread) row.read=true;
+    setState({notifications:[...state.notifications],unreadCount:0});
+    await renderNotifications();
+  });
+}
+async function handleNotificationsMarkSection(button, category) {
+  const unread=state.notifications.filter(row=>!row.read && row.category===category);
+  if(!unread.length) return;
+  await withButton(button,async()=>{
+    await markNotificationsRead(state.mode,state.user.uid,unread);
+    for(const row of unread) row.read=true;
+    setState({
+      notifications:[...state.notifications],
+      unreadCount:state.notifications.filter(row=>!row.read).length
+    });
+    await renderNotifications();
+  });
 }
 async function withButton(button, task) {
   if (!button) return task();
@@ -4171,11 +5804,6 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
-  const profileForm = event.target.closest?.('[data-profile-form]');
-  if (profileForm && !event.target.matches('[type="file"]')) {
-    updatePublicProfileValidation(profileForm);
-    return;
-  }
   const passportForm = event.target.closest?.('[data-student-passport-form]');
   if (passportForm) {
     updateStudentPassportFormQuality(passportForm);
@@ -4199,13 +5827,13 @@ function handleInput(event) {
 
     const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
     if (!allowed.has(String(file.type || '').toLowerCase())) {
-      clearSelectedProfilePhoto();
       toast('Profile photo must be JPG, PNG or WebP.', 'error');
+      input.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      clearSelectedProfilePhoto();
       toast('Profile photo must be 5 MB or smaller.', 'error');
+      input.value = '';
       return;
     }
 
@@ -4213,14 +5841,10 @@ function handleInput(event) {
     const url = URL.createObjectURL(file);
     input.dataset.previewUrl = url;
     if (preview) {
-      preview.innerHTML = `<div class="profile-final-selected-photo"><img class="protected-avatar-image" src="${url}" alt="Selected profile photo preview"></div>`;
+      preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
     }
-    const clearButton = input.form?.querySelector('[data-profile-photo-clear-selection]');
-    if (clearButton) clearButton.hidden = false;
-    const chooseButton = input.form?.querySelector('[data-profile-photo-choose]');
-    if (chooseButton) chooseButton.textContent = 'Choose different photo';
-    const status = input.form?.querySelector('[data-profile-photo-status]');
-    if (status) status.textContent = 'New photo selected. It will become public only after you save the profile.';
+    const stateEl = input.form?.querySelector('[data-profile-photo-state]');
+    if (stateEl) stateEl.textContent = 'Preview selected — save profile to publish this photo';
     return;
   }
 
@@ -4228,7 +5852,7 @@ function handleInput(event) {
   if (!fileInput) return;
   const preview = fileInput.form.querySelector('[data-image-preview]');
   const files = [...(fileInput.files || [])];
-  const policy = getWebPostingPolicy(state.profile || {});
+  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
   const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
   const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
 
@@ -4293,11 +5917,16 @@ document.addEventListener('input', event => {
     return;
   }
   const postAcceptanceForm = event.target.closest?.('[data-post-acceptance-plan-form]');
-  if (postAcceptanceForm) updatePostAcceptanceValidation(postAcceptanceForm);
+  if (postAcceptanceForm) {
+    updatePostAcceptanceValidation(postAcceptanceForm);
+    return;
+  }
+  const profileForm = event.target.closest?.('[data-profile-form]');
+  if (profileForm) updatePublicProfileValidation(profileForm);
 });
 document.addEventListener('keydown', event => {
+  if (trapModalKeyboard(event)) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); document.querySelector('[data-global-search-form] input')?.focus(); }
-  if (event.key==='Escape' && modalRoot.innerHTML) { cleanupProfilePhotoPreview(); modalRoot.innerHTML=''; }
   if (event.key==='Escape' && state.ui.profileMenu) { state.ui.profileMenu = false; syncProfileMenu(); }
 });
 

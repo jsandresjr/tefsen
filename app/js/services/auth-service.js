@@ -5,11 +5,10 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { DEMO_USERS } from './demo-data.js';
+import { buildNewAccountDocument, buildExistingAccountProfilePatch } from './account-bootstrap-service.js';
 
 const DEMO_KEY = 'tefsen_demo_user';
 const demoListeners = new Set();
-const ALLOWED_ROLES = new Set(['student', 'HS_STUDENT', 'UNI_STUDENT', 'MENTOR', 'ADMIN']);
-const ADMIN_EMAIL = 'jsandresjr@gmail.com';
 
 function emitDemo(user) {
   demoListeners.forEach(fn => fn(user));
@@ -23,55 +22,53 @@ function currentDemo() {
   }
 }
 
-function normalizeStoredRole(role, email = '') {
-  const raw = String(role || '').trim();
-  if (ALLOWED_ROLES.has(raw)) return raw;
-  if (raw.toLowerCase() === 'admin' || String(email).toLowerCase() === ADMIN_EMAIL) return 'ADMIN';
-  if (raw.toLowerCase() === 'hs_student') return 'HS_STUDENT';
-  if (raw.toLowerCase() === 'uni_student') return 'UNI_STUDENT';
-  if (raw.toLowerCase() === 'mentor') return 'MENTOR';
-  return 'student';
-}
-
-async function syncUserDocument(user, { isRegistration = false } = {}) {
+export async function ensureUserDocument(user, { fullNameOverride = '' } = {}) {
+  if (!user?.uid) return null;
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
-  const existing = snap.exists() ? snap.data() : {};
-  const email = String(existing.email || user.email || '').trim();
-  const role = normalizeStoredRole(existing.role, email);
-  const fullName = String(user.displayName || existing.fullName || existing.displayName || email || 'Tefsen User').trim();
 
-  const payload = {
-    uid: user.uid,
-    email,
-    fullName,
-    displayName: fullName,
-    role,
+  if (!snap.exists()) {
+    const timestamp = serverTimestamp();
+    const payload = buildNewAccountDocument(user, {
+      fullNameOverride,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+    await setDoc(userRef, payload);
+    return payload;
+  }
+
+  const patch = buildExistingAccountProfilePatch(user, snap.data(), {
+    fullNameOverride,
     updatedAt: serverTimestamp()
-  };
-
-  if (user.photoURL) {
-    payload.profileImageUrl = user.photoURL;
-    payload.photoURL = user.photoURL;
-  }
-
-  if (!snap.exists() || isRegistration) {
-    payload.verified = false;
-    payload.createdAt = serverTimestamp();
-  }
-
-  await setDoc(userRef, payload, { merge: true });
+  });
+  await setDoc(userRef, patch, { merge: true });
+  return { ...snap.data(), ...patch };
 }
 
 export function observeAuth(mode, callback) {
-  if (mode === 'firebase') return onAuthStateChanged(auth, callback);
+  if (mode === 'firebase') {
+    return onAuthStateChanged(auth, user => {
+      if (!user) {
+        callback(null);
+        return;
+      }
+      void ensureUserDocument(user)
+        .catch(error => console.error('Tefsen account bootstrap failed:', error))
+        .finally(() => callback(user));
+    });
+  }
   demoListeners.add(callback);
   queueMicrotask(() => callback(currentDemo()));
   return () => demoListeners.delete(callback);
 }
 
 export async function signIn(mode, email, password) {
-  if (mode === 'firebase') return signInWithEmailAndPassword(auth, email, password);
+  if (mode === 'firebase') {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    await ensureUserDocument(credential.user);
+    return credential;
+  }
   if (!email || !password) throw new Error('Enter your email and password.');
   const base = { ...DEMO_USERS[0], email, displayName: DEMO_USERS[0].fullName };
   localStorage.setItem(DEMO_KEY, JSON.stringify(base));
@@ -83,7 +80,7 @@ export async function register(mode, { fullName, email, password }) {
   if (mode === 'firebase') {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(credential.user, { displayName: fullName });
-    await syncUserDocument(credential.user, { isRegistration: true });
+    await ensureUserDocument(credential.user, { fullNameOverride: fullName });
     return credential;
   }
 
@@ -93,10 +90,9 @@ export async function register(mode, { fullName, email, password }) {
     fullName,
     displayName: fullName,
     email,
-    username: email.split('@')[0],
+    username: '',
     role: 'student',
-    verified: false,
-    points: 0
+    verified: false
   };
   localStorage.setItem(DEMO_KEY, JSON.stringify(user));
   emitDemo(user);
@@ -108,7 +104,7 @@ export async function signInGoogle(mode) {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     const credential = await signInWithPopup(auth, provider);
-    await syncUserDocument(credential.user);
+    await ensureUserDocument(credential.user);
     return credential;
   }
 

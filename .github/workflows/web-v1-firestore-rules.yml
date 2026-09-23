@@ -1,9 +1,41 @@
-name: Tefsen Web V1 Firestore Rules
+name: Tefsen Web V1 Firebase Security
 
 on:
   pull_request:
     paths:
       - 'firebase-tests/**'
+      - 'js/home.js'
+      - 'CNAME'
+      - 'sitemap.xml'
+      - 'robots.txt'
+      - 'founder.html'
+      - 'privacy.html'
+      - 'terms.html'
+      - 'index.html'
+      - 'README.md'
+      - 'docs/WEB_SURFACE_OWNERSHIP.md'
+      - 'docs/PWA_DOCUMENT_SECURITY.md'
+      - 'docs/ENTITLEMENT_ADMIN_AUTHORITY.md'
+      - 'docs/ACCOUNT_DELETION_PRIVACY_REQUESTS.md'
+      - 'docs/ACCESSIBILITY_KEYBOARD.md'
+      - 'docs/PUBLIC_RELEASE_INTEGRITY.md'
+      - 'docs/WEB_COMPLETION_MASTER_PLAN.md'
+      - 'docs/WEB_V1_ENGINEERING_AUDIT.md'
+      - 'docs/WEB_V1_LAUNCH_CHECKLIST.md'
+      - 'docs/WEB_FINAL_RELEASE_HANDOFF.md'
+      - 'app.js'
+      - 'script.js'
+      - 'style.css'
+      - 'js/main.js'
+      - 'services/**'
+      - 'tefsen-web-signup-like-fix/**'
+      - 'delete-account.html'
+      - 'delete-account/**'
+      - 'privacy-policy/**'
+      - 'app/js/services/privacy-request-service.js'
+      - 'app/index.html'
+      - 'app/css/app.css'
+      - 'app/sw.js'
       - '.github/workflows/web-v1-firestore-rules.yml'
       - 'app/js/services/student-passport-service.js'
       - 'app/js/services/journey-service.js'
@@ -15,17 +47,45 @@ on:
       - 'app/js/services/journey-priority-service.js'
       - 'app/js/services/journey-detail-service.js'
       - 'app/js/services/post-acceptance-service.js'
-      - 'app/js/post-acceptance-view.js'
-      - 'app/js/services/profile-presentation-service.js'
-      - 'app/js/profile-view.js'
+      - 'app/js/services/public-profile-service.js'
+      - 'app/js/services/public-profile-record-service.js'
+      - 'app/js/services/community-service.js'
+      - 'app/js/services/success-story-service.js'
+      - 'app/js/services/journey-story-service.js'
+      - 'app/js/services/global-search-service.js'
+      - 'app/js/services/notification-service.js'
+      - 'app/js/services/notification-state-service.js'
+      - 'app/js/services/saved-community-service.js'
+      - 'app/js/services/settings-service.js'
+      - 'app/js/services/moderation-model.js'
+      - 'app/js/services/moderation-service.js'
+      - 'app/css/v27-moderation.css'
+      - 'app/css/v28-recognition.css'
+      - 'app/css/v29-search-integrity.css'
+      - 'app/js/services/global-search-service.js'
+      - 'app/js/services/opportunity-service.js'
+      - 'app/js/services/public-profile-service.js'
+      - 'app/js/store.js'
+      - 'app/js/config/schema.js'
+      - 'app/css/v25-settings.css'
+      - 'app/js/app.js'
+      - 'app/js/services/auth-service.js'
+      - 'app/js/services/account-bootstrap-service.js'
+      - 'app/js/services/app-check-readiness-service.js'
+      - 'app/js/config/firebase-config.example.js'
+      - 'app/js/config/firebase-config.js'
+      - 'app/js/firebase-client.js'
       - 'app/js/services/data-service.js'
+      - 'app/css/communities.css'
+      - 'app/css/v4-profile.css'
+      - 'app/js/post-acceptance-view.js'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  firestore-rules:
+  firebase-security:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
@@ -49,5 +109,26 @@ jobs:
       - name: Install test dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run Firestore emulator security tests
+      - name: Validate Web JavaScript syntax
+        run: |
+          node --check ../app/js/app.js
+          node --check ../js/home.js
+          node --check ../app/js/services/data-service.js
+          node --check ../app/js/services/notification-service.js
+          node --check ../app/js/services/notification-state-service.js
+          node --check ../app/js/services/settings-service.js
+          node --check ../app/js/services/moderation-model.js
+          node --check ../app/js/services/moderation-service.js
+          node --check ../app/js/services/public-profile-service.js
+          node --check ../app/js/services/public-profile-record-service.js
+          node --check ../app/js/services/global-search-service.js
+          node --check ../app/js/services/opportunity-service.js
+          node --check ../app/js/services/app-check-readiness-service.js
+          node --check ../app/js/services/auth-service.js
+          node --check ../app/js/services/account-bootstrap-service.js
+          node --check ../app/js/services/privacy-request-service.js
+          node --check ../app/js/store.js
+          node --check ../app/sw.js
+
+      - name: Run Firestore and Storage emulator security tests
         run: npm run test:emulator

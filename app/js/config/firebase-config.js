@@ -1,10 +1,12 @@
 /**
- * Tefsen Web Firebase configuration.
+ * Tefsen Web production Firebase client configuration.
  *
- * Replace ONLY the placeholder values below with the Web App config from:
- * Firebase Console → Project settings → General → Your apps → Web app.
+ * These values identify the public Firebase Web app for the Tefsen project.
+ * They are client configuration, not service-account credentials or private keys.
  *
- * Do not paste service-account JSON or private keys here.
+ * If Tefsen intentionally migrates to another Firebase project, update this file
+ * from Firebase Console → Project settings → General → Your apps → Web app and
+ * review the project/auth/storage/App Check implications in the same change.
  */
 window.TEFSEN_FIREBASE_CONFIG = {
   apiKey: "AIzaSyDZG1UISLv-Q-l-xTmrytldWO3dp0MPGuY",
@@ -16,10 +18,11 @@ window.TEFSEN_FIREBASE_CONFIG = {
   measurementId: "G-VQ8W2H5YD2"
 };
 
-// Optional: reCAPTCHA Enterprise or v3 site key for Firebase App Check.
-// Leave empty until App Check is configured for the Web app in Firebase Console.
+// Optional: reCAPTCHA v3 site key for Firebase App Check.
+// This Web build currently uses ReCaptchaV3Provider. A site key is public client
+// configuration, not a secret. Leave it empty until the Web App Check provider
+// is registered in Firebase Console, then validate traffic before enforcement.
 window.TEFSEN_APPCHECK_SITE_KEY = "";
 
-// Demo mode lets you preview the complete interface before Firebase is connected.
-// It automatically turns off once the config above no longer contains placeholders.
+// Keep production Web in Firebase mode. Set true only for an intentional preview/demo build.
 window.TEFSEN_FORCE_DEMO_MODE = false;

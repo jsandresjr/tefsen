@@ -1,0 +1,35 @@
+/* Step 28 — Honest Community recognition compatibility page */
+
+.recognition28-page{display:grid;gap:18px;max-width:920px;margin:0 auto}
+.recognition28-hero{
+  position:relative;overflow:hidden;padding:30px;border:1px solid var(--v3-line);
+  border-radius:26px;background:linear-gradient(145deg,rgba(10,36,40,.98),rgba(5,22,25,.98))
+}
+.recognition28-hero::after{
+  content:"";position:absolute;width:260px;height:260px;border-radius:50%;right:-120px;top:-130px;
+  background:rgba(81,226,212,.09);filter:blur(22px);pointer-events:none
+}
+.recognition28-hero>*{position:relative;z-index:1}
+.recognition28-mark{
+  width:48px;height:48px;display:grid;place-items:center;border-radius:15px;
+  border:1px solid rgba(81,226,212,.18);background:rgba(81,226,212,.07);color:#74dfd5
+}
+.recognition28-hero h1{margin:15px 0 8px;font-size:clamp(30px,5vw,48px);letter-spacing:-.045em}
+.recognition28-hero p{max-width:720px;margin:0;color:var(--v3-muted);line-height:1.65}
+.recognition28-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.recognition28-card{
+  display:grid;gap:9px;padding:18px;border:1px solid var(--v3-line);border-radius:18px;
+  background:rgba(9,31,34,.9);color:inherit;text-align:left
+}
+.recognition28-card span{font-size:10px;font-weight:850;letter-spacing:.1em;color:#78a8a4}
+.recognition28-card strong{color:#edf8f6;font-size:17px}
+.recognition28-card p{margin:0;color:var(--v3-muted);font-size:13px;line-height:1.5}
+.recognition28-card button,.recognition28-card .btn{margin-top:3px;width:max-content}
+.recognition28-principles{
+  padding:20px;border:1px solid var(--v3-line);border-radius:20px;background:rgba(7,28,31,.88)
+}
+.recognition28-principles h2{margin:0 0 12px}
+.recognition28-principles ul{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.recognition28-principles li{display:flex;gap:9px;color:#abc3bf;line-height:1.5}
+.recognition28-principles li::before{content:"✓";color:#6fddd2;font-weight:900}
+@media(max-width:760px){.recognition28-grid{grid-template-columns:1fr}.recognition28-hero{padding:22px}}

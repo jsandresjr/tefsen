@@ -4,6 +4,217 @@ This document describes the security behavior required before the Student Passpo
 
 The repository currently contains the web client but does not contain the production Firestore rules file. Do **not** treat UI privacy as security. Firestore rules must enforce these boundaries.
 
+## Public profile vs private account boundary
+
+Tefsen Web must not rely on client-side field projection as a privacy boundary.
+
+Private account data remains in:
+
+`users/{uid}`
+
+Public profile identity is mirrored separately to:
+
+`public_profiles/{uid}`
+
+The public profile document is intentionally limited to:
+
+- `uid`
+- schema version
+- public name
+- optional public username
+- optional public bio
+- public profile image URL fields
+- update timestamp
+
+It must not contain:
+
+- email
+- subscription/billing fields
+- account role or admin authorization
+- verification authority
+- Student Passport data
+- Journey data
+- saved content
+- notification/settings state
+
+Public Search and other-user profile lookup should read `public_profiles`, not `users`.
+
+The signed-in owner may read their own `users/{uid}` document for account/subscription/profile editing. Ordinary users must not read another student's private user document.
+
+Public profile writes must not allow a student to publish privileged fields such as role, verified status, subscription state, or admin claims.
+
+Active users can be migrated safely by mirroring only the allowed public identity fields when they sign in or save their public profile. Do not backfill by exposing the full private user document to browsers.
+
+## Community interaction security
+
+Tefsen Web uses authenticated subcollections for Community interactions rather than letting browsers rewrite public aggregate counters.
+
+### Posts
+
+An ordinary signed-in student may create a public Web post only as themselves.
+
+The Web security contract should require:
+
+- `authorId`, `firebaseUid`, and `userId` all equal `request.auth.uid`
+- public author name/photo match the student's `public_profiles/{uid}` record
+- new posts start as `published + public`
+- source is explicitly Web
+- all public counters start at zero
+- clients cannot include role/admin, verification, billing, or subscription claims
+- clients cannot later update like/comment/answer/save counters
+- post owners may delete their own post
+- moderation-field updates remain trusted-admin only
+
+### Likes
+
+Likes are stored at:
+
+`posts/{postId}/likes/{uid}`
+
+The liking identity is private account interaction data.
+
+Required behavior:
+
+- only `uid == request.auth.uid` may create/delete that like document
+- the parent post must currently be public/published
+- the like payload must bind uid/userId/postId to the authenticated user/path
+- an ordinary client may read only its own like document
+- clients must not list the full likes collection to discover who liked a post
+- Web must not regenerate public aggregate like counters from browser-side collection scans
+
+If a public aggregate like count is needed, maintain it from trusted backend/server logic.
+
+### Answers
+
+Answers are stored at:
+
+`posts/{postId}/answers/{answerId}`
+
+Required behavior:
+
+- the parent post must be public/published
+- answer author identity IDs must equal `request.auth.uid`
+- displayed public author name/photo must match `public_profiles/{uid}`
+- answer content aliases must represent the same submitted content
+- new answers start as `published + public`
+- clients cannot claim role/verified/admin metadata
+- ordinary clients cannot edit counters
+- answer owners may delete their own answer
+
+### Legacy compatibility script
+
+The former `app/js/latest-rules-sync.js` browser compatibility layer has been removed.
+
+It previously attempted to:
+
+- recompute like counts in the browser and update parent posts
+- recompute answer counts in the browser and update parent posts
+- hydrate obsolete follow/follower UI
+- rewrite answer profile-photo metadata client-side
+
+Those behaviors conflict with least-privilege rules and should not be restored. Counter denormalization and cross-document maintenance belong in trusted backend code when needed.
+
+## Cloud Storage security
+
+Tefsen Web currently writes only two media categories:
+
+- public profile photos at `profile_images/{uid}.jpg`
+- public post images at `post_images/{uid}/{postId}/{slot}`
+
+New Web post uploads use deterministic slots `1` and `2`. This prevents arbitrary file counts under one post path.
+
+The isolated Storage contract requires:
+
+### Profile photos
+
+- public object reads
+- write/delete only when `request.auth.uid == uid`
+- JPG, PNG or WebP content type only
+- maximum object size 5 MiB
+- all other profile-image paths denied
+
+### Post images
+
+- public object reads
+- write/delete only when `request.auth.uid == uid`
+- slot must be exactly `1` or `2`
+- JPG, PNG or WebP only
+- maximum object size 6 MiB
+- custom metadata ownerUid/postId/slot must match the path
+- folder listing is not granted to ordinary/anonymous clients
+- all unknown Storage paths are denied
+
+The browser's Free/Student Plus daily and aggregate post-image quotas are product limits, not fully authoritative Storage quotas. The Storage contract intentionally provides the hard abuse boundary that can be enforced independently: ownership, two slots per new Web post, image-only content, per-object size limits and deny-all fallback.
+
+If exact subscription-specific byte quotas need server authority, move that decision to trusted backend upload issuance or trusted claims rather than relying on browser state.
+
+New Web post deletion removes deterministic slots 1 and 2 after the Firestore post is removed. Legacy random-name objects are not broadly listed/deleted by clients; use trusted backend cleanup for historical orphan media.
+
+## Web App Check readiness
+
+The Web client uses Firebase's `ReCaptchaV3Provider`.
+
+Client configuration and enforcement are different states:
+
+1. **Missing key** — App Check is not configured for Web.
+2. **Key configured but initialization failed** — do not enable enforcement.
+3. **Client initialized** — validate real App Check traffic first.
+4. **Enforcement enabled in Firebase Console** — verify separately for each supported Firebase service.
+
+Tefsen Web must never infer enforcement merely because a site key exists or `initializeAppCheck()` returned a client instance.
+
+The Admin review surface reports only client readiness and explicitly states that enforcement must still be verified service-by-service in Firebase Console.
+
+## Authentication account bootstrap integrity
+
+The Web authentication flow must stay compatible with the strict private `users/{uid}` account rule.
+
+For a brand-new Firebase Auth user, the browser may create only the canonical private account document with this exact non-privileged shape:
+
+- uid
+- email
+- fullName
+- displayName
+- username
+- bio
+- role
+- profileImageUrl
+- photoURL
+- verified
+- createdAt
+- updatedAt
+
+New browser-created accounts must always begin with:
+
+- `role = "student"`
+- `verified = false`
+- empty public username unless the student explicitly chooses one later
+- no subscription/billing/admin fields
+
+The browser must never derive admin authorization from an email address.
+
+Trusted admin authorization comes from Firebase Auth custom claims and is checked separately by admin services and Firestore rules.
+
+For an existing private account document, auth bootstrap may update only owner-safe presentation fields:
+
+- fullName
+- displayName
+- profileImageUrl
+- photoURL
+- updatedAt
+
+It must not rewrite:
+
+- email
+- role
+- verified status
+- subscription state
+- billing/admin fields
+
+Every Firebase auth session should retry account bootstrap so an account can recover from a prior transient Firestore/network failure.
+
+The auth bootstrap payload and Firestore rules are tested together in the emulator suite. If either schema changes, update both sides in one reviewed change.
+
 ## Required Student Passport rule
 
 Student Passport data is stored separately from the public user profile:
