@@ -11,7 +11,13 @@ function dateOnlyMillis(value) {
   const raw=String(value || '').trim();
   if(!raw) return null;
   const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(m) return Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]));
+  if(m) {
+    const year=Number(m[1]), month=Number(m[2]), day=Number(m[3]);
+    const value=Date.UTC(year,month-1,day);
+    const check=new Date(value);
+    if(check.getUTCFullYear()!==year || check.getUTCMonth()!==month-1 || check.getUTCDate()!==day) return null;
+    return value;
+  }
   const d=new Date(raw);
   if(Number.isNaN(d.getTime())) return null;
   return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate());
