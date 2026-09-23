@@ -9,7 +9,7 @@ import {
   normalizeUser, getUserById, getWebPostingPolicy, getDailyPostUsage,
   hydratePostLikeState
 } from './services/data-service.js';
-import { getOpportunities, getOpportunityById } from './services/opportunity-service.js';
+import { getOpportunities, getOpportunityById, getOpportunitySearchCorpus } from './services/opportunity-service.js';
 import { getStudentPassport, saveStudentPassport, studentPassportCompleteness, studentPassportCompletionDetails, validateStudentPassportInput, studentPassportOnboardingProgress, shouldShowPassportOnboarding, emptyStudentPassport } from './services/student-passport-service.js';
 import { evaluateEligibility, scoreOpportunityMatch } from './services/eligibility-engine.js';
 import {
@@ -28,7 +28,7 @@ import { buildPublicProfileModel, isPublicProfileActivity, validatePublicProfile
 import { validatePostAcceptanceDraft } from './services/post-acceptance-service.js';
 import { buildSuccessStoryModel, validateSuccessStoryDraft } from './services/success-story-service.js';
 import { buildJourneyStoryModel, validateJourneyStoryDraft } from './services/journey-story-service.js';
-import { buildGlobalSearchModel } from './services/global-search-service.js';
+import { buildGlobalSearchModel, mergeSearchPublicPosts } from './services/global-search-service.js';
 import { buildNotificationCenterModel } from './services/notification-service.js';
 import { buildSavedCommunityModel } from './services/saved-community-service.js';
 import {
@@ -4160,19 +4160,36 @@ async function renderSearch(term = '') {
   const query=String(term||'').trim().slice(0,120);
   state.searchQuery=query;
 
-  renderShell(`<div class="global20-page"><section class="global20-hero loading"><span class="opportunity-kicker">GLOBAL SEARCH</span><h1>${query ? `Searching for “${escapeHTML(query)}”` : 'Search across Tefsen'}</h1><p>Looking across public students, Community, opportunities and learning spaces.</p></section></div>`,{wide:true,right:false});
+  renderShell(`<div class="global20-page"><section class="global20-hero loading"><span class="opportunity-kicker">PUBLIC SEARCH</span><h1>${query ? `Searching for “${escapeHTML(query)}”` : 'Search Tefsen'}</h1><p>Checking public student, Community and opportunity records without exposing private account data.</p></section></div>`,{wide:true,right:false});
 
   try{
-    const [rawSearch,opportunities]=await Promise.all([
-      query ? searchAll(state.mode,query).catch(()=>({users:[],posts:[]})) : Promise.resolve({users:[],posts:[]}),
-      getOpportunities(state.mode).catch(()=>[])
-    ]);
+    let rawSearch={users:[],posts:[],coverage:{people:{scanned:0,limit:0,complete:true},community:{scanned:0,limit:0,complete:true}}};
+    let opportunitySearch={items:[],coverage:{scanned:0,limit:0,complete:true}};
+
+    if(query){
+      [rawSearch,opportunitySearch]=await Promise.all([
+        searchAll(state.mode,query),
+        getOpportunitySearchCorpus(state.mode)
+      ]);
+    }else{
+      const opportunities=await getOpportunities(state.mode).catch(()=>[]);
+      opportunitySearch={items:opportunities,coverage:{scanned:opportunities.length,limit:opportunities.length,complete:true}};
+    }
+
+    const publicPosts=query
+      ? mergeSearchPublicPosts(state.posts,rawSearch.posts)
+      : mergeSearchPublicPosts(state.posts);
 
     currentSearch=buildGlobalSearchModel({
       term:query,
       users:rawSearch.users,
-      posts:state.posts.length ? state.posts : rawSearch.posts,
-      opportunities
+      posts:publicPosts,
+      opportunities:opportunitySearch.items,
+      coverage:{
+        people:rawSearch.coverage?.people,
+        community:rawSearch.coverage?.community,
+        opportunities:opportunitySearch.coverage
+      }
     });
 
     const countItems=query ? [
@@ -4185,15 +4202,22 @@ async function renderSearch(term = '') {
       ['Intakes',currentSearch.counts.intakes]
     ] : [];
 
+    const emptyTitle=currentSearch.coverage?.complete
+      ? `No public matches for “${escapeHTML(query)}”`
+      : `No match found in the current search coverage for “${escapeHTML(query)}”`;
+    const emptyCopy=currentSearch.coverage?.complete
+      ? 'Try a broader subject, university, country, scholarship name, program, student name or intake.'
+      : 'This search window is bounded, so a matching public record may exist outside the records checked. Try a more specific name, username, university or opportunity title.';
+
     const content=`${demoBanner()}
       <div class="global20-page">
         <section class="global20-hero">
           <div>
-            <span class="opportunity-kicker">GLOBAL SEARCH</span>
-            <h1>${query ? `Results for “${escapeHTML(query)}”` : 'Find the right place to continue'}</h1>
-            <p>Search public student profiles, discussions, Success and Journey stories, official-source opportunity records, subjects, universities and intake spaces from one place.</p>
+            <span class="opportunity-kicker">PUBLIC SEARCH</span>
+            <h1>${query ? `Results for “${escapeHTML(query)}”` : 'Find the right public place to continue'}</h1>
+            <p>Search public student profiles, discussions, Success and Journey stories, public opportunity records, subjects, universities and intake spaces. Private Passport, Journey and account data are never part of this search.</p>
             <form class="global20-search-form" data-global-search-form>
-              <input class="input" name="q" maxlength="120" value="${escapeHTML(query)}" placeholder="Try Computer Science, scholarship, university, student name…" aria-label="Search Tefsen">
+              <input class="input" name="q" maxlength="120" value="${escapeHTML(query)}" placeholder="Try Computer Science, scholarship, university, student name…" aria-label="Search public Tefsen data">
               <button class="btn btn-primary" type="submit">${icon('search',17)} Search</button>
             </form>
           </div>
@@ -4201,21 +4225,25 @@ async function renderSearch(term = '') {
             <span>WHAT SEARCH INCLUDES</span>
             <div><b>Public student context</b><small>Public profile identity and published Community content only.</small></div>
             <div><b>Opportunity discovery</b><small>Public opportunity metadata with official-source trust boundaries.</small></div>
-            <div><b>Community spaces</b><small>Subjects, universities and intake spaces derived from public data.</small></div>
+            <div><b>Honest coverage</b><small>Search tells you when a result window is bounded instead of presenting partial results as a complete global index.</small></div>
           </aside>
         </section>
 
-        ${query ? `<section class="global20-counts" aria-label="Search result counts">${countItems.map(([label,value])=>`<article><strong>${value}</strong><span>${label}</span></article>`).join('')}</section>` : ''}
+        ${query ? `<section class="global29-coverage ${currentSearch.coverage.complete?'complete':'partial'}">
+          <div>${icon(currentSearch.coverage.complete?'check':'info',17)}<span><b>${currentSearch.coverage.complete?'Complete current corpus':'Bounded search coverage'}</b><small>${escapeHTML(currentSearch.coverage.note)}</small></span></div>
+          <span class="global29-count-label">${escapeHTML(currentSearch.countLabel)}</span>
+        </section>
+        <section class="global20-counts" aria-label="Matches found in current search coverage">${countItems.map(([label,value])=>`<article><strong>${value}</strong><span>${label}</span></article>`).join('')}</section>` : ''}
 
         ${query ? `
           <section class="global20-ranking-note">${icon('info',16)}<span>${escapeHTML(currentSearch.rankingNote)}</span></section>
-          ${currentSearch.empty ? `<section class="global20-empty"><div>${icon('search',24)}</div><h2>No public matches for “${escapeHTML(query)}”</h2><p>Try a broader subject, university, country, scholarship name, program, student name or intake.</p><button class="btn btn-secondary" type="button" data-route="search">Clear search</button></section>` : `
-            ${global20Section('Best matching public results','TOP MATCHES',currentSearch.top,'A mixed view across Tefsen. Result order is deterministic text matching, not a recommendation or quality score.')}
-            ${global20Section('People','PUBLIC STUDENTS',currentSearch.people,'Only public profile fields are shown here.')}
-            ${global20Section('Community posts and stories','PUBLIC COMMUNITY',currentSearch.community,'Published discussions and student-shared Success/Journey stories.')}
+          ${currentSearch.empty ? `<section class="global20-empty"><div>${icon('search',24)}</div><h2>${emptyTitle}</h2><p>${emptyCopy}</p><button class="btn btn-secondary" type="button" data-route="search">Clear search</button></section>` : `
+            ${global20Section('Best matching public results','TOP MATCHES',currentSearch.top,'A mixed view across the records checked. Result order is deterministic text matching, not a recommendation or quality score.')}
+            ${global20Section('People','PUBLIC STUDENTS',currentSearch.people,'Only public profile fields are shown here. Counts are matches found in the current search coverage.')}
+            ${global20Section('Community posts and stories','PUBLIC COMMUNITY',currentSearch.community,'Published discussions and student-shared Success/Journey stories in the current search coverage.')}
             ${global20Section('Opportunities','OFFICIAL-SOURCE DISCOVERY',currentSearch.opportunities,'Open each result to verify eligibility, deadline and application details on the official provider source.')}
             ${global20Section('Subject spaces','LEARNING COMMUNITIES',currentSearch.subjects)}
-            ${global20Section('University spaces','STUDENT CONTEXT',currentSearch.universities,'These are student community spaces, not official university channels.')}
+            ${global20Section('University spaces','STUDENT CONTEXT',currentSearch.universities,'These are student community spaces derived from the public records checked, not official university channels.')}
             ${global20Section('Intake spaces','INTAKE CONTEXT',currentSearch.intakes,'Intake pages show public student context and exact intake-linked data where available.')}
           `}`
           : global20DiscoveryMarkup(currentSearch)}
@@ -4224,7 +4252,7 @@ async function renderSearch(term = '') {
     renderShell(content,{wide:true,right:false});
   }catch(error){
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Search unavailable','Please try again.')}`,{wide:true,right:false});
+    renderShell(`${demoBanner()}${emptyState('info','Search unavailable','Tefsen could not safely load the public search corpus. Please try again.')}`,{wide:true,right:false});
   }
 }
 
