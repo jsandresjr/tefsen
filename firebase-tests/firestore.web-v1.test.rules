@@ -140,6 +140,156 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    match /posts/{postId} {
+      function publicPost() {
+        return resource.data.status == "published"
+          && resource.data.visibility == "public";
+      }
+
+      allow read: if isAdmin() || publicPost();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "visibility",
+          "moderationStatus",
+          "moderatedAt",
+          "moderatedByAdminUid",
+          "updatedAt"
+        ]);
+      allow create, delete: if false;
+    }
+
+    match /reports/{reportId} {
+      function reportReasonAllowed() {
+        return request.resource.data.reason in [
+          "Spam",
+          "Harassment",
+          "Harmful or unsafe content",
+          "Misinformation concern",
+          "Copyright concern",
+          "Other"
+        ];
+      }
+
+      function validPostReportCreate() {
+        return signedIn()
+          && request.resource.data.keys().hasAll([
+            "targetType",
+            "postId",
+            "targetTitle",
+            "targetAuthorId",
+            "targetExcerpt",
+            "reporterUid",
+            "userId",
+            "reason",
+            "details",
+            "status",
+            "sourcePlatform",
+            "createdAtMillis",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.keys().hasOnly([
+            "targetType",
+            "postId",
+            "targetTitle",
+            "targetAuthorId",
+            "targetExcerpt",
+            "reporterUid",
+            "userId",
+            "reason",
+            "details",
+            "status",
+            "sourcePlatform",
+            "createdAtMillis",
+            "createdAt",
+            "updatedAt"
+          ])
+          && request.resource.data.targetType == "post"
+          && request.resource.data.reporterUid == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == "open"
+          && request.resource.data.sourcePlatform == "web"
+          && request.resource.data.postId is string
+          && request.resource.data.postId.size() > 0
+          && request.resource.data.targetTitle is string
+          && request.resource.data.targetTitle.size() <= 180
+          && request.resource.data.targetAuthorId is string
+          && request.resource.data.targetAuthorId.size() <= 180
+          && request.resource.data.targetExcerpt is string
+          && request.resource.data.targetExcerpt.size() <= 300
+          && request.resource.data.details is string
+          && request.resource.data.details.size() <= 1000
+          && reportReasonAllowed()
+          && get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.status == "published"
+          && get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.visibility == "public";
+      }
+
+      allow create: if validPostReportCreate();
+      allow read: if isAdmin();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "resolution",
+          "reviewedAt",
+          "reviewedByAdminUid",
+          "updatedAt"
+        ]);
+      allow delete: if false;
+    }
+
+    match /support_requests/{requestId} {
+      allow read: if isAdmin() && resource.data.type == "post_report";
+      allow update: if isAdmin()
+        && resource.data.type == "post_report"
+        && request.resource.data.type == "post_report"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "resolution",
+          "reviewedAt",
+          "reviewedByAdminUid",
+          "updatedAt"
+        ]);
+      allow create, delete: if false;
+    }
+
+    match /moderation_audit/{auditId} {
+      function validModerationAudit() {
+        return request.resource.data.keys().hasAll([
+          "action",
+          "reportId",
+          "reportSource",
+          "postId",
+          "adminUid",
+          "reason",
+          "createdAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "action",
+          "reportId",
+          "reportSource",
+          "postId",
+          "adminUid",
+          "reason",
+          "createdAt"
+        ])
+        && request.resource.data.adminUid == request.auth.uid
+        && request.resource.data.action in [
+          "hide_reported_post",
+          "resolve_report",
+          "dismiss_report"
+        ]
+        && request.resource.data.reportSource in [
+          "reports",
+          "support_requests"
+        ];
+      }
+
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validModerationAudit();
+      allow update, delete: if false;
+    }
+
     match /opportunities/{opportunityId} {
       allow read: if isAdmin()
         || (resource.data.status == "published"
