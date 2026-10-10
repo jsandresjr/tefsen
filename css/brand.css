@@ -4,37 +4,43 @@
 .profile-hero{padding:160px 0 125px;min-height:92vh;overflow:hidden}.profile-hero-grid{display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:clamp(30px,8vw,115px);margin-top:95px}.profile-head h1{font-size:clamp(5rem,10.5vw,12rem);line-height:.85;letter-spacing:-.11em;margin:22px 0 40px}.profile-head h1>span{-webkit-text-stroke:1.5px #181818;color:transparent}.profile-head>p:not(.eyebrow){font-size:16px;line-height:1.85;max-width:560px;color:#62615c}.profile-head .profile-intro{font-size:clamp(20px,2.2vw,32px)!important;font-weight:600;letter-spacing:-.035em;color:#191919!important}.profile-links{display:flex;gap:30px;flex-wrap:wrap;margin-top:40px}.profile-photo{background:#e0dfd8;position:relative;aspect-ratio:4/4.75;overflow:hidden}.profile-photo img{width:100%;height:100%;object-fit:cover;filter:none;animation:photo-reveal 1.2s cubic-bezier(.16,1,.3,1) both}.profile-photo-caption{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;gap:20px;padding:22px;color:#fff;background:linear-gradient(transparent,#000a)}.profile-story-grid{display:grid;grid-template-columns:1fr 1fr;gap:8vw}.profile-story-grid .large-copy{margin:0}.profile-story-grid .large-copy p{margin:0 0 25px}.profile-value-list{display:grid;grid-template-columns:repeat(3,1fr);gap:25px;margin:80px 0}.profile-value-list>div{border-top:1px solid #8f8e89;padding-top:25px}.profile-value-list span{font-size:11px;font-weight:800}.profile-value-list h3{font-size:clamp(26px,4vw,54px);letter-spacing:-.06em;margin:55px 0 12px}.profile-value-list p{font-size:14px;color:#66655f}
 @keyframes rise{from{opacity:0;transform:translateY(105%)}to{opacity:1;transform:translateY(0)}}@keyframes photo-reveal{from{opacity:0;filter:blur(7px)}to{opacity:1;filter:blur(0)}}@keyframes pulse{50%{opacity:.4;transform:scale(.7)}}@keyframes marquee{to{transform:translateX(-50%)}}@keyframes orbit{0%{transform:rotate(0deg) rotateX(65deg)}100%{transform:rotate(360deg) rotateX(65deg)}}@keyframes float{50%{transform:translateY(-20px)}}
 
-/* Founder portraits: always in full color, with gentle cursor-follow parallax on precise pointers. */
+/* Founder color-spotlight: photos start grayscale; only the area beneath the mouse
+   reveals the true original color. Both homepage and founder page share this effect. */
 .portrait-card,.profile-photo{
-  --portrait-x:0px;
-  --portrait-y:0px;
-  --portrait-tilt-x:0deg;
-  --portrait-tilt-y:0deg;
-  --portrait-light-x:50%;
-  --portrait-light-y:50%;
+  position:relative;
   isolation:isolate;
+  --reveal-x:50%;
+  --reveal-y:50%;
 }
-.portrait-card img,.profile-photo img{
-  filter:none;
-  transform:perspective(1100px) translate3d(var(--portrait-x),var(--portrait-y),0) rotateX(var(--portrait-tilt-x)) rotateY(var(--portrait-tilt-y)) scale(1.065);
-  transform-origin:center;
-  transition:transform .32s cubic-bezier(.2,.8,.2,1);
-  backface-visibility:hidden;
+.portrait-card>img:not(.founder-color-layer),
+.profile-photo>img:not(.founder-color-layer){
+  filter:grayscale(1);
+  transform:none;
+  transition:none;
+  animation:none; /* Preserve the grayscale filter; previous photo-reveal animated filter. */
 }
-.portrait-card::after,.profile-photo::after{
-  content:"";
+.portrait-card>.founder-color-layer,
+.profile-photo>.founder-color-layer{
   position:absolute;
-  z-index:1;
   inset:0;
+  z-index:1;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  filter:none;
+  transform:none;
+  animation:none;
   pointer-events:none;
+  user-select:none;
   opacity:0;
-  background:radial-gradient(circle 260px at var(--portrait-light-x) var(--portrait-light-y),rgba(255,255,255,.18),transparent 80%);
-  transition:opacity .28s ease;
+  -webkit-mask-image:radial-gradient(circle 145px at var(--reveal-x) var(--reveal-y),#000 0%,#000 42%,rgba(0,0,0,.8) 64%,transparent 100%);
+  mask-image:radial-gradient(circle 145px at var(--reveal-x) var(--reveal-y),#000 0%,#000 42%,rgba(0,0,0,.8) 64%,transparent 100%);
+  transition:opacity .22s ease;
 }
-.portrait-card.is-pointer-active::after,.profile-photo.is-pointer-active::after{opacity:1}
+.portrait-card.is-revealing>.founder-color-layer,
+.profile-photo.is-revealing>.founder-color-layer{opacity:1}
 .portrait-card>span,.profile-photo-caption{z-index:2}
-@media(prefers-reduced-motion:reduce){
-  .portrait-card img,.profile-photo img{transform:none;transition:none}
-  .portrait-card::after,.profile-photo::after{display:none}
+@media (prefers-reduced-motion:reduce){
+  .portrait-card>.founder-color-layer,.profile-photo>.founder-color-layer{display:none}
 }
 @media(max-width:1000px){.hero-middle{grid-template-columns:1fr}.hero-object{position:absolute;right:-80px;top:22%;opacity:.22;width:60vw;pointer-events:none}.hero h1{font-size:clamp(5rem,15vw,10rem)}.hero-headlines{margin-top:90px}.identity-grid{grid-template-columns:1fr}.side-label{margin:0}.approach-head{display:block}.approach-head p{max-width:650px}.values{gap:9px}.value{padding:18px}.value-art{height:220px}.profile-hero-grid{gap:40px}}@media(max-width:760px){.wrap{width:min(100% - 40px,1500px)}.header-inner{min-height:76px}.nav{display:none;position:absolute;left:0;right:0;top:76px;padding:24px 20px 30px;background:var(--paper);flex-direction:column;align-items:stretch;gap:14px;box-shadow:0 20px 30px #0001}.nav.open{display:flex}.nav a{font-size:16px;padding:14px 10px!important}.nav-cta{display:flex;justify-content:space-between;margin-top:6px}.menu-toggle{display:block}.menu-toggle[aria-expanded="true"] span:first-child{transform:translateY(4px) rotate(45deg)}.menu-toggle[aria-expanded="true"] span:last-child{transform:translateY(-4px) rotate(-45deg)}.hero{min-height:690px;height:90svh}.hero-wrap{padding-top:105px}.top-meta,.section-meta{font-size:9px}.top-meta>span:last-child{display:none}.hero-middle{align-items:center}.hero h1{font-size:clamp(4.4rem,16vw,8rem)}.hero-headlines{margin-top:0}.hero-object{top:25%;width:80vw;right:-30vw;opacity:.18}.hero-caption{margin-top:30px}.hero-caption p{font-size:14px}.circle-link{width:53px;height:53px}.hero-foot>span:last-child{display:none}.hero-foot{font-size:9px}.space-y{padding:90px 0}.identity .space-y{padding-top:65px}.section-meta{margin-bottom:65px}.display{font-size:clamp(3.15rem,12vw,6rem)}.large-copy{font-size:17px}.values{grid-template-columns:1fr;gap:14px}.value{padding:25px}.value-art{height:220px}.value-copy h3{font-size:30px}.approach-head{margin-bottom:45px}.statement-title{font-size:clamp(4.3rem,15.5vw,9rem);margin-bottom:70px}.statement-foot{display:block}.statement-foot p{margin-top:18px}.founder-feature-grid{grid-template-columns:1fr}.portrait-card{max-width:550px;width:100%;aspect-ratio:4/4.3}.founder-feature-copy>p{font-size:16px}.contact-title{font-size:clamp(3.9rem,13vw,7rem);margin-bottom:50px}.contact-bottom{display:block}.contact-pill{margin-top:28px}.footer{padding-top:45px}.footer-top{padding-bottom:45px}.footer-bottom{align-items:start;flex-direction:column;gap:18px}.footer-brand{font-size:15vw}.profile-hero{padding:125px 0 90px}.profile-hero-grid{grid-template-columns:1fr;margin-top:55px}.profile-head h1{font-size:clamp(5.4rem,19vw,10rem)}.profile-photo{max-width:550px}.profile-story-grid{grid-template-columns:1fr;gap:35px}.profile-value-list{grid-template-columns:1fr;margin:45px 0}.profile-value-list h3{margin:23px 0 8px}}@media(max-width:420px){.hero h1{font-size:15.5vw}.top-meta{font-size:8px}.hero-foot{font-size:8px}.contact-title{font-size:12.6vw}.contact-pill{gap:22px;padding:20px 22px}.profile-head h1{font-size:17.5vw}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.js .reveal{opacity:1;transform:none}.hero h1 .line>span{animation:none}.rise{animation:none}}
