@@ -298,3 +298,13 @@ html.tefsen-v2 .tefsen-text-social .social-search-form input[type="search"]{min-
 @media (prefers-reduced-motion: reduce){
   html.tefsen-v2 .social-compose-modal *, html.tefsen-v2 .tefsen-text-social .social-search *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
+
+/* Non-destructive avatar crop preview: the backend receives only optimized JPEG. */
+html.tefsen-v2 .profile13-photo-editor .v4-photo-preview:has(.tefsen-avatar-crop){width:260px!important;max-width:100%;height:auto!important;max-height:none!important;overflow:visible!important;background:transparent!important}
+html.tefsen-v2 .tefsen-avatar-crop{display:grid;justify-items:center;gap:10px;width:100%;padding:4px}
+html.tefsen-v2 .tefsen-avatar-crop canvas{width:min(220px,100%);height:auto;aspect-ratio:1;border-radius:50%;border:1px solid #777;touch-action:none;cursor:grab;box-shadow:0 0 0 3px rgba(255,255,255,.13)}
+html.tefsen-v2 .tefsen-avatar-crop canvas:active{cursor:grabbing}
+html.tefsen-v2 .tefsen-avatar-crop label{width:100%;display:flex;align-items:center;gap:8px;font-size:12px;color:inherit}
+html.tefsen-v2 .tefsen-avatar-crop label input{flex:1;accent-color:#eee}
+html.tefsen-v2 .tefsen-avatar-crop small{font-size:11px;text-align:center;max-width:240px;line-height:1.5;color:inherit}
+html.tefsen-v2 .tefsen-avatar-crop button{min-height:38px!important}
