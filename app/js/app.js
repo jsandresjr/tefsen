@@ -1,4 +1,5 @@
 import { initFirebase, appCheck } from './firebase-client.js';
+import {postLimits, validateTextPost, loadDraft, saveDraft, clearDraft, chooseSearchMode, rankPeople, filterPosts, normalizeSearch} from './services/text-first-workflow.mjs';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
 import {
@@ -220,6 +221,8 @@ let currentUserSettings = defaultUserSettings();
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
+let activeSearchMode = 'people';
+let activeSearchGeneration = 0;
 let likeHydrationKey = '';
 let likeHydrationAt = 0;
 let likeHydrationRun = 0;
@@ -3850,24 +3853,34 @@ function global20DiscoveryMarkup(model) {
 async function renderSearch(term = '') {
   const query=String(term||'').trim().slice(0,120);
   state.searchQuery=query;
-  renderShell(`<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Searching available public posts and profiles only.</p></section>`,{right:false});
+  activeSearchMode=chooseSearchMode(query,activeSearchMode);
+  const generation=++activeSearchGeneration;
+  const surface=(content='')=>`${demoBanner()}<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div>
+    <form class="social-search-form" data-global-search-form><input class="input" type="search" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search public posts and people" autocomplete="off"><button class="social-secondary" type="submit">Search</button></form>
+    <div class="social-search-tabs" role="group" aria-label="Search category">
+      <button type="button" data-search-mode="people" class="${activeSearchMode==='people'?'active':''}" aria-pressed="${activeSearchMode==='people'}">People</button>
+      <button type="button" data-search-mode="posts" class="${activeSearchMode==='posts'?'active':''}" aria-pressed="${activeSearchMode==='posts'}">Posts</button>
+    </div>${content}</section>`;
+  renderShell(surface(query?'<p class="social-subtle" role="status">Searching the available public index…</p>':'<p class="social-subtle">Find members by username or display name. Use @ for usernames.</p>'),{right:false});
   if(!query)return;
   try {
-    const loaded=await searchAll(state.mode,query);
-    const words=query.toLowerCase();
-    const users=(loaded.users||[]).filter(u=>[u.fullName,u.displayName,u.username,u.bio].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,20);
-    const posts=mergeSearchPublicPosts(state.posts,loaded.posts).filter(p=>[p.title,p.content,p.authorName].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,50);
-    const people=users.map(p=>`<button class="social-person-row" data-route="profile/${encodeURIComponent(p.uid||p.id||'')}" type="button">${avatar(p,'sm')}<span><strong>${escapeHTML(p.fullName||p.displayName||'Tefsen member')}</strong><small>${escapeHTML(p.username?'@'+p.username:'Public profile')}</small></span>${icon('chevron-right',19)}</button>`).join('');
-    const markup=`${demoBanner()}<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Results from the available public search window. More public posts or profiles may exist beyond it.</p>${people?`<h2>People</h2><div class="social-people">${people}</div>`:''}<h2>Posts</h2><div class="social-feed-list">${posts.length?posts.map(postCard).join(''):`<div class="social-empty"><h2>No matching public posts</h2><p>Try another keyword or name.</p></div>`}</div></section>`;
-    renderShell(markup,{right:false});
-  } catch(error) {
-    console.error(error);
-    renderShell('<section class="social-empty"><h2>Search unavailable</h2><p>Please try again later.</p></section>',{right:false});
+    const loaded=await searchAll(state.mode,query.replace(/^@/,''));
+    if(generation!==activeSearchGeneration || currentRoute()!=='search')return;
+    const people=rankPeople(loaded.users||[],query).slice(0,50);
+    const posts=filterPosts(mergeSearchPublicPosts(state.posts,loaded.posts),query).slice(0,50);
+    const result=activeSearchMode==='people'
+      ? (people.length? `<div class="social-people">${people.map(p=>`<button class="social-person-row" data-route="profile/${encodeURIComponent(p.uid||p.id||'')}" type="button">${avatar(p,'sm')}<span><strong>${escapeHTML(p.fullName||p.displayName||'Tefsen member')}</strong><small>${escapeHTML(p.username?'@'+p.username:'Public profile')}</small></span>${icon('chevron-right',19)}</button>`).join('')}</div>` : '<div class="social-empty"><h2>No matching people in this search window</h2><p>Try a different name or username.</p></div>')
+      : (posts.length? `<div class="social-feed-list">${posts.map(postCard).join('')}</div>` : '<div class="social-empty"><h2>No matching public posts</h2><p>Try a different keyword.</p></div>');
+    renderShell(surface('<p class="social-subtle">Showing a limited set of public results. Full-directory indexed search requires a trusted backend endpoint.</p>'+result),{right:false});
+  }catch(error){
+    if(generation!==activeSearchGeneration || currentRoute()!=='search')return;
+    renderShell(surface('<p class="social-subtle" role="alert">Search could not load. Try again.</p><button class="social-secondary" type="button" data-search-retry>Retry</button>'),{right:false});
   }
 }
 function renderRoute() {
   if (!state.user) return;
   const [route, param, param2] = routeParts();
+  if(route!=='search')activeSearchGeneration++;
   state.ui.profileMenu = false;
   document.documentElement.classList.remove('profile-menu-open');
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
@@ -3972,16 +3985,21 @@ function openCommunityComposer(context = {}) {
 }
 
 function openComposer() {
-  const policy = getWebPostingPolicy(state.profile || {}, {admin:adminCapability});
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal social-compose-modal" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+  if(!state.user?.uid) return;
+  const policy=getWebPostingPolicy(state.profile||{},{admin:adminCapability});
+  const limits=postLimits({subscribed:policy.subscribed,admin:policy.admin});
+  const draft=loadDraft(localStorage,state.user.uid);
+  modalRoot.innerHTML=`<div class="modal-backdrop" data-modal-backdrop><section class="modal social-compose-modal" role="dialog" aria-modal="true" aria-labelledby="compose-title">
     <header class="modal-head"><h2 id="compose-title">New post</h2><button class="close-btn" type="button" data-close-modal aria-label="Close">${icon('close',20)}</button></header>
-    <div class="modal-body"><div class="social-compose-author">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>Sharing with everyone</small></div></div>
-    <form class="form-grid" data-compose-form><label class="sr-only" for="social-compose-text">Your public post</label><textarea class="textarea social-compose-text" id="social-compose-text" name="content" maxlength="1000" required placeholder="An idea, a lesson, or news worth sharing…"></textarea>
-    <div class="social-compose-meta"><span>Only text. All your ideas.</span><span data-compose-count>0/1000</span></div>
+    <div class="modal-body"><div class="social-compose-author">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName||'Tefsen User')}</b><small>Sharing with everyone</small></div></div>
+    <form class="form-grid" data-compose-form><label class="sr-only" for="social-compose-text">Your public post</label><textarea class="textarea social-compose-text" id="social-compose-text" name="content" maxlength="${limits.maxChars}" required placeholder="An idea, a lesson, or news worth sharing…">${escapeHTML(draft)}</textarea>
+    <div class="social-compose-meta"><span>Only text. ${limits.maxChars} characters max.</span><span data-compose-count>${[...draft].length}/${limits.maxChars}</span></div>
+    <div class="social-compose-draft"><small>Saved privately on this browser for your current account.</small><button type="button" data-compose-clear>Clear draft</button></div>
     <p class="social-compose-rule">Keep it respectful. Add a source link when sharing news.</p>
     <div class="form-error" data-compose-error role="status"></div>
-    <div class="social-compose-submit"><span>${Number.isFinite(policy.dailyTextPosts)?`${policy.dailyTextPosts} text posts per day on your plan`:'Public text post'}</span><button class="btn btn-primary" type="submit">Post</button></div>
+    <div class="social-compose-submit"><span>${Number.isFinite(limits.dailyPosts)?`${limits.dailyPosts} text posts per day`:'Administrator posting'} · Backend rules apply</span><button class="btn btn-primary" type="submit" ${draft.trim()?'':'disabled'}>Post</button></div>
     </form></div></section></div>`;
+  modalRoot.querySelector('[data-compose-form] textarea')?.focus();
 }
 function openReportModal(postId) {
   const options=REPORT_REASONS.map(reason=>`<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`).join('');
@@ -4204,6 +4222,12 @@ async function handleClick(event) {
   if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
   if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
   if (event.target.closest('[data-action="compose"]')) { openComposer(); return; }
+  if (event.target.closest('[data-compose-clear]')) {
+    if (state.user?.uid) clearDraft(localStorage,state.user.uid);
+    const textarea=modalRoot.querySelector('[data-compose-form] textarea');
+    if(textarea){textarea.value='';textarea.dispatchEvent(new Event('input',{bubbles:true}));textarea.focus();}
+    return;
+  }
   const shareSuccess = event.target.closest('[data-share-success]');
   if (shareSuccess) { openSuccessStoryModal({ subject:shareSuccess.dataset.prefillSubject||'', university:shareSuccess.dataset.prefillUniversity||'', intake:shareSuccess.dataset.prefillIntake||'' }); return; }
   const shareJourneyStory = event.target.closest('[data-share-journey-story]');
@@ -4212,8 +4236,11 @@ async function handleClick(event) {
   if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
   if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
   if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
+  const searchModeButton=event.target.closest('[data-search-mode]');
+  if(searchModeButton){activeSearchMode=searchModeButton.dataset.searchMode==='posts'?'posts':'people';renderSearch(state.searchQuery);return;}
+  if(event.target.closest('[data-search-retry]')){renderSearch(state.searchQuery);return;}
   const tab = event.target.closest('[data-feed-tab]');
-  if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
+  if (tab) { if(state.activeFeedTab!==tab.dataset.feedTab){state.activeFeedTab=tab.dataset.feedTab;renderHome();} return; }
   const adminTabButton = event.target.closest('[data-admin-tab]');
   if (adminTabButton) { const next=adminTabButton.dataset.adminTab; adminTab=['review','import','reports'].includes(next)?next:'review'; await renderAdmin(); return; }
   const adminReview = event.target.closest('[data-admin-review-action]');
@@ -4358,24 +4385,27 @@ async function handleForgot() {
 }
 
 async function handleCompose(form) {
-  const errorEl = form.querySelector('[data-compose-error]');
-  const submit = form.querySelector('button[type="submit"]');
-  const content = String(new FormData(form).get('content') || '').trim();
-  if (!content || content.length > 1000) {
-    errorEl.textContent = 'Write between 1 and 1000 characters.';
-    return;
-  }
-  const payload = { title:content.slice(0, 100), content, subject:'General', tags:[], imageFiles:[] };
-  await withButton(submit, async () => {
+  if (form.dataset.submitting==='true') return;
+  const errorEl=form.querySelector('[data-compose-error]'), submit=form.querySelector('button[type="submit"]');
+  const policy=getWebPostingPolicy(state.profile||{},{admin:adminCapability});
+  const limits=postLimits({subscribed:policy.subscribed,admin:policy.admin});
+  const validation=validateTextPost(new FormData(form).get('content'),limits);
+  errorEl.textContent='';
+  if(!validation.valid){ errorEl.textContent=validation.message; return; }
+  form.dataset.submitting='true';
+  await withButton(submit, async()=>{
     try {
-      const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
-      modalRoot.innerHTML = '';
-      toast('Your post is public.','success');
-      if(state.mode === 'demo') state.posts = [post,...state.posts];
+      const post=await createPost(state.mode,state.user,state.profile,{
+        title:validation.content.slice(0,100),content:validation.content,subject:'General',tags:[],imageFiles:[]
+      },{admin:adminCapability});
+      clearDraft(localStorage,state.user.uid);
+      modalRoot.innerHTML='';
+      toast(String(post.status||'').toLowerCase()==='pending'?'Submitted for review':'Post submitted','success');
+      if(state.mode==='demo')state.posts=[post,...state.posts];
       go('home');
     } catch(error) {
-      errorEl.textContent = humanError(error);
-    }
+      errorEl.textContent=humanError(error);
+    } finally { delete form.dataset.submitting; }
   });
 }
 function syncLikeButtons(postId, active, count, pending = false) {
@@ -5319,6 +5349,16 @@ document.addEventListener('click', handleClick);
 document.addEventListener('submit', handleSubmit);
 document.addEventListener('change', handleInput);
 document.addEventListener('input', event => {
+  if(event.target.matches('[data-compose-form] textarea[name="content"]')) {
+    const field=event.target;
+    if(state.user?.uid)saveDraft(localStorage,state.user.uid,field.value);
+    const limit=Number(field.maxLength)||300;
+    const counter=field.form?.querySelector('[data-compose-count]');
+    if(counter)counter.textContent=[...field.value].length+'/'+limit;
+    const submit=field.form?.querySelector('button[type="submit"]');
+    if(submit && field.form?.dataset.submitting!=='true')submit.disabled=!field.value.trim();
+    return;
+  }
   if (event.target.matches('[data-opportunity-search]')) {
     opportunityDiscoveryFilters.query = String(event.target.value || '').trim();
     applyOpportunitySearchDebounced();
