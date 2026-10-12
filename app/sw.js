@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v71-text-first-replies';
+const CACHE = 'tefsen-web-shell-v72-transparent-metal-branding';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',

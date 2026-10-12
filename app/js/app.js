@@ -388,7 +388,7 @@ async function handleAuthChange(user) {
 }
 
 function loadingScreen(text = 'Opening Tefsen Web…') {
-  return `<main id="app-main" tabindex="-1" style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></main>`;
+  return `<main id="app-main" tabindex="-1" style="min-height:100vh;display:grid;place-items:center;padding:24px"><div style="text-align:center;color:#9fb1c6"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt="Tefsen" style="width:86px;height:86px;object-fit:contain;border-radius:24px;margin-bottom:16px"><div>${escapeHTML(text)}</div></div></main>`;
 }
 
 function renderAuth(mode = 'login') {
@@ -396,7 +396,7 @@ function renderAuth(mode = 'login') {
   root.innerHTML = `
     <main id="app-main" class="auth-page" tabindex="-1">
       <section class="auth-art">
-        <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+        <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span></a>
         <div class="auth-message">
           <h1>Your thoughts.<br><span>Your community.</span></h1>
           <p>Share public text posts, learn from different experiences and connect through thoughtful conversations.</p>
@@ -438,7 +438,7 @@ function renderShell(content, options = {}) {
     <div class="app-shell tefsen-text-social">
       <header class="topbar social-topbar">
         <button class="topbar-brand social-brand" type="button" data-route="home" aria-label="Tefsen home">
-          <img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span>
+          <img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span>
         </button>
         <div class="topbar-center">
           <form class="global-search" data-global-search-form role="search">
@@ -1649,7 +1649,7 @@ function renderPassportOnboarding(passport) {
     <div class="passport-onboarding-page">
       <section class="passport-onboarding-shell">
         <aside class="passport-onboarding-aside">
-          <a class="passport-onboarding-brand" href="../" aria-label="Tefsen home"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+          <a class="passport-onboarding-brand" href="../" aria-label="Tefsen home"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span></a>
           <div>
             <span class="opportunity-kicker">PRIVATE STUDENT PASSPORT</span>
             <h1>Tell Tefsen what you are working toward.</h1>
