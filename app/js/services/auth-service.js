@@ -1,7 +1,7 @@
 import { auth, db } from '../firebase-client.js';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, signOut, GoogleAuthProvider, signInWithPopup, updateProfile
+  sendPasswordResetEmail, sendEmailVerification, reload, signOut, GoogleAuthProvider, signInWithPopup, updateProfile
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 import { DEMO_USERS } from './demo-data.js';
@@ -123,4 +123,21 @@ export async function logout(mode) {
   if (mode === 'firebase') return signOut(auth);
   localStorage.removeItem(DEMO_KEY);
   emitDemo(null);
+}
+
+/** Email verification applies to password accounts; OAuth providers follow Firebase's verified-email state. */
+export async function sendConfirmationEmail(mode){
+  if(mode!=='firebase')return false;
+  const user=auth?.currentUser;
+  if(!user)throw new Error('Sign in before requesting a verification email.');
+  if(user.emailVerified)return true;
+  await sendEmailVerification(user);
+  return true;
+}
+
+export async function refreshConfirmationStatus(mode){
+  if(mode!=='firebase')return true;
+  if(!auth?.currentUser)throw new Error('Sign in to continue.');
+  await reload(auth.currentUser);
+  return auth.currentUser.emailVerified===true;
 }

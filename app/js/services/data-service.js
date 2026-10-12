@@ -1,4 +1,5 @@
 import { auth, db, storage } from '../firebase-client.js';
+import { validatePhotoSource, preparePhotoBase64, updateProfilePhoto } from './profile-photo-callable.js';
 import { SCHEMA, FIELD_ALIASES } from '../config/schema.js';
 import { pick, uid, timestampToDate } from '../utils.js';
 import { DEMO_USERS, DEMO_POSTS, DEMO_COMMENTS } from './demo-data.js';
@@ -258,9 +259,9 @@ function resolveSubscription(raw = {}) {
   const statusActive = ['active', 'trialing', 'trial', 'subscribed', 'premium', 'paid'].includes(status);
   const notExpired = expiresDate ? expiresDate.getTime() > Date.now() : false;
   return {
-    active: Boolean(direct || statusActive || notExpired),
+    active: Boolean((direct || statusActive || notExpired) && (!expiresAt || notExpired)),
     status: status || (direct ? 'active' : ''),
-    plan: plan || (direct || statusActive || notExpired ? 'Subscribed Student' : 'Free Student'),
+    plan: plan || ((direct || statusActive || notExpired) && (!expiresAt || notExpired) ? 'Subscribed Student' : 'Free Student'),
     expiresAt
   };
 }
@@ -274,7 +275,8 @@ export function getWebPostingPolicy(profile = {}, { admin = false } = {}) {
       maxImagesPerPost: 2,
       maxTotalImageBytes: 6 * 1024 * 1024,
       dailyImagePosts: Infinity,
-      dailyTextPosts: Infinity
+      dailyTextPosts: Infinity,
+      maxChars: 1000
     };
   }
 
@@ -287,7 +289,8 @@ export function getWebPostingPolicy(profile = {}, { admin = false } = {}) {
       maxImagesPerPost: 2,
       maxTotalImageBytes: 6 * 1024 * 1024,
       dailyImagePosts: 6,
-      dailyTextPosts: Infinity
+      dailyTextPosts: 40,
+      maxChars: 1000
     };
   }
 
@@ -298,7 +301,8 @@ export function getWebPostingPolicy(profile = {}, { admin = false } = {}) {
     maxImagesPerPost: 1,
     maxTotalImageBytes: 2 * 1024 * 1024,
     dailyImagePosts: 2,
-    dailyTextPosts: 20
+    dailyTextPosts: 20,
+    maxChars: 300
   };
 }
 
@@ -608,6 +612,8 @@ export async function createPost(mode, user, profile, payload, { admin = false }
   }
 
   const publicMetadata = normalizePublicPostMetadata(payload);
+  if ([...String(payload.content||'').trim()].length > policy.maxChars)
+    throw new Error('Post exceeds the '+policy.maxChars+'-character limit for this account.');
   const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
     .filter(file => file && file.size);
   if (imageFiles.length) throw new Error('Tefsen public posts are text-only. Profile photos are managed separately.');
@@ -1234,16 +1240,13 @@ export async function updateUserProfile(mode, userId, data) {
     ? data.profileImageFile
     : null;
   if (photoFile) {
-    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    if (!allowedTypes.has(String(photoFile.type || '').toLowerCase())) {
-      throw new Error('Profile photo must be JPG, PNG or WebP.');
-    }
-    if (photoFile.size > 5 * 1024 * 1024) {
-      throw new Error('Profile photo must be 5 MB or smaller.');
-    }
-    const objectRef = ref(storage, `profile_images/${userId}.jpg`);
-    const upload = await uploadBytes(objectRef, photoFile, { contentType: photoFile.type });
-    profileImageUrl = await getDownloadURL(upload.ref);
+    validatePhotoSource(photoFile);
+    // Never upload directly to Storage: monthly count and permissions belong
+    // to the existing us-central1 callable, shared with Android.
+    const imageBase64=await preparePhotoBase64(photoFile);
+    const response=await updateProfilePhoto('upload',imageBase64);
+    profileImageUrl=String(response.profileImageUrl||'');
+    if(!profileImageUrl)throw new Error('The photo service did not return an image URL.');
   }
 
   const payload = {
@@ -1268,44 +1271,18 @@ export async function updateUserProfile(mode, userId, data) {
   return normalizeUser({ ...current, ...payload }, userId);
 }
 
-export async function removeProfilePhoto(mode, userId) {
-  if (!userId) throw new Error('Missing user ID.');
-
-  if (mode === 'demo') {
-    const existing = DEMO_USERS.find(row => row.uid === userId || row.id === userId);
-    if (existing) {
-      existing.profileImageUrl = '';
-      existing.photoURL = '';
-      existing.photoUrl = '';
-    }
-    return existing ? normalizeUser(existing, userId) : null;
+export async function removeProfilePhoto(mode,userId) {
+  if(!userId)throw new Error('Missing user ID.');
+  if(mode==='demo'){
+    const existing=DEMO_USERS.find(row=>row.uid===userId||row.id===userId);
+    if(existing){existing.profileImageUrl='';existing.photoURL='';existing.photoUrl='';}
+    return existing?normalizeUser(existing,userId):null;
   }
-
-  const objectRef = ref(storage, `profile_images/${userId}.jpg`);
-  try {
-    await deleteObject(objectRef);
-  } catch (error) {
-    if (error?.code !== 'storage/object-not-found') throw error;
-  }
-
-  const userRef = doc(db, C.users, userId);
-  const currentSnap=await getDoc(userRef);
-  const current=currentSnap.exists() ? currentSnap.data() : {};
-  const batch=writeBatch(db);
-  batch.set(userRef,{
-    profileImageUrl:'',
-    photoURL:'',
-    updatedAt:serverTimestamp()
-  },{ merge:true });
-  batch.set(
-    publicProfileDocument(userId),
-    publicProfileWritePayload(userId,{ ...current, profileImageUrl:'', photoURL:'', photoUrl:'' }),
-    { merge:true }
-  );
-  await batch.commit();
-
+  const result=await updateProfilePhoto('remove');
   userProfileCache.delete(`${mode}:${userId}`);
-  return normalizeUser({ ...current, profileImageUrl:'', photoURL:'' }, userId);
+  const currentSnap=await getDoc(doc(db,C.users,userId));
+  const data=currentSnap.exists()?currentSnap.data():{};
+  return normalizeUser({...data,profileImageUrl:String(result.profileImageUrl||''),photoURL:String(result.profileImageUrl||'')},userId);
 }
 
 

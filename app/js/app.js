@@ -1,6 +1,9 @@
-import { initFirebase, appCheck } from './firebase-client.js';
+import { initFirebase, appCheck, auth } from './firebase-client.js';
+import {mountAvatarCropper} from './services/avatar-cropper.js';
+import {validatePhotoSource} from './services/profile-photo-policy.mjs';
+import {postLimits, validateTextPost, loadDraft, saveDraft, clearDraft, chooseSearchMode, rankPeople, filterPosts, normalizeSearch} from './services/text-first-workflow.mjs';
 import { state, setState } from './store.js';
-import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
+import { observeAuth, signIn, register, signInGoogle, resetPassword, logout, sendConfirmationEmail, refreshConfirmationStatus } from './services/auth-service.js';
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, getSyncedNotificationReadIds, markNotificationRead, markNotificationsRead,
@@ -220,6 +223,11 @@ let currentUserSettings = defaultUserSettings();
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
+let feedHasLoaded=false;
+let lastRenderedRoute='';
+const scrollByRoute=new Map();
+let activeSearchMode = 'people';
+let activeSearchGeneration = 0;
 let likeHydrationKey = '';
 let likeHydrationAt = 0;
 let likeHydrationRun = 0;
@@ -285,69 +293,49 @@ function humanError(error) {
 }
 
 async function boot() {
-  if (appStarted) return;
-  appStarted = true;
-  root.innerHTML = loadingScreen();
-  try {
-    const env = await initFirebase();
-    setState({ mode: env.mode, initialized: true });
-    stopAuth = observeAuth(env.mode, handleAuthChange);
-  } catch (error) {
+  if(appStarted)return;
+  appStarted=true;
+  root.innerHTML=loadingScreen();
+  try{
+    const env=await initFirebase();
+    if(env.mode==='demo' && window.TEFSEN_FORCE_DEMO_MODE!==true)
+      throw new Error('Production Firebase is unavailable.');
+    setState({mode:env.mode,initialized:true});
+    stopAuth=observeAuth(env.mode,handleAuthChange);
+  }catch(error){
     console.error(error);
-    setState({ mode: 'demo', initialized: true });
-    toast('Firebase could not initialize. Opening preview mode.', 'error');
-    stopAuth = observeAuth('demo', handleAuthChange);
+    appStarted=false;
+    root.innerHTML='<main id="app-main" class="app-error-screen"><div><h1>Tefsen is unavailable</h1><p>Unable to connect to Firebase. Check your internet connection and try again.</p><button class="btn btn-primary" type="button" data-retry-boot>Retry</button></div></main>';
   }
 }
-
 async function handleAuthChange(user) {
-  stopPosts?.(); stopPosts = null;
-  stopComments?.(); stopComments = null;
-  reactionState = { saved: new Set(), liked: new Set() };
-  currentStudentPassport = null;
-  passportOnboardingJustCompleted = false;
-  currentSavedWorkspace = null;
-  savedOpportunityCompareIds = new Set();
-  adminCapability = false;
-  currentAdminOpportunities = [];
-  currentAdminReports = [];
-  adminPreviewRows = [];
-  adminImportSource = '';
-  currentUserSettings = defaultUserSettings({ timeZone: browserTimeZone() });
+  stopPosts?.();stopPosts=null;
+  stopComments?.();stopComments=null;
+  reactionState={saved:new Set(),liked:new Set()};
+  feedHasLoaded=false;
+  adminCapability=false;
+  currentUserSettings=defaultUserSettings({timeZone:browserTimeZone()});
   applyRuntimeSettings(currentUserSettings);
-  setState({ user, profile: null, posts: [], notifications: [], unreadCount: 0 });
-
-  if (!user) {
-    renderAuth('login');
-    return;
+  setState({user,profile:null,posts:[],notifications:[],unreadCount:0});
+  if(!user){renderAuth('login');return;}
+  if(state.mode==='firebase' && user.email && user.emailVerified!==true && !(user.providerData||[]).some(p=>p.providerId==='google.com')){
+    renderEmailConfirmation();return;
   }
-
-  root.innerHTML = loadingScreen('Loading your Tefsen space…');
-  try {
-    const [profile, userSettings, reactions, activityNotifications, notificationReadIds] = await Promise.all([
-      getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
-      getUserSettings(state.mode, user.uid).catch(() => defaultUserSettings({ timeZone: browserTimeZone() })),
-      getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
-      getNotifications(state.mode, user.uid).catch(() => []),
-      getSyncedNotificationReadIds(state.mode, user.uid).catch(() => getNotificationReadIds(user.uid))
-    ]);
-    currentUserSettings = normalizeUserSettings(userSettings, { timeZone: browserTimeZone() });
-    applyRuntimeSettings(currentUserSettings);
-    const notificationModel = applyNotificationPreferences(buildNotificationCenterModel({
-      activityNotifications,
-      journeys:[],
-      opportunities:[],
-      readIds:notificationReadIds,
-      now:new Date()
-    }), currentUserSettings);
-    reactionState = reactions;
-    setState({
-      profile,
-      notifications:notificationModel.items,
-      unreadCount:notificationModel.unreadCount
-    });
-    adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
+  root.innerHTML=loadingScreen('Opening your Tefsen space…');
+  const userId=user.uid;
+  try{
+    const profile=await getProfile(state.mode,user).catch(()=>normalizeUser({
+      uid:user.uid,fullName:user.displayName||user.email||'Tefsen User',email:user.email||''
+    },user.uid));
+    if(state.user?.uid!==userId)return;
+    setState({profile});
+    // Auth + essential profile are sufficient to render. Other account calls
+    // are optional and must never leave the app on a perpetual spinner.
+    if(!location.hash||location.hash==='#/')go('home');
+    else renderRoute();
     stopPosts = subscribePosts(state.mode, posts => {
+      if(state.user?.uid!==userId)return;
+      feedHasLoaded=true;
       setState({ posts });
       renderRoute();
 
@@ -362,7 +350,7 @@ async function handleAuthChange(user) {
         likeHydrationAt = now;
         const run = ++likeHydrationRun;
         void hydratePostLikeState(state.mode, state.user.uid, visibleIds).then(result => {
-          if (run !== likeHydrationRun) return;
+          if (run !== likeHydrationRun || state.user?.uid!==userId) return;
           reactionState.liked = result.liked;
           let changed = false;
           for (const post of posts) {
@@ -375,15 +363,35 @@ async function handleAuthChange(user) {
         }).catch(error => console.warn('Like-state reconciliation failed:', error));
       }
     }, error => {
+      if(state.user?.uid!==userId)return;
+      feedHasLoaded=true;
       console.error(error);
       toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
       renderRoute();
     });
-    if (!location.hash || location.hash === '#/') go('home'); else renderRoute();
-  } catch (error) {
+
+    void Promise.all([
+      getUserSettings(state.mode,userId).catch(()=>defaultUserSettings({timeZone:browserTimeZone()})),
+      getReactionIds(state.mode,userId).catch(()=>({saved:new Set(),liked:new Set()})),
+      getNotifications(state.mode,userId).catch(()=>[]),
+      getSyncedNotificationReadIds(state.mode,userId).catch(()=>getNotificationReadIds(userId)),
+      getAdminCapability(state.mode,user,profile).catch(()=>false)
+    ]).then(([settings,reactions,activityNotifications,readIds,isAdmin])=>{
+      if(state.user?.uid!==userId)return;
+      currentUserSettings=normalizeUserSettings(settings,{timeZone:browserTimeZone()});
+      applyRuntimeSettings(currentUserSettings);
+      reactionState.saved=reactions.saved;
+      adminCapability=isAdmin===true;
+      const model=applyNotificationPreferences(buildNotificationCenterModel({
+        activityNotifications,journeys:[],opportunities:[],readIds,now:new Date()
+      }),currentUserSettings);
+      setState({notifications:model.items,unreadCount:model.unreadCount});
+      renderRoute();
+    }).catch(error=>console.warn('Optional account data unavailable',error));
+  }catch(error){
+    if(state.user?.uid!==userId)return;
     console.error(error);
-    toast(humanError(error), 'error');
-    renderRoute();
+    root.innerHTML='<main id="app-main" class="app-error-screen"><div><h1>Unable to open your account</h1><p>Account information could not load.</p><button class="btn btn-primary" type="button" data-retry-profile>Try again</button></div></main>';
   }
 }
 
@@ -426,6 +434,18 @@ function renderAuth(mode = 'login') {
   normalizeRenderedAccessibility(root);
 }
 
+function renderEmailConfirmation() {
+  root.innerHTML=`<main id="app-main" class="auth-page" tabindex="-1">
+    <section class="auth-art"><div class="auth-brand"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span></div><div class="auth-message"><h1>Confirm your email.<br><span>Then join the conversation.</span></h1><p>Your public profile and posts stay protected until your email is verified.</p></div></section>
+    <section class="auth-panel"><div class="auth-card">
+      <h2>Check your inbox</h2><p>Open the email confirmation link sent to your account, then come back here. If the message is missing, request another.</p>
+      <button type="button" class="btn btn-primary btn-block" data-verify-check>I've verified my email</button>
+      <button type="button" class="btn btn-secondary btn-block" data-verify-resend>Resend verification email</button>
+      <button type="button" class="btn btn-ghost btn-block" data-logout>Sign out</button>
+      <p class="form-help">If you don't see a message, check Spam. An email can be resent after a short wait.</p>
+    </div></section></main>`;
+}
+
 function demoBanner() {
   if (state.mode !== 'demo') return '';
   return `<div class="demo-banner"><span><b>Interface preview mode.</b> Add your Firebase Web config to sync real Tefsen accounts and data.</span><a href="#" data-demo-info>View setup</a></div>`;
@@ -433,6 +453,9 @@ function demoBanner() {
 
 function renderShell(content, options = {}) {
   const route = currentRoute();
+  const targetScroll=lastRenderedRoute===route?window.scrollY:(scrollByRoute.get(route)||0);
+  if(lastRenderedRoute && lastRenderedRoute!==route)scrollByRoute.set(lastRenderedRoute,window.scrollY);
+  lastRenderedRoute=route;
   const p = state.profile || {};
   root.innerHTML = `
     <div class="app-shell tefsen-text-social">
@@ -480,6 +503,7 @@ function renderShell(content, options = {}) {
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
   normalizeRenderedAccessibility(root);
+  requestAnimationFrame(()=>{if(currentRoute()===route)window.scrollTo(0,targetScroll);});
 }
 function navButton(id, label, ic, route) {
   const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
@@ -615,7 +639,9 @@ async function renderHome() {
   const following = state.activeFeedTab === 'following';
   const cards = following
     ? `<section class="social-empty"><div>${icon('users',28)}</div><h2>Following feed on Android</h2><p>Posts from people you follow are not synced into the Web following feed yet. Choose Everyone to read public posts here.</p><button class="social-secondary" type="button" data-feed-tab="recent">See everyone</button></section>`
-    : state.posts.length
+    : !feedHasLoaded
+      ? `<section class="social-empty" role="status"><h2>Loading public posts…</h2></section>`
+      : state.posts.length
       ? getFilteredPosts(state.activeFeedTab === 'trending' ? 'trending' : 'recent').map(postCard).join('')
       : `<section class="social-empty"><div>${icon('message',28)}</div><h2>Nothing posted yet</h2><p>Share the first idea, question or useful experience with everyone.</p><button class="social-secondary" type="button" data-action="compose">Write a post</button></section>`;
   const content = `${demoBanner()}<section class="social-feed-header"><div><small>PUBLIC THOUGHTS. REAL PEOPLE.</small><h1>Everyone has something worth sharing.</h1><p>Thoughts, lessons and experiences — in words.</p></div><button type="button" class="social-write" data-action="compose">${icon('edit',18)}<span>Write a post</span></button></section>
@@ -3850,24 +3876,34 @@ function global20DiscoveryMarkup(model) {
 async function renderSearch(term = '') {
   const query=String(term||'').trim().slice(0,120);
   state.searchQuery=query;
-  renderShell(`<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Searching available public posts and profiles only.</p></section>`,{right:false});
+  activeSearchMode=chooseSearchMode(query,activeSearchMode);
+  const generation=++activeSearchGeneration;
+  const surface=(content='')=>`${demoBanner()}<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div>
+    <form class="social-search-form" data-global-search-form><input class="input" type="search" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search public posts and people" autocomplete="off"><button class="social-secondary" type="submit">Search</button></form>
+    <div class="social-search-tabs" role="group" aria-label="Search category">
+      <button type="button" data-search-mode="people" class="${activeSearchMode==='people'?'active':''}" aria-pressed="${activeSearchMode==='people'}">People</button>
+      <button type="button" data-search-mode="posts" class="${activeSearchMode==='posts'?'active':''}" aria-pressed="${activeSearchMode==='posts'}">Posts</button>
+    </div>${content}</section>`;
+  renderShell(surface(query?'<p class="social-subtle" role="status">Searching the available public index…</p>':'<p class="social-subtle">Find members by username or display name. Use @ for usernames.</p>'),{right:false});
   if(!query)return;
   try {
-    const loaded=await searchAll(state.mode,query);
-    const words=query.toLowerCase();
-    const users=(loaded.users||[]).filter(u=>[u.fullName,u.displayName,u.username,u.bio].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,20);
-    const posts=mergeSearchPublicPosts(state.posts,loaded.posts).filter(p=>[p.title,p.content,p.authorName].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,50);
-    const people=users.map(p=>`<button class="social-person-row" data-route="profile/${encodeURIComponent(p.uid||p.id||'')}" type="button">${avatar(p,'sm')}<span><strong>${escapeHTML(p.fullName||p.displayName||'Tefsen member')}</strong><small>${escapeHTML(p.username?'@'+p.username:'Public profile')}</small></span>${icon('chevron-right',19)}</button>`).join('');
-    const markup=`${demoBanner()}<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Results from the available public search window. More public posts or profiles may exist beyond it.</p>${people?`<h2>People</h2><div class="social-people">${people}</div>`:''}<h2>Posts</h2><div class="social-feed-list">${posts.length?posts.map(postCard).join(''):`<div class="social-empty"><h2>No matching public posts</h2><p>Try another keyword or name.</p></div>`}</div></section>`;
-    renderShell(markup,{right:false});
-  } catch(error) {
-    console.error(error);
-    renderShell('<section class="social-empty"><h2>Search unavailable</h2><p>Please try again later.</p></section>',{right:false});
+    const loaded=await searchAll(state.mode,query.replace(/^@/,''));
+    if(generation!==activeSearchGeneration || currentRoute()!=='search')return;
+    const people=rankPeople(loaded.users||[],query).slice(0,50);
+    const posts=filterPosts(mergeSearchPublicPosts(state.posts,loaded.posts),query).slice(0,50);
+    const result=activeSearchMode==='people'
+      ? (people.length? `<div class="social-people">${people.map(p=>`<button class="social-person-row" data-route="profile/${encodeURIComponent(p.uid||p.id||'')}" type="button">${avatar(p,'sm')}<span><strong>${escapeHTML(p.fullName||p.displayName||'Tefsen member')}</strong><small>${escapeHTML(p.username?'@'+p.username:'Public profile')}</small></span>${icon('chevron-right',19)}</button>`).join('')}</div>` : '<div class="social-empty"><h2>No matching people in this search window</h2><p>Try a different name or username.</p></div>')
+      : (posts.length? `<div class="social-feed-list">${posts.map(postCard).join('')}</div>` : '<div class="social-empty"><h2>No matching public posts</h2><p>Try a different keyword.</p></div>');
+    renderShell(surface('<p class="social-subtle">Showing a limited set of public results. Full-directory indexed search requires a trusted backend endpoint.</p>'+result),{right:false});
+  }catch(error){
+    if(generation!==activeSearchGeneration || currentRoute()!=='search')return;
+    renderShell(surface('<p class="social-subtle" role="alert">Search could not load. Try again.</p><button class="social-secondary" type="button" data-search-retry>Retry</button>'),{right:false});
   }
 }
 function renderRoute() {
   if (!state.user) return;
   const [route, param, param2] = routeParts();
+  if(route!=='search')activeSearchGeneration++;
   state.ui.profileMenu = false;
   document.documentElement.classList.remove('profile-menu-open');
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
@@ -3972,16 +4008,21 @@ function openCommunityComposer(context = {}) {
 }
 
 function openComposer() {
-  const policy = getWebPostingPolicy(state.profile || {}, {admin:adminCapability});
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal social-compose-modal" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+  if(!state.user?.uid) return;
+  const policy=getWebPostingPolicy(state.profile||{},{admin:adminCapability});
+  const limits=postLimits({subscribed:policy.subscribed,admin:policy.admin});
+  const draft=loadDraft(localStorage,state.user.uid);
+  modalRoot.innerHTML=`<div class="modal-backdrop" data-modal-backdrop><section class="modal social-compose-modal" role="dialog" aria-modal="true" aria-labelledby="compose-title">
     <header class="modal-head"><h2 id="compose-title">New post</h2><button class="close-btn" type="button" data-close-modal aria-label="Close">${icon('close',20)}</button></header>
-    <div class="modal-body"><div class="social-compose-author">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>Sharing with everyone</small></div></div>
-    <form class="form-grid" data-compose-form><label class="sr-only" for="social-compose-text">Your public post</label><textarea class="textarea social-compose-text" id="social-compose-text" name="content" maxlength="1000" required placeholder="An idea, a lesson, or news worth sharing…"></textarea>
-    <div class="social-compose-meta"><span>Only text. All your ideas.</span><span data-compose-count>0/1000</span></div>
+    <div class="modal-body"><div class="social-compose-author">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName||'Tefsen User')}</b><small>Sharing with everyone</small></div></div>
+    <form class="form-grid" data-compose-form><label class="sr-only" for="social-compose-text">Your public post</label><textarea class="textarea social-compose-text" id="social-compose-text" name="content" maxlength="${limits.maxChars}" required placeholder="An idea, a lesson, or news worth sharing…">${escapeHTML(draft)}</textarea>
+    <div class="social-compose-meta"><span>Only text. ${limits.maxChars} characters max.</span><span data-compose-count>${[...draft].length}/${limits.maxChars}</span></div>
+    <div class="social-compose-draft"><small>Saved privately on this browser for your current account.</small><button type="button" data-compose-clear>Clear draft</button></div>
     <p class="social-compose-rule">Keep it respectful. Add a source link when sharing news.</p>
     <div class="form-error" data-compose-error role="status"></div>
-    <div class="social-compose-submit"><span>${Number.isFinite(policy.dailyTextPosts)?`${policy.dailyTextPosts} text posts per day on your plan`:'Public text post'}</span><button class="btn btn-primary" type="submit">Post</button></div>
+    <div class="social-compose-submit"><span>${Number.isFinite(limits.dailyPosts)?`${limits.dailyPosts} text posts per day`:'Administrator posting'} · Backend rules apply</span><button class="btn btn-primary" type="submit" ${draft.trim()?'':'disabled'}>Post</button></div>
     </form></div></section></div>`;
+  modalRoot.querySelector('[data-compose-form] textarea')?.focus();
 }
 function openReportModal(postId) {
   const options=REPORT_REASONS.map(reason=>`<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`).join('');
@@ -4018,7 +4059,7 @@ function openEditProfile() {
             <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
             <div class="v4-photo-editor-copy">
               <b>Profile photo</b>
-              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. A selected image stays a preview until you save.</p>
+              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. Drag to position, zoom, and confirm the preview before saving.</p>
               <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
               <div class="v4-photo-editor-actions">
                 <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Choose a new photo' : 'Choose photo'}</button>
@@ -4203,17 +4244,47 @@ async function handleClick(event) {
   if (event.target.closest('[data-demo-login]')) { await signIn(state.mode,'demo@tefsen.com','demo123'); return; }
   if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
   if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
+  if(event.target.closest('[data-retry-boot]')){appStarted=false;await boot();return;}
+  if(event.target.closest('[data-retry-profile]')){if(state.user)await handleAuthChange(state.user);return;}
+  const confirmation=event.target.closest('[data-verify-check]');
+  if(confirmation) {
+    await withButton(confirmation,async()=>{
+      try {
+        const verified=await refreshConfirmationStatus(state.mode);
+        if(verified)await handleAuthChange(auth.currentUser);
+        else toast('Your email is not verified yet. Check the link in your inbox.','error');
+      }catch(error){toast(humanError(error),'error');}
+    });
+    return;
+  }
+  const resend=event.target.closest('[data-verify-resend]');
+  if(resend) {
+    await withButton(resend,async()=>{
+      try{await sendConfirmationEmail(state.mode);toast('Verification email requested. Check your inbox.','success');}
+      catch(error){toast(humanError(error),'error');}
+    });
+    return;
+  }
   if (event.target.closest('[data-action="compose"]')) { openComposer(); return; }
+  if (event.target.closest('[data-compose-clear]')) {
+    if (state.user?.uid) clearDraft(localStorage,state.user.uid);
+    const textarea=modalRoot.querySelector('[data-compose-form] textarea');
+    if(textarea){textarea.value='';textarea.dispatchEvent(new Event('input',{bubbles:true}));textarea.focus();}
+    return;
+  }
   const shareSuccess = event.target.closest('[data-share-success]');
   if (shareSuccess) { openSuccessStoryModal({ subject:shareSuccess.dataset.prefillSubject||'', university:shareSuccess.dataset.prefillUniversity||'', intake:shareSuccess.dataset.prefillIntake||'' }); return; }
   const shareJourneyStory = event.target.closest('[data-share-journey-story]');
   if (shareJourneyStory) { openJourneyStoryModal({ subject:shareJourneyStory.dataset.prefillSubject||'', university:shareJourneyStory.dataset.prefillUniversity||'', intake:shareJourneyStory.dataset.prefillIntake||'' }); return; }
   const communityDiscussion = event.target.closest('[data-community-discussion]');
   if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
-  if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
-  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
+  if (event.target.closest('[data-close-modal]')) { modalRoot.querySelector('[data-profile-form]')?.__avatarCrop?.dispose?.(); modalRoot.innerHTML=''; return; }
+  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.querySelector('[data-profile-form]')?.__avatarCrop?.dispose?.(); modalRoot.innerHTML=''; return; }
+  const searchModeButton=event.target.closest('[data-search-mode]');
+  if(searchModeButton){activeSearchMode=searchModeButton.dataset.searchMode==='posts'?'posts':'people';renderSearch(state.searchQuery);return;}
+  if(event.target.closest('[data-search-retry]')){renderSearch(state.searchQuery);return;}
   const tab = event.target.closest('[data-feed-tab]');
-  if (tab) { state.activeFeedTab = tab.dataset.feedTab; renderHome(); return; }
+  if (tab) { if(state.activeFeedTab!==tab.dataset.feedTab){state.activeFeedTab=tab.dataset.feedTab;renderHome();} return; }
   const adminTabButton = event.target.closest('[data-admin-tab]');
   if (adminTabButton) { const next=adminTabButton.dataset.adminTab; adminTab=['review','import','reports'].includes(next)?next:'review'; await renderAdmin(); return; }
   const adminReview = event.target.closest('[data-admin-review-action]');
@@ -4344,7 +4415,13 @@ async function handleAuthForm(form) {
   const submit = form.querySelector('button[type="submit"]');
   await withButton(submit, async () => {
     try {
-      if (mode === 'register') await register(state.mode, { fullName: fd.get('fullName').trim(), email: fd.get('email').trim(), password: fd.get('password') });
+      if (mode === 'register') {
+        await register(state.mode, {fullName:fd.get('fullName').trim(),email:fd.get('email').trim(),password:fd.get('password')});
+        if(state.mode==='firebase'){
+          try{await sendConfirmationEmail(state.mode);}
+          catch(e){toast('Account created. Use Resend verification email if the first email did not arrive.','error');}
+        }
+      }
       else await signIn(state.mode, fd.get('email').trim(), fd.get('password'));
     } catch (error) { errorEl.textContent = humanError(error); }
   });
@@ -4358,24 +4435,27 @@ async function handleForgot() {
 }
 
 async function handleCompose(form) {
-  const errorEl = form.querySelector('[data-compose-error]');
-  const submit = form.querySelector('button[type="submit"]');
-  const content = String(new FormData(form).get('content') || '').trim();
-  if (!content || content.length > 1000) {
-    errorEl.textContent = 'Write between 1 and 1000 characters.';
-    return;
-  }
-  const payload = { title:content.slice(0, 100), content, subject:'General', tags:[], imageFiles:[] };
-  await withButton(submit, async () => {
+  if (form.dataset.submitting==='true') return;
+  const errorEl=form.querySelector('[data-compose-error]'), submit=form.querySelector('button[type="submit"]');
+  const policy=getWebPostingPolicy(state.profile||{},{admin:adminCapability});
+  const limits=postLimits({subscribed:policy.subscribed,admin:policy.admin});
+  const validation=validateTextPost(new FormData(form).get('content'),limits);
+  errorEl.textContent='';
+  if(!validation.valid){ errorEl.textContent=validation.message; return; }
+  form.dataset.submitting='true';
+  await withButton(submit, async()=>{
     try {
-      const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
-      modalRoot.innerHTML = '';
-      toast('Your post is public.','success');
-      if(state.mode === 'demo') state.posts = [post,...state.posts];
+      const post=await createPost(state.mode,state.user,state.profile,{
+        title:validation.content.slice(0,100),content:validation.content,subject:'General',tags:[],imageFiles:[]
+      },{admin:adminCapability});
+      clearDraft(localStorage,state.user.uid);
+      modalRoot.innerHTML='';
+      toast(String(post.status||'').toLowerCase()==='pending'?'Submitted for review':'Post submitted','success');
+      if(state.mode==='demo')state.posts=[post,...state.posts];
       go('home');
     } catch(error) {
-      errorEl.textContent = humanError(error);
-    }
+      errorEl.textContent=humanError(error);
+    } finally { delete form.dataset.submitting; }
   });
 }
 function syncLikeButtons(postId, active, count, pending = false) {
@@ -4856,20 +4936,26 @@ async function handleProfileSave(form) {
 
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
+  if(form.dataset.photoCropBusy==='true'){
+    toast('Wait for the photo preview to finish loading.','error');return;
+  }
   await withButton(submit, async () => {
     try {
+      const outputPhoto=(selectedPhoto instanceof File && selectedPhoto.size)
+        ? (form.__avatarCrop ? await form.__avatarCrop.toFile() : null) : null;
+      if(selectedPhoto instanceof File && selectedPhoto.size && !outputPhoto)
+        throw new Error('Crop the selected image before saving.');
       const profile = await updateUserProfile(state.mode, state.user.uid, {
         fullName:draft.fullName,
         username:draft.username,
         bio:draft.bio,
-        profileImageFile:selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+        profileImageFile:outputPhoto
       });
       state.profile = { ...state.profile, ...profile };
       state.posts = state.posts.map(post => post.authorId === state.user.uid
         ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
-      const input = form.querySelector('[data-profile-photo-input]');
-      if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
+      form.__avatarCrop?.dispose?.();
       modalRoot.innerHTML = '';
       toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
@@ -5243,26 +5329,29 @@ function handleInput(event) {
     const preview = input.form?.querySelector('[data-profile-photo-preview]');
     if (!file) return;
 
-    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    if (!allowed.has(String(file.type || '').toLowerCase())) {
-      toast('Profile photo must be JPG, PNG or WebP.', 'error');
-      input.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast('Profile photo must be 5 MB or smaller.', 'error');
-      input.value = '';
-      return;
-    }
-
-    if (input.dataset.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
-    const url = URL.createObjectURL(file);
-    input.dataset.previewUrl = url;
-    if (preview) {
-      preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
-    }
-    const stateEl = input.form?.querySelector('[data-profile-photo-state]');
-    if (stateEl) stateEl.textContent = 'Preview selected — save profile to publish this photo';
+    const form=input.form;
+    try{ validatePhotoSource(file); }
+    catch(error){toast(error.message,'error');input.value='';return;}
+    const changeId=Number(form.dataset.photoCropChange||0)+1;
+    form.dataset.photoCropChange=String(changeId);
+    form.dataset.photoCropBusy='true';
+    form.__avatarCrop?.dispose?.();
+    form.__avatarCrop=null;
+    const stateEl=form.querySelector('[data-profile-photo-state]');
+    if(stateEl)stateEl.textContent='Preparing the crop preview…';
+    void mountAvatarCropper(file,preview).then(editor=>{
+      if(form.dataset.photoCropChange!==String(changeId) || !form.isConnected){
+        editor.dispose();return;
+      }
+      form.__avatarCrop=editor;
+      delete form.dataset.photoCropBusy;
+      if(stateEl)stateEl.textContent='Drag or use arrow keys to position. Save the profile to upload.';
+    }).catch(error=>{
+      delete form.dataset.photoCropBusy;
+      if(stateEl)stateEl.textContent='Photo crop could not be prepared. Select another image.';
+      toast(error.message||'Photo preparation failed.','error');
+      input.value='';
+    });
     return;
   }
 
@@ -5319,6 +5408,16 @@ document.addEventListener('click', handleClick);
 document.addEventListener('submit', handleSubmit);
 document.addEventListener('change', handleInput);
 document.addEventListener('input', event => {
+  if(event.target.matches('[data-compose-form] textarea[name="content"]')) {
+    const field=event.target;
+    if(state.user?.uid)saveDraft(localStorage,state.user.uid,field.value);
+    const limit=Number(field.maxLength)||300;
+    const counter=field.form?.querySelector('[data-compose-count]');
+    if(counter)counter.textContent=[...field.value].length+'/'+limit;
+    const submit=field.form?.querySelector('button[type="submit"]');
+    if(submit && field.form?.dataset.submitting!=='true')submit.disabled=!field.value.trim();
+    return;
+  }
   if (event.target.matches('[data-opportunity-search]')) {
     opportunityDiscoveryFilters.query = String(event.target.value || '').trim();
     applyOpportunitySearchDebounced();
