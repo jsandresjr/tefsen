@@ -324,26 +324,22 @@ async function handleAuthChange(user) {
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
-    const [profile, userSettings, reactions, activityNotifications, notificationReadIds, passport, notificationJourneys, notificationOpportunities] = await Promise.all([
+    const [profile, userSettings, reactions, activityNotifications, notificationReadIds] = await Promise.all([
       getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
       getUserSettings(state.mode, user.uid).catch(() => defaultUserSettings({ timeZone: browserTimeZone() })),
       getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
       getNotifications(state.mode, user.uid).catch(() => []),
-      getSyncedNotificationReadIds(state.mode, user.uid).catch(() => getNotificationReadIds(user.uid)),
-      getStudentPassport(state.mode, user.uid).catch(() => emptyStudentPassport(user.uid)),
-      listJourneyStates(state.mode, user.uid).catch(() => []),
-      getOpportunities(state.mode).catch(() => [])
+      getSyncedNotificationReadIds(state.mode, user.uid).catch(() => getNotificationReadIds(user.uid))
     ]);
     currentUserSettings = normalizeUserSettings(userSettings, { timeZone: browserTimeZone() });
     applyRuntimeSettings(currentUserSettings);
     const notificationModel = applyNotificationPreferences(buildNotificationCenterModel({
       activityNotifications,
-      journeys:notificationJourneys,
-      opportunities:notificationOpportunities,
+      journeys:[],
+      opportunities:[],
       readIds:notificationReadIds,
       now:new Date()
     }), currentUserSettings);
-    currentStudentPassport = passport;
     reactionState = reactions;
     setState({
       profile,
@@ -3296,12 +3292,12 @@ async function renderPostDetail(postId) {
     const content = `<button class="btn btn-ghost" style="margin-bottom:14px" data-back>${icon('back',17)} Back</button>
       <article class="panel detail-card">
         <header class="post-head"><button class="avatar-route-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button><div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName)} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div><button class="post-menu" data-post-menu="${escapeHTML(post.id)}">${icon('more',20)}</button></header>
-        <div class="post-body">${structuredPostMarkup(post)}<span class="post-subject">${escapeHTML(post.subject || 'General')}</span><h1>${escapeHTML(post.title || 'Discussion')}</h1><p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
+        <div class="post-body">${structuredPostMarkup(post)}<span class="post-subject">${escapeHTML(post.subject || 'General')}</span>${post.title && !(post.content || '').startsWith(post.title) ? `<h1>${escapeHTML(post.title)}</h1>` : ''}<p>${nl2br(post.content || '')}</p>${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image">` : '')}${post.tags?.length ? `<div class="tag-row">${post.tags.map(t=>`<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>`:''}</div>
         <footer class="post-actions"><button class="action-btn like ${liked?'active':''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button><button class="action-btn" aria-label="Comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(currentComments.length || post.commentCount)}</span></button><button class="action-btn ${saved?'active':''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved?'Saved':'Save'}</button><button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button></footer>
       </article>
-      <section class="panel answer-form"><div class="panel-title"><h3>Add an answer</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Publish answer</button></div></form></section>
-      <div class="answers-head"><h2 style="margin:0">${currentComments.length} ${currentComments.length===1?'Answer':'Answers'}</h2></div>
-      <div>${currentComments.length ? currentComments.map(answerCard).join('') : emptyState('comment','No answers yet','Be the first to help with a thoughtful answer.')}</div>`;
+      <section class="panel answer-form"><div class="panel-title"><h3>Write a reply</h3><small>Be clear and respectful</small></div><form data-comment-form="${escapeHTML(post.id)}"><textarea class="textarea" name="content" placeholder="Write a useful answer…" required maxlength="5000"></textarea><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit">Post reply</button></div></form></section>
+      <div class="answers-head"><h2 style="margin:0">${currentComments.length} ${currentComments.length===1?'Reply':'Replies'}</h2></div>
+      <div>${currentComments.length ? currentComments.map(answerCard).join('') : emptyState('comment','No replies yet','Be the first to reply.')}</div>`;
     renderShell(content);
   };
   draw();
@@ -3318,23 +3314,20 @@ function answerCard(answer) {
 
 async function refreshNotificationCenterData() {
   if(!state.user?.uid) return buildNotificationCenterModel();
-  const [activityNotifications,journeys,opportunities,readIds]=await Promise.all([
+  const [activityNotifications,readIds]=await Promise.all([
     getNotifications(state.mode,state.user.uid).catch(()=>[]),
-    listJourneyStates(state.mode,state.user.uid).catch(()=>[]),
-    getOpportunities(state.mode).catch(()=>[]),
     getSyncedNotificationReadIds(state.mode,state.user.uid).catch(()=>getNotificationReadIds(state.user.uid))
   ]);
   const model=applyNotificationPreferences(buildNotificationCenterModel({
     activityNotifications,
-    journeys,
-    opportunities,
+    journeys:[],
+    opportunities:[],
     readIds,
     now:new Date()
-  }), currentUserSettings);
+  }),currentUserSettings);
   setState({notifications:model.items,unreadCount:model.unreadCount});
   return model;
 }
-
 function notificationIconName(n) {
   if(n.type==='deadline') return 'clock';
   if(n.type==='post_acceptance') return 'check';
