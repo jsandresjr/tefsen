@@ -4,6 +4,7 @@ import {
   postLimits,validateTextPost,draftStorageKey,saveDraft,loadDraft,clearDraft,
   normalizeSearch,chooseSearchMode,rankPeople,filterPosts
 } from '../js/services/text-first-workflow.mjs';
+import {avatarCropRect} from '../js/services/avatar-crop-math.mjs';
 import {validatePhotoSource,MAX_PROFILE_SOURCE_BYTES} from '../js/services/profile-photo-policy.mjs';
 
 function fakeStorage(){
@@ -50,4 +51,17 @@ test('photo source supports exactly 5 MiB but refuses oversize and unknown',()=>
   assert.throws(()=>validatePhotoSource({type:'image/png'}));
   assert.throws(()=>validatePhotoSource({size:0,type:'image/png'}));
   assert.throws(()=>validatePhotoSource({size:500,type:'application/pdf'}));
+});
+
+test('avatar crop always covers output and clamps drag/zoom',()=>{
+  const cover=avatarCropRect(100,200,200,1);
+  assert.equal(cover.width,200);
+  assert.equal(cover.height,400);
+  assert.equal(cover.x,0);
+  assert.equal(cover.y,-100);
+  const zoomed=avatarCropRect(100,200,200,2,1000,-1000);
+  assert.equal(zoomed.zoom,2);
+  assert.equal(zoomed.x,0);
+  assert.equal(zoomed.y,200-zoomed.height);
+  assert.throws(()=>avatarCropRect(0,300,200));
 });
