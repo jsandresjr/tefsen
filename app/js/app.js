@@ -1,7 +1,7 @@
-import { initFirebase, appCheck } from './firebase-client.js';
+import { initFirebase, appCheck, auth } from './firebase-client.js';
 import {postLimits, validateTextPost, loadDraft, saveDraft, clearDraft, chooseSearchMode, rankPeople, filterPosts, normalizeSearch} from './services/text-first-workflow.mjs';
 import { state, setState } from './store.js';
-import { observeAuth, signIn, register, signInGoogle, resetPassword, logout } from './services/auth-service.js';
+import { observeAuth, signIn, register, signInGoogle, resetPassword, logout, sendConfirmationEmail, refreshConfirmationStatus } from './services/auth-service.js';
 import {
   getProfile, subscribePosts, createPost, deletePost, getPost, getReactionIds, getSavedCommunityPosts, toggleLike, toggleSave,
   subscribeComments, addComment, getNotifications, getNotificationReadIds, getSyncedNotificationReadIds, markNotificationRead, markNotificationsRead,
@@ -324,6 +324,10 @@ async function handleAuthChange(user) {
     renderAuth('login');
     return;
   }
+  if (state.mode==='firebase' && user.email && user.emailVerified!==true && (user.providerData||[]).some(p=>p.providerId==='password')) {
+    renderEmailConfirmation();
+    return;
+  }
 
   root.innerHTML = loadingScreen('Loading your Tefsen space…');
   try {
@@ -427,6 +431,18 @@ function renderAuth(mode = 'login') {
       </section>
     </main>`;
   normalizeRenderedAccessibility(root);
+}
+
+function renderEmailConfirmation() {
+  root.innerHTML=`<main id="app-main" class="auth-page" tabindex="-1">
+    <section class="auth-art"><div class="auth-brand"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span></div><div class="auth-message"><h1>Confirm your email.<br><span>Then join the conversation.</span></h1><p>Your public profile and posts stay protected until your email is verified.</p></div></section>
+    <section class="auth-panel"><div class="auth-card">
+      <h2>Check your inbox</h2><p>We've asked Firebase to verify the email address attached to your account. Open the confirmation link, then come back here.</p>
+      <button type="button" class="btn btn-primary btn-block" data-verify-check>I've verified my email</button>
+      <button type="button" class="btn btn-secondary btn-block" data-verify-resend>Resend verification email</button>
+      <button type="button" class="btn btn-ghost btn-block" data-logout>Sign out</button>
+      <p class="form-help">If you don't see a message, check Spam. An email can be resent after a short wait.</p>
+    </div></section></main>`;
 }
 
 function demoBanner() {
@@ -4221,6 +4237,25 @@ async function handleClick(event) {
   if (event.target.closest('[data-demo-login]')) { await signIn(state.mode,'demo@tefsen.com','demo123'); return; }
   if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
   if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
+  const confirmation=event.target.closest('[data-verify-check]');
+  if(confirmation) {
+    await withButton(confirmation,async()=>{
+      try {
+        const verified=await refreshConfirmationStatus(state.mode);
+        if(verified)await handleAuthChange(auth.currentUser);
+        else toast('Your email is not verified yet. Check the link in your inbox.','error');
+      }catch(error){toast(humanError(error),'error');}
+    });
+    return;
+  }
+  const resend=event.target.closest('[data-verify-resend]');
+  if(resend) {
+    await withButton(resend,async()=>{
+      try{await sendConfirmationEmail(state.mode);toast('Verification email requested. Check your inbox.','success');}
+      catch(error){toast(humanError(error),'error');}
+    });
+    return;
+  }
   if (event.target.closest('[data-action="compose"]')) { openComposer(); return; }
   if (event.target.closest('[data-compose-clear]')) {
     if (state.user?.uid) clearDraft(localStorage,state.user.uid);
@@ -4371,7 +4406,13 @@ async function handleAuthForm(form) {
   const submit = form.querySelector('button[type="submit"]');
   await withButton(submit, async () => {
     try {
-      if (mode === 'register') await register(state.mode, { fullName: fd.get('fullName').trim(), email: fd.get('email').trim(), password: fd.get('password') });
+      if (mode === 'register') {
+        await register(state.mode, {fullName:fd.get('fullName').trim(),email:fd.get('email').trim(),password:fd.get('password')});
+        if(state.mode==='firebase'){
+          try{await sendConfirmationEmail(state.mode);}
+          catch(e){toast('Account created. Use Resend verification email if the first email did not arrive.','error');}
+        }
+      }
       else await signIn(state.mode, fd.get('email').trim(), fd.get('password'));
     } catch (error) { errorEl.textContent = humanError(error); }
   });
