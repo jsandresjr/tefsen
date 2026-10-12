@@ -324,7 +324,7 @@ async function handleAuthChange(user) {
     renderAuth('login');
     return;
   }
-  if (state.mode==='firebase' && user.email && user.emailVerified!==true && (user.providerData||[]).some(p=>p.providerId==='password')) {
+  if (state.mode==='firebase' && user.email && user.emailVerified!==true && !(user.providerData||[]).some(p=>p.providerId==='google.com')) {
     renderEmailConfirmation();
     return;
   }
@@ -437,7 +437,7 @@ function renderEmailConfirmation() {
   root.innerHTML=`<main id="app-main" class="auth-page" tabindex="-1">
     <section class="auth-art"><div class="auth-brand"><img src="assets/tefsen-logo.png?v=20261012-transparent" alt=""><span>Tefsen</span></div><div class="auth-message"><h1>Confirm your email.<br><span>Then join the conversation.</span></h1><p>Your public profile and posts stay protected until your email is verified.</p></div></section>
     <section class="auth-panel"><div class="auth-card">
-      <h2>Check your inbox</h2><p>We've asked Firebase to verify the email address attached to your account. Open the confirmation link, then come back here.</p>
+      <h2>Check your inbox</h2><p>Open the email confirmation link sent to your account, then come back here. If the message is missing, request another.</p>
       <button type="button" class="btn btn-primary btn-block" data-verify-check>I've verified my email</button>
       <button type="button" class="btn btn-secondary btn-block" data-verify-resend>Resend verification email</button>
       <button type="button" class="btn btn-ghost btn-block" data-logout>Sign out</button>
