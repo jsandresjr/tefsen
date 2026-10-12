@@ -610,6 +610,7 @@ export async function createPost(mode, user, profile, payload, { admin = false }
   const publicMetadata = normalizePublicPostMetadata(payload);
   const imageFiles = (Array.isArray(payload.imageFiles) ? payload.imageFiles : [payload.imageFile])
     .filter(file => file && file.size);
+  if (imageFiles.length) throw new Error('Tefsen public posts are text-only. Profile photos are managed separately.');
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   const totalImageBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
 
