@@ -1,4 +1,4 @@
-const CACHE = 'tefsen-web-shell-v69-text-first-social';
+const CACHE = 'tefsen-web-shell-v70-text-first-social-stable';
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
