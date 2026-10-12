@@ -254,3 +254,30 @@ html.tefsen-v2 .auth-page .auth-card label{color:#dedede!important}
   html.tefsen-v2 .tefsen-text-social .social-search-form{flex-wrap:wrap}
   html.tefsen-v2 .tefsen-text-social .social-search-form .social-secondary{width:100%}
 }
+
+/* Matching post discussion and moderation surfaces */
+html.tefsen-v2 .tefsen-text-social .detail-card,
+html.tefsen-v2 .tefsen-text-social .answer-form,
+html.tefsen-v2 .tefsen-text-social .answer-card{
+  background:transparent!important;color:var(--social-text)!important;border:0!important;
+  border-bottom:1px solid var(--social-border)!important;border-radius:0!important;
+  box-shadow:none!important;padding:25px 6px!important;
+}
+html.tefsen-v2 .tefsen-text-social .detail-card .post-body h1{font-size:23px!important;color:var(--social-text)!important;letter-spacing:-.025em}
+html.tefsen-v2 .tefsen-text-social .detail-card .post-body p,
+html.tefsen-v2 .tefsen-text-social .answer-card p{color:var(--social-text)!important;font-size:15px!important;line-height:1.8!important;overflow-wrap:anywhere}
+html.tefsen-v2 .tefsen-text-social .detail-card .post-subject,
+html.tefsen-v2 .tefsen-text-social .detail-card .role-pill,
+html.tefsen-v2 .tefsen-text-social .detail-card .tag-row,
+html.tefsen-v2 .tefsen-text-social .detail-card .post-image-grid,
+html.tefsen-v2 .tefsen-text-social .detail-card img.post-image{display:none!important}
+html.tefsen-v2 .tefsen-text-social .detail-card .post-actions{border-top:0!important}
+html.tefsen-v2 .tefsen-text-social .detail-card .action-btn{background:transparent!important;color:var(--social-muted)!important;border:0!important}
+html.tefsen-v2 .tefsen-text-social .answer-form .panel-title h3,
+html.tefsen-v2 .tefsen-text-social .answers-head h2{color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .answer-form textarea{background:var(--social-surface)!important;color:var(--social-text)!important;border-color:var(--social-border)!important}
+html.tefsen-v2 .tefsen-text-social .answer-form .btn-primary,
+html.tefsen-v2 .tefsen-text-social .btn-primary{background:var(--social-text)!important;color:var(--social-inverse)!important;border-color:var(--social-text)!important;box-shadow:none!important}
+html.tefsen-v2 .tefsen-text-social .panel{box-shadow:none!important}
+html.tefsen-v2 .tefsen-text-social .social-main .widget,
+html.tefsen-v2 .tefsen-text-social .section-card{border-color:var(--social-border)!important}
