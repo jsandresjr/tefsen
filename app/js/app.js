@@ -631,72 +631,17 @@ async function renderHome() {
   renderShell(content,{right:false});
 }
 async function renderSavedCommunity() {
-  renderShell(`<div class="saved24-page"><section class="saved24-hero loading"><span class="opportunity-kicker">SAVED COMMUNITY</span><h1>Loading your saved posts…</h1><p>Checking your private saved list independently of the current Community feed.</p></section></div>`,{wide:true,right:false});
-
-  try{
+  renderShell('<div class="social-section-heading"><h1>Saved posts</h1></div><section class="social-empty">Loading saved posts…</section>',{right:false});
+  try {
     const loaded=await getSavedCommunityPosts(state.mode,state.user.uid,state.posts);
     reactionState.saved=new Set(loaded.savedIds||[]);
-    const model=buildSavedCommunityModel({
-      posts:loaded.posts,
-      referenceCount:loaded.referenceCount,
-      staleCount:loaded.staleCount
-    });
-
-    const section=(title,eyebrow,posts,description)=>posts.length ? `<section class="saved24-section">
-      <header class="saved24-section-head">
-        <div><span class="opportunity-kicker">${escapeHTML(eyebrow)}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)}</p></div>
-        <span>${posts.length}</span>
-      </header>
-      <div class="saved24-list">${posts.map(postCard).join('')}</div>
-    </section>` : '';
-
-    const content=`${demoBanner()}
-      <div class="saved24-page">
-        <section class="saved24-hero">
-          <div>
-            <span class="opportunity-kicker">PRIVATE COMMUNITY LIBRARY</span>
-            <h1>Keep useful Community posts without losing them in the feed.</h1>
-            <p>Save public discussions, Success stories and Journey stories for your own later review. Your saved list is private account data and is separate from saved opportunities.</p>
-            <div class="saved24-hero-actions">
-              <button class="btn btn-primary" type="button" data-route="explore">${icon('compass',17)} Explore Community</button>
-              <button class="btn btn-secondary" type="button" data-route="journeys">Saved opportunities & Journeys</button>
-            </div>
-          </div>
-          <aside class="saved24-scope">
-            <span>WHAT SAVING MEANS</span>
-            <div><b>Private to your account</b><small>${escapeHTML(model.privacyNote)}</small></div>
-            <div><b>Separate from applications</b><small>${escapeHTML(model.distinctionNote)}</small></div>
-            <div><b>Public content can change</b><small>If a post is hidden or deleted later, Tefsen will not expose it just because you saved it earlier.</small></div>
-          </aside>
-        </section>
-
-        <section class="saved24-stats" aria-label="Saved Community summary">
-          <article><strong>${model.counts.saved}</strong><span>Available saved posts</span></article>
-          <article><strong>${model.counts.discussions}</strong><span>Discussions</span></article>
-          <article><strong>${model.counts.successStories}</strong><span>Success stories</span></article>
-          <article><strong>${model.counts.journeyStories}</strong><span>Journey stories</span></article>
-        </section>
-
-        ${model.staleCount ? `<section class="saved24-unavailable">${icon('info',16)}<span>${model.staleCount} saved reference${model.staleCount===1?' is':'s are'} unavailable because the post no longer resolves as public content.</span></section>` : ''}
-
-        ${model.empty ? `<section class="saved24-empty">
-          <div>${icon('bookmark',25)}</div>
-          <h2>No saved Community posts yet</h2>
-          <p>Use Save on a useful public discussion, Success story or Journey story. Saved Opportunities remain in your separate Journey workspace.</p>
-          <button class="btn btn-primary" type="button" data-route="explore">Find useful Community posts</button>
-        </section>` : `
-          ${section('Saved discussions','LEARNING & QUESTIONS',model.discussions,'Public discussions you chose to keep for later review.')}
-          ${section('Saved student outcomes','STUDENT EXPERIENCES',model.outcomes,'Success and Journey stories add context, but they do not replace official provider information.')}
-        `}
-      </div>`;
-
-    renderShell(content,{wide:true,right:false});
-  }catch(error){
+    const posts=loaded.posts||[];
+    renderShell(`${demoBanner()}<section class="social-saved"><div class="social-section-heading"><h1>Saved posts</h1></div><p class="social-subtle">Your saved public posts are private to your account.</p><div class="social-feed-list">${posts.length?posts.map(postCard).join(''):`<div class="social-empty"><div>${icon('bookmark',27)}</div><h2>No saved posts yet.</h2><p>Save useful public thoughts to find them again.</p><button class="social-secondary" type="button" data-route="home">Explore posts</button></div>`}</div></section>`,{right:false});
+  } catch(error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Saved Community unavailable','Please try again.')}`,{wide:true,right:false});
+    renderShell('<section class="social-empty"><h2>Saved posts unavailable</h2><p>Please try again later.</p></section>',{right:false});
   }
 }
-
 async function renderExplore() {
   renderShell(`<div class="community15-page"><section class="community15-hero loading"><div><span class="opportunity-kicker">STUDENT COMMUNITY</span><h1>Loading useful discussions…</h1><p>Preparing public discussions, communities and student outcomes.</p></div></section></div>`, { wide:true, right:false });
   try {
@@ -3512,94 +3457,14 @@ async function renderProfile(userId = '') {
   renderShell(content,{right:false});
 }
 async function renderSubscription() {
-  const p = state.profile || {};
-  const policy = getWebPostingPolicy(p, { admin:adminCapability });
-  let usage = { textPosts: 0, imagePosts: 0 };
-  try { usage = await getDailyPostUsage(state.mode, state.user.uid); } catch { /* keep page available */ }
-
-  const isAdmin = Boolean(policy.admin);
-  const isPlus = Boolean(policy.subscribed) && !isAdmin;
-  const planName = isAdmin ? 'Admin Full Access' : (isPlus ? 'Tefsen Student Plus' : 'Free Student');
-  const planEyebrow = isAdmin ? 'TEFSEN ADMIN' : (isPlus ? 'ACTIVE MEMBERSHIP' : 'STUDENT MEMBERSHIP');
-  const planDescription = isAdmin
-    ? 'Complete web access with no student posting quota.'
-    : isPlus
-      ? 'Your premium student limits are active on this Tefsen account.'
-      : 'Learn, ask and share for free — upgrade when you need more image publishing power.';
-  const price = isAdmin
-    ? `<div class="lux-access-token">${icon('check',18)} Full access</div>`
-    : `<div class="lux-price"><strong>Google Play</strong><span>price & offers</span></div>`;
-  const primaryAction = isAdmin
-    ? `<button class="btn lux-primary" type="button" data-route="settings">Open admin settings</button>`
-    : isPlus
-      ? `<a class="btn lux-primary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage in Google Play</a>`
-      : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Get Student Plus</a>`;
-
-  const imageLimitText = Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} / day` : 'Unlimited';
-  const textLimitText = Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} / day` : 'Unlimited';
-  const imageProgress = Number.isFinite(policy.dailyImagePosts) && policy.dailyImagePosts > 0 ? Math.min(100, Math.round((usage.imagePosts / policy.dailyImagePosts) * 100)) : 0;
-  const textProgress = Number.isFinite(policy.dailyTextPosts) && policy.dailyTextPosts > 0 ? Math.min(100, Math.round((usage.textPosts / policy.dailyTextPosts) * 100)) : 0;
-
-  const content = `${demoBanner()}
-    <div class="subscription-luxury-page">
-      <header class="subscription-luxury-head">
-        <div><span class="lux-overline">TEFSEN MEMBERSHIP</span><h1>Study with fewer limits.</h1><p>A refined membership experience for students who publish, explain and contribute more.</p></div>
-        <div class="lux-secure-note">${icon('check',16)} Same Tefsen account</div>
-      </header>
-
-      <section class="lux-plan-hero ${isAdmin ? 'is-admin' : ''} ${isPlus ? 'is-plus' : ''}">
-        <div class="lux-glow lux-glow-a"></div><div class="lux-glow lux-glow-b"></div>
-        <div class="lux-plan-content">
-          <span class="lux-plan-eyebrow">${planEyebrow}</span>
-          <h2>${planName}</h2>
-          <p>${planDescription}</p>
-          <div class="lux-plan-actions">${primaryAction}<button class="btn lux-secondary" type="button" data-sync-subscription>${icon('check',17)} Sync status</button></div>
-        </div>
-        <div class="lux-plan-price">${price}<small>${isAdmin ? 'Administrative account' : 'Google Play billing'}</small></div>
-      </section>
-
-      <div class="lux-usage-grid">
-        <section class="lux-usage-card">
-          <div class="lux-icon-orb">${icon('image',20)}</div>
-          <div class="lux-usage-top"><span>Image posts</span><strong>${imageLimitText}</strong></div>
-          <p>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post · ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total</p>
-          <div class="lux-meter"><i style="width:${imageProgress}%"></i></div>
-          <small>Today ${usage.imagePosts}${Number.isFinite(policy.dailyImagePosts) ? ` of ${policy.dailyImagePosts}` : ''}</small>
-        </section>
-        <section class="lux-usage-card">
-          <div class="lux-icon-orb">${icon('message',20)}</div>
-          <div class="lux-usage-top"><span>Text posts</span><strong>${textLimitText}</strong></div>
-          <p>Questions and knowledge posts without images.</p>
-          <div class="lux-meter"><i style="width:${textProgress}%"></i></div>
-          <small>Today ${usage.textPosts}${Number.isFinite(policy.dailyTextPosts) ? ` of ${policy.dailyTextPosts}` : ''}</small>
-        </section>
-      </div>
-
-      <section class="lux-compare-section">
-        <div class="lux-section-title"><span>MEMBERSHIP DETAILS</span><h2>Choose the pace that fits you.</h2></div>
-        <div class="lux-compare-grid">
-          <article class="lux-plan-card ${!isPlus && !isAdmin ? 'is-current' : ''}">
-            <div><span class="lux-card-kicker">FREE</span><h3>Free Student</h3><p>Essential access for everyday learning.</p></div>
-            <ul><li>${icon('check',16)} 20 text posts per day</li><li>${icon('check',16)} 2 image posts per day</li><li>${icon('check',16)} 1 image per post</li><li>${icon('check',16)} Up to 2 MB total</li></ul>
-            ${!isPlus && !isAdmin ? '<span class="lux-current-pill">Current plan</span>' : ''}
-          </article>
-          <article class="lux-plan-card lux-plan-card-plus ${isPlus ? 'is-current' : ''}">
-            <div><span class="lux-card-kicker">STUDENT PLUS</span><h3>Student Plus <small>Price shown in Google Play</small></h3><p>Designed for students who contribute more. Exact price, taxes and promotional eligibility are shown by Google Play for your account and region.</p></div>
-            <ul><li>${icon('check',16)} Unlimited text posts</li><li>${icon('check',16)} 6 image posts per day</li><li>${icon('check',16)} 2 images per post</li><li>${icon('check',16)} Up to 6 MB total</li></ul>
-            ${isPlus ? '<span class="lux-current-pill">Active plan</span>' : `<a class="lux-card-cta" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Upgrade with Google Play →</a>`}
-          </article>
-        </div>
-      </section>
-
-      <section class="lux-billing-card">
-        <div class="lux-billing-mark">G</div>
-        <div><span class="lux-card-kicker">GOOGLE PLAY</span><h3>Billing stays with your Android subscription.</h3><p>Purchase or manage Student Plus through the Tefsen Android app, then sync the same Tefsen account here. Google Play is the authority for current price, taxes, trial or promotional eligibility, renewal and cancellation terms.</p></div>
-        ${isAdmin ? '' : (isPlus ? `<a class="btn lux-secondary" href="${GOOGLE_PLAY_SUBSCRIPTIONS_URL}" target="_blank" rel="noopener noreferrer">Manage subscription</a>` : `<a class="btn lux-primary" href="${GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">Open Google Play</a>`)}
-      </section>
-    </div>`;
-  renderShell(content, { wide: true });
+  const policy=getWebPostingPolicy(state.profile||{},{admin:adminCapability});
+  let usage={textPosts:0};
+  try{usage=await getDailyPostUsage(state.mode,state.user.uid)}catch{}
+  const isPlus=policy.subscribed===true;
+  const limit=Number.isFinite(policy.dailyTextPosts)?String(policy.dailyTextPosts):'Unlimited';
+  const content=`${demoBanner()}<section class="social-subscription"><div class="social-section-heading"><h1>Student Plus</h1></div><div class="social-plan"><span class="social-plan-kicker">OPTIONAL MEMBERSHIP</span><h2>${isPlus?'Your Student Plus is active':'More room for your ideas.'}</h2><p>Tefsen is a public text-first community. Your current plan allows ${limit} text posts per day.</p><div class="social-plan-metrics"><span><strong>${usage.textPosts||0}</strong> Text posts today</span><span><strong>${limit}</strong> Daily text-post allowance</span></div><p>Posting is public. There are no private chats, calls or post-image attachments in this web composer.</p><a class="social-plan-action" href="${isPlus?GOOGLE_PLAY_SUBSCRIPTIONS_URL:GOOGLE_PLAY_APP_URL}" target="_blank" rel="noopener noreferrer">${isPlus?'Manage on Google Play':'View Student Plus on Google Play'}</a><small>Current pricing and subscription terms are shown by Google Play. No purchase is made on this page.</small></div></section>`;
+  renderShell(content,{right:false});
 }
-
 function settingsToggleMarkup(key, checked, label) {
   return `<button class="settings25-toggle ${checked ? 'active' : ''}" type="button" data-settings-toggle="${key}" aria-label="${escapeHTML(label)}" aria-pressed="${checked}"></button>`;
 }
@@ -3992,103 +3857,21 @@ function global20DiscoveryMarkup(model) {
 async function renderSearch(term = '') {
   const query=String(term||'').trim().slice(0,120);
   state.searchQuery=query;
-
-  renderShell(`<div class="global20-page"><section class="global20-hero loading"><span class="opportunity-kicker">PUBLIC SEARCH</span><h1>${query ? `Searching for “${escapeHTML(query)}”` : 'Search Tefsen'}</h1><p>Checking public student, Community and opportunity records without exposing private account data.</p></section></div>`,{wide:true,right:false});
-
-  try{
-    let rawSearch={users:[],posts:[],coverage:{people:{scanned:0,limit:0,complete:true},community:{scanned:0,limit:0,complete:true}}};
-    let opportunitySearch={items:[],coverage:{scanned:0,limit:0,complete:true}};
-
-    if(query){
-      [rawSearch,opportunitySearch]=await Promise.all([
-        searchAll(state.mode,query),
-        getOpportunitySearchCorpus(state.mode)
-      ]);
-    }else{
-      const opportunities=await getOpportunities(state.mode).catch(()=>[]);
-      opportunitySearch={items:opportunities,coverage:{scanned:opportunities.length,limit:opportunities.length,complete:true}};
-    }
-
-    const publicPosts=query
-      ? mergeSearchPublicPosts(state.posts,rawSearch.posts)
-      : mergeSearchPublicPosts(state.posts);
-
-    currentSearch=buildGlobalSearchModel({
-      term:query,
-      users:rawSearch.users,
-      posts:publicPosts,
-      opportunities:opportunitySearch.items,
-      coverage:{
-        people:rawSearch.coverage?.people,
-        community:rawSearch.coverage?.community,
-        opportunities:opportunitySearch.coverage
-      }
-    });
-
-    const countItems=query ? [
-      ['All',currentSearch.counts.all],
-      ['People',currentSearch.counts.people],
-      ['Community',currentSearch.counts.community],
-      ['Opportunities',currentSearch.counts.opportunities],
-      ['Subjects',currentSearch.counts.subjects],
-      ['Universities',currentSearch.counts.universities],
-      ['Intakes',currentSearch.counts.intakes]
-    ] : [];
-
-    const emptyTitle=currentSearch.coverage?.complete
-      ? `No public matches for “${escapeHTML(query)}”`
-      : `No match found in the current search coverage for “${escapeHTML(query)}”`;
-    const emptyCopy=currentSearch.coverage?.complete
-      ? 'Try a broader subject, university, country, scholarship name, program, student name or intake.'
-      : 'This search window is bounded, so a matching public record may exist outside the records checked. Try a more specific name, username, university or opportunity title.';
-
-    const content=`${demoBanner()}
-      <div class="global20-page">
-        <section class="global20-hero">
-          <div>
-            <span class="opportunity-kicker">PUBLIC SEARCH</span>
-            <h1>${query ? `Results for “${escapeHTML(query)}”` : 'Find the right public place to continue'}</h1>
-            <p>Search public student profiles, discussions, Success and Journey stories, public opportunity records, subjects, universities and intake spaces. Private Passport, Journey and account data are never part of this search.</p>
-            <form class="global20-search-form" data-global-search-form>
-              <input class="input" name="q" maxlength="120" value="${escapeHTML(query)}" placeholder="Try Computer Science, scholarship, university, student name…" aria-label="Search public Tefsen data">
-              <button class="btn btn-primary" type="submit">${icon('search',17)} Search</button>
-            </form>
-          </div>
-          <aside class="global20-scope">
-            <span>WHAT SEARCH INCLUDES</span>
-            <div><b>Public student context</b><small>Public profile identity and published Community content only.</small></div>
-            <div><b>Opportunity discovery</b><small>Public opportunity metadata with official-source trust boundaries.</small></div>
-            <div><b>Honest coverage</b><small>Search tells you when a result window is bounded instead of presenting partial results as a complete global index.</small></div>
-          </aside>
-        </section>
-
-        ${query ? `<section class="global29-coverage ${currentSearch.coverage.complete?'complete':'partial'}">
-          <div>${icon(currentSearch.coverage.complete?'check':'info',17)}<span><b>${currentSearch.coverage.complete?'Complete current corpus':'Bounded search coverage'}</b><small>${escapeHTML(currentSearch.coverage.note)}</small></span></div>
-          <span class="global29-count-label">${escapeHTML(currentSearch.countLabel)}</span>
-        </section>
-        <section class="global20-counts" aria-label="Matches found in current search coverage">${countItems.map(([label,value])=>`<article><strong>${value}</strong><span>${label}</span></article>`).join('')}</section>` : ''}
-
-        ${query ? `
-          <section class="global20-ranking-note">${icon('info',16)}<span>${escapeHTML(currentSearch.rankingNote)}</span></section>
-          ${currentSearch.empty ? `<section class="global20-empty"><div>${icon('search',24)}</div><h2>${emptyTitle}</h2><p>${emptyCopy}</p><button class="btn btn-secondary" type="button" data-route="search">Clear search</button></section>` : `
-            ${global20Section('Best matching public results','TOP MATCHES',currentSearch.top,'A mixed view across the records checked. Result order is deterministic text matching, not a recommendation or quality score.')}
-            ${global20Section('People','PUBLIC STUDENTS',currentSearch.people,'Only public profile fields are shown here. Counts are matches found in the current search coverage.')}
-            ${global20Section('Community posts and stories','PUBLIC COMMUNITY',currentSearch.community,'Published discussions and student-shared Success/Journey stories in the current search coverage.')}
-            ${global20Section('Opportunities','OFFICIAL-SOURCE DISCOVERY',currentSearch.opportunities,'Open each result to verify eligibility, deadline and application details on the official provider source.')}
-            ${global20Section('Subject spaces','LEARNING COMMUNITIES',currentSearch.subjects)}
-            ${global20Section('University spaces','STUDENT CONTEXT',currentSearch.universities,'These are student community spaces derived from the public records checked, not official university channels.')}
-            ${global20Section('Intake spaces','INTAKE CONTEXT',currentSearch.intakes,'Intake pages show public student context and exact intake-linked data where available.')}
-          `}`
-          : global20DiscoveryMarkup(currentSearch)}
-      </div>`;
-
-    renderShell(content,{wide:true,right:false});
-  }catch(error){
+  renderShell(`<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Searching available public posts and profiles only.</p></section>`,{right:false});
+  if(!query)return;
+  try {
+    const loaded=await searchAll(state.mode,query);
+    const words=query.toLowerCase();
+    const users=(loaded.users||[]).filter(u=>[u.fullName,u.displayName,u.username,u.bio].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,20);
+    const posts=mergeSearchPublicPosts(state.posts,loaded.posts).filter(p=>[p.title,p.content,p.authorName].some(s=>String(s||'').toLowerCase().includes(words))).slice(0,50);
+    const people=users.map(p=>`<button class="social-person-row" data-route="profile/${encodeURIComponent(p.uid||p.id||'')}" type="button">${avatar(p,'sm')}<span><strong>${escapeHTML(p.fullName||p.displayName||'Tefsen member')}</strong><small>${escapeHTML(p.username?'@'+p.username:'Public profile')}</small></span>${icon('chevron-right',19)}</button>`).join('');
+    const markup=`${demoBanner()}<section class="social-search"><div class="social-section-heading"><h1>Search</h1></div><form class="social-search-form" data-global-search-form><input class="input" name="q" value="${escapeHTML(query)}" maxlength="120" placeholder="Search public posts and people…" aria-label="Search people and posts"><button class="social-secondary" type="submit">Search</button></form><p class="social-subtle">Results from the available public search window. More public posts or profiles may exist beyond it.</p>${people?`<h2>People</h2><div class="social-people">${people}</div>`:''}<h2>Posts</h2><div class="social-feed-list">${posts.length?posts.map(postCard).join(''):`<div class="social-empty"><h2>No matching public posts</h2><p>Try another keyword or name.</p></div>`}</div></section>`;
+    renderShell(markup,{right:false});
+  } catch(error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Search unavailable','Tefsen could not safely load the public search corpus. Please try again.')}`,{wide:true,right:false});
+    renderShell('<section class="social-empty"><h2>Search unavailable</h2><p>Please try again later.</p></section>',{right:false});
   }
 }
-
 function renderRoute() {
   if (!state.user) return;
   const [route, param, param2] = routeParts();
@@ -4098,19 +3881,15 @@ function renderRoute() {
   if (stopComments && route !== 'post') { stopComments(); stopComments = null; }
   switch (route || 'home') {
     case 'home': renderHome(); break;
-    case 'opportunities': renderOpportunities(); break;
-    case 'passport': renderStudentPassport(); break;
-    case 'journeys': renderJourneys(); break;
-    case 'journey': renderJourneyDetail(param || ''); break;
-    case 'opportunity': renderOpportunityDetail(param || ''); break;
-    case 'explore': renderExplore(); break;
-    case 'subject': renderSubjectCommunity(param || 'General'); break;
-    case 'university': renderUniversityCommunity(param || ''); break;
-    case 'intake': renderIntakeCommunity(param || '', param2 || ''); break;
+    // Legacy education-dashboard routes are kept only as safe redirects;
+    // the text-first social product is the supported Web navigation.
+    case 'opportunities': case 'passport': case 'journeys': case 'journey':
+    case 'opportunity': case 'explore': case 'subject': case 'university': case 'intake':
+      go('home'); break;
     case 'saved': renderSavedCommunity(); break;
     case 'notifications': renderNotifications(); break;
-    case 'messages': renderPrivateMessagingUnavailable(); break;
-    case 'leaderboard': renderLeaderboardRetired(); break;
+    case 'messages': go('home'); break;
+    case 'leaderboard': go('home'); break;
     case 'profile': renderProfile(param || ''); break;
     case 'settings': {
       const allowedSettingsTabs = new Set(['overview','preferences','notifications','privacy','security']);
