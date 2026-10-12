@@ -383,7 +383,7 @@ async function handleAuthChange(user) {
       toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
       renderRoute();
     });
-    if (!location.hash || location.hash === '#/') go(shouldShowPassportOnboarding(passport) ? 'passport' : 'home'); else renderRoute();
+    if (!location.hash || location.hash === '#/') go('home'); else renderRoute();
   } catch (error) {
     console.error(error);
     toast(humanError(error), 'error');
@@ -402,16 +402,16 @@ function renderAuth(mode = 'login') {
       <section class="auth-art">
         <a class="auth-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
         <div class="auth-message">
-          <h1>Find your path.<br><span>Build your future.</span></h1>
-          <p>Discover student opportunities, understand requirements, prepare your application journey, and learn from students moving toward similar goals.</p>
+          <h1>Your thoughts.<br><span>Your community.</span></h1>
+          <p>Share public text posts, learn from different experiences and connect through thoughtful conversations.</p>
         </div>
-        <div class="auth-proof"><span>✓ Student focused</span><span>✓ Opportunity driven</span><span>✓ Private journey tools</span></div>
+        <div class="auth-proof"><span>✓ Public conversations</span><span>✓ Text-first</span><span>✓ No private messaging</span></div>
       </section>
       <section class="auth-panel">
         <div class="auth-card">
           ${state.mode === 'demo' ? `<div class="demo-banner"><span><b>Preview mode:</b> Firebase is not connected yet.</span><a href="#" data-demo-info>Setup</a></div>` : ''}
           <h2>${isRegister ? 'Create your account' : 'Welcome back'}</h2>
-          <p>${isRegister ? 'Build your Student Passport and start finding opportunities that fit your goals.' : 'Sign in to continue to Tefsen Web.'}</p>
+          <p>${isRegister ? 'Create an account to share your ideas with the Tefsen community.' : 'Sign in to read and share public posts.'}</p>
           <form class="form-grid" data-auth-form="${isRegister ? 'register' : 'login'}">
             ${isRegister ? `<div class="field"><label for="fullName">Full name</label><input class="input" id="fullName" name="fullName" autocomplete="name" required maxlength="80"></div>` : ''}
             <div class="field"><label for="email">Email</label><input class="input" id="email" name="email" type="email" autocomplete="email" required></div>
@@ -438,57 +438,53 @@ function demoBanner() {
 function renderShell(content, options = {}) {
   const route = currentRoute();
   const p = state.profile || {};
-  const rightContent = options.right === false ? '' : renderRightbar();
   root.innerHTML = `
-    <div class="app-shell">
-      <header class="topbar">
-        <a class="topbar-brand" href="../"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></a>
+    <div class="app-shell tefsen-text-social">
+      <header class="topbar social-topbar">
+        <button class="topbar-brand social-brand" type="button" data-route="home" aria-label="Tefsen home">
+          <img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span>
+        </button>
         <div class="topbar-center">
-          <form class="global-search" data-global-search-form>
-            <span class="mobile-top-brand"><img src="assets/tefsen-logo.png" alt=""><span>Tefsen</span></span>
+          <form class="global-search" data-global-search-form role="search">
             <span class="search-icon">${icon('search',18)}</span>
-            <input name="q" value="${escapeHTML(state.searchQuery)}" placeholder="Search students, stories and community…" aria-label="Search Tefsen" aria-keyshortcuts="Control+K Meta+K">
-            <span class="search-kbd" aria-hidden="true">Ctrl/⌘ K</span>
+            <input name="q" value="${escapeHTML(state.searchQuery || '')}" placeholder="Search posts and people…" aria-label="Search Tefsen" autocomplete="off">
           </form>
         </div>
         <div class="topbar-actions">
+          <button class="icon-button social-search-trigger" type="button" data-route="search" aria-label="Search">${icon('search',22)}</button>
           ${quickThemeButtonMarkup()}
-          <button class="icon-button hide-small" type="button" data-route="notifications" aria-label="Notifications">${icon('bell',19)}${state.unreadCount ? `<span class="badge-dot">${Math.min(state.unreadCount, 99)}</span>` : ''}</button>
-          <button class="top-avatar" type="button" data-profile-menu aria-label="Open account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}"><span class="top-avatar-fallback">${escapeHTML(initials(p.fullName || 'TU'))}</span>${safeUrl(p.photoUrl || '') ? `<img src="${safeUrl(p.photoUrl)}" alt="${escapeHTML(p.fullName || 'Profile')}" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</button>
+          <button class="icon-button social-settings-trigger" type="button" data-route="settings" aria-label="Settings">${icon('settings',20)}</button>
+          <button class="top-avatar" type="button" data-profile-menu aria-label="Account menu" aria-haspopup="menu" aria-expanded="${state.ui.profileMenu ? 'true' : 'false'}">${avatar(p,'sm')}</button>
         </div>
       </header>
-
-      <aside class="sidebar">
-        <nav class="nav-list" aria-label="Tefsen navigation">
-          ${navItems.filter(([id]) => ['home','opportunities','passport','journeys','explore'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}
+      <aside class="sidebar social-sidebar">
+        <nav class="nav-list" aria-label="Main navigation">
+          ${navButton('home','Home','home',route)}
+          <button class="nav-item" type="button" data-action="compose"><span class="nav-icon">${icon('edit',20)}</span><span>Post</span></button>
+          ${navButton('notifications','Alerts','bell',route)}
+          ${navButton('profile','Profile','user',route)}
         </nav>
-        <div class="nav-divider"></div>
-        <div class="sidebar-cta"><button class="btn btn-primary btn-block" data-route="opportunities">${icon('compass',18)} Find opportunities</button></div>
-        <nav class="nav-list" aria-label="Account and saved navigation">
-          ${navItems.filter(([id]) => ['saved','notifications','profile','settings'].includes(id)).map(([id,label,ic]) => navButton(id,label,ic,route)).join('')}${adminCapability ? navButton('admin','Admin review','settings',route) : ''}
-        </nav>
-        <button class="sidebar-profile" type="button" data-route="profile">
-          ${avatar(p,'sm')}
-          <span style="min-width:0;text-align:left"><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(normalizeRole(p.role || 'Student'))}</small></span>
-        </button>
+        <button class="social-sidebar-compose" type="button" data-action="compose">${icon('plus',18)} Create post</button>
+        <div class="social-sidebar-footer">
+          <button type="button" data-route="saved">${icon('bookmark',16)} Saved posts</button>
+          <button type="button" data-route="settings">${icon('settings',16)} Settings</button>
+          ${adminCapability ? '<button type="button" data-route="admin">Moderation</button>' : ''}
+          <a href="../privacy-policy/">Privacy</a><a href="../child-safety/">Safety</a>
+        </div>
       </aside>
-
-      ${rightContent ? `<aside class="rightbar">${rightContent}</aside>` : ''}
-
-      <main id="app-main" class="main-area" tabindex="-1"><div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div></main>
-
-      <nav class="mobile-bottom" aria-label="Mobile navigation">
-        ${mobileNavButton('home','home',route,'Home')}
-        ${mobileNavButton('opportunities','compass',route,'Opportunities')}
-        ${mobileNavButton('passport','user',route,'Student Passport')}
-        ${mobileNavButton('journeys','check',route,'Journey')}
-        ${mobileNavButton('explore','compass',route,'Community')}
+      <main id="app-main" class="main-area social-main" tabindex="-1">
+        <div class="content-wrap ${options.wide ? 'wide' : ''}">${content}</div>
+      </main>
+      <nav class="mobile-bottom social-mobile-nav" aria-label="Mobile navigation">
+        <button class="${route === 'home' ? 'active' : ''}" type="button" data-route="home" aria-label="Home" ${route === 'home' ? 'aria-current="page"' : ''}>${icon('home',22)}<span>Home</span></button>
+        <button type="button" data-action="compose" aria-label="Create post">${icon('edit',22)}<span>Post</span></button>
+        <button class="${route === 'notifications' ? 'active' : ''}" type="button" data-route="notifications" aria-label="Alerts" ${route === 'notifications' ? 'aria-current="page"' : ''}>${icon('bell',22)}<span>Alerts</span>${state.unreadCount ? `<small>${Math.min(99,state.unreadCount)}</small>` : ''}</button>
+        <button class="${route === 'profile' ? 'active' : ''}" type="button" data-route="profile" aria-label="Profile" ${route === 'profile' ? 'aria-current="page"' : ''}>${icon('user',22)}<span>Profile</span></button>
       </nav>
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
   normalizeRenderedAccessibility(root);
 }
-
 function navButton(id, label, ic, route) {
   const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
   return `<button class="nav-item ${active ? 'active' : ''}" type="button" data-route="${id}"${active ? ' aria-current="page"' : ''}><span class="nav-icon">${icon(ic,20)}</span><span>${escapeHTML(label)}</span>${id === 'notifications' && state.unreadCount ? `<span class="badge-dot" style="position:static;margin-left:auto;border:0">${Math.min(99,state.unreadCount)}</span>` : ''}</button>`;
@@ -501,31 +497,18 @@ function mobileNavButton(id, ic, route, label) {
 
 function renderProfileDropdown() {
   const p = state.profile || {};
-  const rawRole = String(p.role || 'Student');
-  const isAdmin = adminCapability === true;
-  const role = isAdmin ? 'Admin' : (rawRole.trim().toLowerCase() === 'admin' ? 'Student' : normalizeRole(rawRole));
-  const plan = isAdmin ? 'Admin Full Access' : (p.subscriptionActive ? 'Student Plus' : 'Free Student');
   return `<div class="profile-menu-backdrop" data-profile-menu-dismiss aria-hidden="true"></div>
-    <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Tefsen account menu">
-      <div class="dropdown-user dropdown-user-premium">
-        ${avatar(p,'sm')}
-        <div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>${escapeHTML(role)} · ${escapeHTML(plan)}</small></div>
-      </div>
-      <div class="dropdown-plan-chip">${isAdmin ? icon('check',15) : icon('info',15)} <span>${escapeHTML(plan)}</span></div>
+    <section class="dropdown profile-dropdown" data-dropdown role="menu" aria-label="Account menu">
+      <div class="dropdown-user">${avatar(p,'sm')}<div><b>${escapeHTML(p.fullName || 'Tefsen User')}</b><small>Public text community</small></div></div>
+      <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>Your profile</span></button>
+      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved posts</span></button>
+      <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Student Plus</span></button>
+      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings and privacy</span></button>
+      ${adminCapability ? `<button type="button" data-route="admin" role="menuitem">${icon('check',17)} Moderation</button>` : ''}
       <div class="dropdown-separator"></div>
-      <button type="button" data-route="profile" role="menuitem">${icon('user',17)} <span>View profile</span><small>Public profile and posts</small></button>
-      <button type="button" data-route="subscription" role="menuitem">${icon('info',17)} <span>Subscription</span><small>Plan, limits and billing</small></button>
-      <button type="button" data-route="explore" role="menuitem">${icon('compass',17)} <span>Community</span><small>Subjects, universities and outcomes</small></button>
-      <button type="button" data-route="saved" role="menuitem">${icon('bookmark',17)} <span>Saved community posts</span><small>Discussions and student stories you saved</small></button>
-      <button type="button" data-route="journeys" role="menuitem">${icon('check',17)} <span>Application journey</span><small>Saved opportunities, tasks and progress</small></button>
-      <button type="button" data-route="notifications" role="menuitem">${icon('bell',17)} <span>Notifications</span><small>Replies and account activity</small></button>
-      <button type="button" data-route="settings" role="menuitem">${icon('settings',17)} <span>Settings</span><small>Account, privacy and preferences</small></button>
-      ${adminCapability ? `<button type="button" data-route="admin" role="menuitem">${icon('check',17)} <span>Admin review</span><small>Verify and manage opportunities</small></button>` : ''}
-      <div class="dropdown-separator"></div>
-      <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} <span>Sign out</span></button>
+      <button type="button" class="dropdown-danger" data-logout role="menuitem">${icon('logout',17)} Sign out</button>
     </section>`;
 }
-
 function syncProfileMenu() {
   document.querySelectorAll('.profile-menu-backdrop, .profile-dropdown').forEach(el => el.remove());
   const trigger = document.querySelector('[data-profile-menu]');
@@ -607,242 +590,46 @@ function structuredPostMarkup(post) {
 function postCard(post) {
   const liked = reactionState.liked.has(post.id);
   const saved = reactionState.saved.has(post.id);
-  const displayTitle = post.title || (post.content ? post.content.slice(0,110) : 'Untitled discussion');
-  return `<article class="panel post-card" data-post-id="${escapeHTML(post.id)}">
+  const title = String(post.title || '').trim();
+  const body = String(post.content || '').trim();
+  const showTitle = Boolean(title && (body !== title && !body.startsWith(title)));
+  return `<article class="panel post-card social-post-card" data-post-id="${escapeHTML(post.id)}">
     <header class="post-head">
-      <button style="border:0;background:none;padding:0;cursor:pointer" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({ fullName: post.authorName, photoUrl: post.authorPhotoUrl }, '', '')}</button>
-      <div class="post-head-main"><button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified, post.role)}</b></button><small>${rolePill(post.role)} &nbsp; ${relativeTime(post.createdAt)}</small></div>
+      <button class="social-avatar-button" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}">${avatar({fullName:post.authorName,photoUrl:post.authorPhotoUrl})}</button>
+      <div class="post-head-main">
+        <button class="user-name-link" type="button" data-route="profile/${encodeURIComponent(post.authorId || '')}"><b>${escapeHTML(post.authorName || 'Tefsen User')} ${verifiedMark(post.verified,post.role)}</b></button>
+        <small>${relativeTime(post.createdAt)} · Public post</small>
+      </div>
       <button class="post-menu" type="button" data-post-menu="${escapeHTML(post.id)}" aria-label="Post options">${icon('more',20)}</button>
     </header>
-    <div class="post-body" data-route="post/${encodeURIComponent(post.id)}">
-      ${structuredPostMarkup(post)}
-      <span class="post-subject">${escapeHTML(post.subject || 'General')}</span>
-      <h3>${escapeHTML(displayTitle)}</h3>
-      ${post.content && post.content !== post.title ? `<p>${nl2br(post.content.length > 460 ? post.content.slice(0,460) + '…' : post.content)}</p>` : ''}
-      ${post.imageUrls?.length ? `<div class="post-image-grid ${post.imageUrls.length > 1 ? 'two' : 'one'}">${post.imageUrls.slice(0,2).map((url,i)=>`<img class="post-image" src="${safeUrl(url)}" alt="Post image ${i+1}" loading="lazy" decoding="async">`).join('')}</div>` : (post.imageUrl ? `<img class="post-image" src="${safeUrl(post.imageUrl)}" alt="Post image" loading="lazy" decoding="async">` : '')}
-      ${post.tags?.length ? `<div class="tag-row">${post.tags.slice(0,6).map(t => `<span class="tag">#${escapeHTML(t)}</span>`).join('')}</div>` : ''}
+    <div class="post-body" data-route="post/${encodeURIComponent(post.id)}" role="link" tabindex="0" aria-label="Read post">
+      ${showTitle ? `<h3>${escapeHTML(title)}</h3>` : ''}
+      <p>${nl2br((body || title).slice(0,620))}${(body || title).length > 620 ? '…' : ''}</p>
+      ${(body || title).length > 620 ? '<span class="social-read-more">Read more</span>' : ''}
     </div>
     <footer class="post-actions">
-      <button class="action-btn like ${liked ? 'active' : ''}" data-like="${escapeHTML(post.id)}" aria-label="Like post" aria-pressed="${liked}"><span class="action-icon">${icon('heart',17)}</span><span class="action-count">${formatCount(post.likeCount)}</span></button>
-      <button class="action-btn" data-route="post/${encodeURIComponent(post.id)}" aria-label="Open comments"><span class="action-icon">${icon('comment',17)}</span><span class="action-count">${formatCount(post.commentCount)}</span></button>
-      <button class="action-btn ${saved ? 'active' : ''}" data-save="${escapeHTML(post.id)}"><span>${icon('bookmark',17)}</span>${saved ? 'Saved' : 'Save'}</button>
-      <button class="action-btn" data-share="${escapeHTML(post.id)}"><span>${icon('share',17)}</span>Share</button>
+      <button class="action-btn like ${liked ? 'active' : ''}" data-like="${escapeHTML(post.id)}" aria-pressed="${liked}" aria-label="Like post">${icon('heart',21)}<span class="action-count">${formatCount(post.likeCount)}</span></button>
+      <button class="action-btn" data-route="post/${encodeURIComponent(post.id)}" aria-label="Read replies">${icon('comment',20)}<span class="action-count">${formatCount(post.commentCount)}</span></button>
+      <button class="action-btn ${saved ? 'active' : ''}" data-save="${escapeHTML(post.id)}" aria-label="${saved ? 'Remove saved post' : 'Save post'}">${icon('bookmark',21)}</button>
+      <button class="action-btn" data-share="${escapeHTML(post.id)}" aria-label="Share post">${icon('share',21)}</button>
     </footer>
   </article>`;
 }
-
 async function renderHome() {
-  renderShell(`<div class="home-v3"><section class="home-v3-hero loading"><div><span class="opportunity-kicker">YOUR STUDENT JOURNEY</span><h1>Preparing your next step…</h1><p>Loading Student Passport, opportunities and private Journey progress.</p></div></section></div>`, { wide:true, right:false });
-
-  try {
-    const [passport, opportunities, journeys] = await Promise.all([
-      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
-      getOpportunities(state.mode).catch(() => []),
-      listJourneyStates(state.mode, state.user.uid).catch(() => [])
-    ]);
-
-    currentStudentPassport = passport;
-    currentJourneyStates = new Map(journeys.map(row => [row.opportunityId, row]));
-
-    const passportDetails = studentPassportCompletionDetails(passport);
-    const ranked = opportunities
-      .map(item => {
-        const match = scoreOpportunityMatch(passport, item);
-        const matchView = opportunityMatchPresentation(match);
-        return {
-          item,
-          match,
-          matchView,
-          profileScore:matchView.score,
-          personalized:matchView.personalized
-        };
-      })
-      .sort((a,b) => (b.profileScore - a.profileScore) || (b.match.score - a.match.score));
-
-    const dashboard = buildHomeDashboardModel({
-      passport,
-      passportDetails,
-      rankedOpportunities:ranked,
-      journeys
-    });
-
-    const firstName = String(state.profile?.fullName || 'Student').trim().split(/\s+/)[0] || 'Student';
-    const successes = state.posts.filter(post => post.postType === 'success_story').slice(0,2);
-    const stateCopy = {
-      deadline:{ label:'DEADLINE FOCUS', title:'Protect the opportunity already on your path.' },
-      accepted:{ label:'ACCEPTED · NEXT STAGE', title:'Turn an acceptance into a prepared next chapter.' },
-      journey:{ label:'APPLICATION IN PROGRESS', title:'Keep your active application moving.' },
-      getting_started:{ label:'GETTING STARTED', title:'Build enough context for Tefsen to guide you.' },
-      saved:{ label:'SAVED OPPORTUNITY', title:'Turn interest into a preparation plan.' },
-      match:{ label:'PROFILE MATCH', title:'Review the strongest opportunity signal on your path.' },
-      discovery:{ label:'DISCOVERY', title:'Find a useful next opportunity.' }
-    };
-    const homeState = stateCopy[dashboard.state] || stateCopy.discovery;
-
-    const homeMatchCard = ({item,matchView}) => {
-      const deadline = opportunityDeadlinePresentation(item);
-      const matchLabel = matchView.personalized
-        ? `${matchView.score}% profile match`
-        : 'Complete Passport to personalize';
-      return `<button class="home-v3-match-card" type="button" data-route="opportunity/${encodeURIComponent(item.id)}">
-        <div class="home-v3-match-meta">
-          <span class="opportunity-funding-badge">${escapeHTML(item.fundingType || 'Funding varies')}</span>
-          <span class="opportunity-location-badge">${escapeHTML(item.country || 'Multiple / global')}</span>
-        </div>
-        <h3>${escapeHTML(item.title)}</h3>
-        <p>${escapeHTML(item.provider || item.university || 'Opportunity provider')}</p>
-        <div class="home-v3-match-foot">
-          <span class="${matchView.personalized ? 'personalized' : ''}">${escapeHTML(matchLabel)}</span>
-          <small class="${escapeHTML(deadline.tone)}">${escapeHTML(deadline.label)}</small>
-        </div>
-      </button>`;
-    };
-
-    const nearestMarkup = dashboard.nearestDeadline
-      ? `<section class="home-v3-focus-card">
-          <div class="home-v3-focus-icon">${icon('info',19)}</div>
-          <div>
-            <span>NEAREST SAVED DEADLINE</span>
-            <h3>${escapeHTML(dashboard.nearestDeadline.title)}</h3>
-            <p>${dashboard.nearestDeadline.days === 0 ? 'Deadline today' : `${dashboard.nearestDeadline.days} days remaining`}. Confirm the exact deadline on the official provider source.</p>
-          </div>
-          <button class="btn btn-secondary" type="button" data-route="${escapeHTML(dashboard.nearestDeadline.route)}">Open</button>
-        </section>`
-      : '';
-
-    const journeyFocus = dashboard.acceptedJourney
-      ? `<section class="home-v3-journey-empty accepted">
-          <span class="home-v3-mini-kicker">ACCEPTED OUTCOME</span>
-          <h3>Continue planning after acceptance.</h3>
-          <p>Your accepted Journey stays private. Use it to organize the next stage instead of treating acceptance as the end of the process.</p>
-          <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(dashboard.acceptedJourney.opportunityId)}">Open accepted Journey</button>
-        </section>`
-      : dashboard.activeJourney
-        ? (() => {
-            const row = dashboard.activeJourney;
-            const opportunity = opportunities.find(item => item.id === row.opportunityId);
-            const progress = journeyProgress(row);
-            return `<section class="home-v3-journey-empty active">
-              <span class="home-v3-mini-kicker">ACTIVE APPLICATION</span>
-              <h3>${escapeHTML(opportunity?.title || 'Application Journey')}</h3>
-              <p>${escapeHTML(JOURNEY_LABELS[row.status] || row.status)} · ${progress.completed}/${progress.total} preparation tasks complete.</p>
-              <div class="home-v3-inline-progress"><i style="width:${progress.percent}%"></i></div>
-              <button class="btn btn-primary" type="button" data-route="journey/${encodeURIComponent(row.opportunityId)}">Continue Journey</button>
-            </section>`;
-          })()
-        : dashboard.savedCount
-          ? `<section class="home-v3-journey-empty saved">
-              <span class="home-v3-mini-kicker">SAVED FOR LATER</span>
-              <h3>${dashboard.savedCount} saved opportunit${dashboard.savedCount === 1 ? 'y' : 'ies'} waiting for a decision.</h3>
-              <p>Review requirements and start a private Journey only for opportunities you seriously want to prepare.</p>
-              <button class="btn btn-secondary" type="button" data-route="journeys">Review saved opportunities</button>
-            </section>`
-          : `<section class="home-v3-journey-empty">
-              <span class="home-v3-mini-kicker">NO APPLICATION JOURNEY YET</span>
-              <h3>Save an opportunity when it is worth tracking.</h3>
-              <p>Your Journey becomes the private place for stages, tasks, notes and deadlines. You do not need to start one just to browse.</p>
-              <button class="btn btn-secondary" type="button" data-route="opportunities">Find an opportunity</button>
-            </section>`;
-
-    const gettingStarted = dashboard.newUser
-      ? `<section class="home-v3-starter">
-          <div class="home-v3-section-title">
-            <div><span class="opportunity-kicker">START WITH THREE SMALL STEPS</span><h2>Make Tefsen useful without filling everything at once.</h2></div>
-          </div>
-          <div class="home-v3-starter-grid">
-            <button type="button" data-route="passport"><span>01</span><div><b>Set your direction</b><small>Add essential Student Passport fields.</small></div></button>
-            <button type="button" data-route="opportunities"><span>02</span><div><b>Explore globally</b><small>Browse opportunities from different countries and providers.</small></div></button>
-            <button type="button" data-route="opportunities"><span>03</span><div><b>Save selectively</b><small>Start a Journey only when an opportunity is worth preparing.</small></div></button>
-          </div>
-        </section>`
-      : '';
-
-    const content = `${demoBanner()}<div class="home-v3 home-state-${escapeHTML(dashboard.state)}">
-      <section class="home-v3-hero">
-        <div class="home-v3-hero-copy">
-          <span class="opportunity-kicker">${escapeHTML(homeState.label)}</span>
-          <h1>Welcome, ${escapeHTML(firstName)}.<br>${escapeHTML(homeState.title)}</h1>
-          <p>Tefsen brings your private Student Passport, global opportunity discovery, deadlines and application Journey into one place without turning profile completion into an acceptance score.</p>
-          <div class="home-v3-hero-actions">
-            <button class="btn btn-primary" type="button" data-route="${escapeHTML(dashboard.action.route)}">${escapeHTML(dashboard.action.button)}</button>
-            <button class="btn btn-secondary" type="button" data-route="opportunities">Explore opportunities</button>
-          </div>
-        </div>
-
-        <aside class="home-v3-goal">
-          <span>CURRENT DIRECTION</span>
-          <strong>${escapeHTML(dashboard.goal)}</strong>
-          <div class="home-v3-passport-progress"><i style="width:${dashboard.passportPercent}%"></i></div>
-          <div class="home-v3-goal-foot">
-            <small>Student Passport · ${dashboard.passportPercent}% complete</small>
-            <button type="button" data-route="passport">Edit Passport</button>
-          </div>
-        </aside>
-      </section>
-
-      <section class="home-v3-next ${escapeHTML(dashboard.action.tone)}">
-        <div class="home-v3-next-icon">${dashboard.action.tone === 'urgent' ? '!' : icon('check',20)}</div>
-        <div class="home-v3-next-copy">
-          <span>RECOMMENDED NEXT ACTION</span>
-          <h2>${escapeHTML(dashboard.action.title)}</h2>
-          <p>${escapeHTML(dashboard.action.detail)}</p>
-          <small>${escapeHTML(dashboard.action.reason)}</small>
-        </div>
-        <button class="btn btn-primary" type="button" data-route="${escapeHTML(dashboard.action.route)}">${escapeHTML(dashboard.action.button)}</button>
-      </section>
-
-      ${gettingStarted}
-
-      <section class="home-v3-stats" aria-label="Student journey summary">
-        <article><span>Passport</span><strong>${dashboard.passportPercent}%</strong><small>Profile completeness</small></article>
-        <article><span>Saved</span><strong>${dashboard.savedCount || '—'}</strong><small>${dashboard.savedCount ? 'opportunities being tracked' : 'Nothing saved yet'}</small></article>
-        <article><span>Active</span><strong>${dashboard.activeCount || '—'}</strong><small>${dashboard.activeCount ? 'application Journeys' : 'No active application'}</small></article>
-        <article><span>Nearest deadline</span><strong>${dashboard.nearestDeadline ? (dashboard.nearestDeadline.days === 0 ? 'Today' : dashboard.nearestDeadline.days) : '—'}</strong><small>${dashboard.nearestDeadline ? (dashboard.nearestDeadline.days === 0 ? 'Act today' : 'days remaining') : 'No dated saved deadline'}</small></article>
-      </section>
-
-      ${nearestMarkup}
-
-      <section class="home-v3-section">
-        <div class="home-v3-section-title">
-          <div><span class="opportunity-kicker">DISCOVER</span><h2>${dashboard.essentialReady ? 'Recommended from your current profile' : 'Explore opportunities while you build your Passport'}</h2><p>${dashboard.essentialReady ? 'Profile match is based on structured Student Passport factors, not source verification and not an admission prediction.' : 'You can explore the global catalogue now. Tefsen will personalize ranking more as your essential Passport fields become complete.'}</p></div>
-          <button class="btn btn-ghost" type="button" data-route="opportunities">View all</button>
-        </div>
-        <div class="home-v3-match-grid">
-          ${ranked.length ? ranked.slice(0,3).map(homeMatchCard).join('') : `<section class="home-v3-empty">
-            <div>${icon('compass',22)}</div><h3>No opportunities are loaded yet.</h3><p>Open Opportunities to review the catalogue state and official-source listings.</p><button class="btn btn-secondary" type="button" data-route="opportunities">Open Opportunities</button>
-          </section>`}
-        </div>
-      </section>
-
-      <section class="home-v3-section home-v3-two-col">
-        <div>
-          <div class="home-v3-section-title compact">
-            <div><span class="opportunity-kicker">YOUR JOURNEY</span><h2>Applications & preparation</h2><p>Private stages, tasks and deadlines for opportunities you choose to pursue.</p></div>
-            <button class="btn btn-ghost" type="button" data-route="journeys">Open Journey</button>
-          </div>
-          ${journeyFocus}
-        </div>
-
-        <div>
-          <div class="home-v3-section-title compact">
-            <div><span class="opportunity-kicker">COMMUNITY OUTCOMES</span><h2>Learn from student experiences</h2><p>Community stories can add context, but official sources still control requirements.</p></div>
-            <button class="btn btn-ghost" type="button" data-route="explore">Community</button>
-          </div>
-          <div class="home-v3-outcomes">${successes.length
-            ? successes.map(post => `<button class="home-v3-outcome-card" type="button" data-route="post/${encodeURIComponent(post.id)}"><span>SUCCESS STORY</span><h3>${escapeHTML(post.title || 'Student success')}</h3><p>${escapeHTML((post.content || '').slice(0,150))}</p></button>`).join('')
-            : `<section class="home-v3-journey-empty"><span class="home-v3-mini-kicker">COMMUNITY IS GROWING</span><h3>No public success stories yet.</h3><p>Student outcomes will appear here only when students choose to share them publicly.</p><button class="btn btn-secondary" type="button" data-route="explore">Open Community</button></section>`}
-          </div>
-        </div>
-      </section>
-    </div>`;
-
-    renderShell(content, { wide:true, right:false });
-  } catch (error) {
-    console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Dashboard unavailable','Please try again.')}`, { wide:true, right:false });
-  }
+  const following = state.activeFeedTab === 'following';
+  const cards = following
+    ? `<section class="social-empty"><div>${icon('users',28)}</div><h2>Following feed on Android</h2><p>Posts from people you follow are not synced into the Web following feed yet. Choose Everyone to read public posts here.</p><button class="social-secondary" type="button" data-feed-tab="recent">See everyone</button></section>`
+    : state.posts.length
+      ? getFilteredPosts(state.activeFeedTab === 'trending' ? 'trending' : 'recent').map(postCard).join('')
+      : `<section class="social-empty"><div>${icon('message',28)}</div><h2>Nothing posted yet</h2><p>Share the first idea, question or useful experience with everyone.</p><button class="social-secondary" type="button" data-action="compose">Write a post</button></section>`;
+  const content = `${demoBanner()}<section class="social-feed-header"><div><small>PUBLIC THOUGHTS. REAL PEOPLE.</small><h1>Everyone has something worth sharing.</h1><p>Thoughts, lessons and experiences — in words.</p></div><button type="button" class="social-write" data-action="compose">${icon('edit',18)}<span>Write a post</span></button></section>
+    <div class="social-feed-tabs" role="group" aria-label="Feed selection">
+      <button type="button" class="${following ? '' : 'active'}" data-feed-tab="recent" aria-pressed="${!following}">Everyone</button>
+      <button type="button" class="${following ? 'active' : ''}" data-feed-tab="following" aria-pressed="${following}">Following</button>
+    </div>
+    <div class="social-feed-list" aria-live="polite">${cards}</div>`;
+  renderShell(content,{right:false});
 }
-
 async function renderSavedCommunity() {
   renderShell(`<div class="saved24-page"><section class="saved24-hero loading"><span class="opportunity-kicker">SAVED COMMUNITY</span><h1>Loading your saved posts…</h1><p>Checking your private saved list independently of the current Community feed.</p></section></div>`,{wide:true,right:false});
 
@@ -3641,52 +3428,18 @@ function notification21Section(title,eyebrow,rows,description='') {
 }
 
 async function renderNotifications() {
-  renderShell(`<div class="notification21-page"><section class="notification21-hero loading"><span class="opportunity-kicker">NOTIFICATIONS</span><h1>Loading what needs your attention…</h1><p>Checking your Journey dates, opportunity deadlines and Community activity.</p></section></div>`,{wide:true,right:false});
-
-  try{
-    const model=await refreshNotificationCenterData();
-    const content=`${demoBanner()}
-      <div class="notification21-page">
-        <section class="notification21-hero">
-          <div>
-            <span class="opportunity-kicker">YOUR NEXT ACTIONS</span>
-            <h1>Notifications that help you move forward</h1>
-            <p>Tefsen prioritizes deadlines, private Journey planning dates, accepted-offer actions and useful Community activity instead of filling this page with generic engagement noise.</p>
-            <div class="notification21-hero-actions">
-              ${model.unreadCount ? '<button class="btn btn-secondary" type="button" data-notifications-mark-all>Mark all as read</button>' : '<span class="notification21-calm">✓ No unread notifications</span>'}
-              <button class="btn btn-ghost" type="button" data-route="journeys">Open Journey workspace</button><button class="btn btn-ghost" type="button" data-route="settings/notifications">Manage alerts</button>
-            </div>
-          </div>
-          <aside class="notification21-scope">
-            <span>HOW THIS WORKS</span>
-            <div><b>Private planning stays private</b><small>Journey-derived alerts are calculated for you; they are not public Community posts.</small></div>
-            <div><b>Official sources still control dates</b><small>A stored deadline is a planning aid. Verify current dates and requirements on the provider source.</small></div>
-            <div><b>Read state is account-scoped</b><small>Acknowledged items sync through your private notification state when available, with a per-account browser fallback.</small></div>
-          </aside>
-        </section>
-
-        <section class="notification21-stats" aria-label="Notification summary">
-          <article><strong>${model.counts.unread}</strong><span>Unread</span></article>
-          <article><strong>${model.counts.attention}</strong><span>Needs attention</span></article>
-          <article><strong>${model.counts.planning}</strong><span>Planning</span></article>
-          <article><strong>${model.counts.activity}</strong><span>Community updates</span></article>
-        </section>
-
-        <section class="notification21-source-note">${icon('info',16)}<span>${escapeHTML(model.sourceNote)}</span></section>
-
-        ${model.empty ? `<section class="notification21-empty"><div>${icon('bell',24)}</div><h2>Nothing needs your attention right now</h2><p>Deadline, Journey and supported Community activity notifications will appear here when there is something useful to review.</p><div><button class="btn btn-primary" type="button" data-route="opportunities">Explore opportunities</button><button class="btn btn-secondary" type="button" data-route="journeys">Open Journeys</button></div></section>` : `
-          ${notification21Section('Deadlines and time-sensitive actions','NEEDS ATTENTION',model.sections.attention,'Stored dates that are close, today or overdue. Verify official deadlines before acting.')}
-          ${notification21Section('Continue your plan','JOURNEY PLANNING',model.sections.planning,'Useful next actions from your private Journey and accepted-offer workspace.')}
-          ${notification21Section('Community activity','PUBLIC ACTIVITY',model.sections.activity,'Replies and supported activity records from the Community notification collection.')}
-        `}
-      </div>`;
-    renderShell(content,{wide:true,right:false});
-  }catch(error){
+  renderShell('<div class="social-notifications"><h1>Notifications</h1><p class="social-subtle">Loading community activity…</p></div>',{right:false});
+  try {
+    const model = await refreshNotificationCenterData();
+    const activity = model.sections?.activity || [];
+    const content = `${demoBanner()}<section class="social-notifications"><div class="social-section-heading"><h1>Notifications</h1>${activity.some(n=>!n.read) ? '<button class="social-secondary" type="button" data-notifications-mark-all>Mark all as read</button>' : ''}</div>
+      ${activity.length ? `<div class="social-notification-list">${activity.map(notification21Item).join('')}</div>` : `<div class="social-empty social-alert-empty"><div>${icon('bell',30)}</div><h2>You're all caught up.</h2><p>Replies and community activity will appear here.</p></div>`}</section>`;
+    renderShell(content,{right:false});
+  } catch (error) {
     console.error(error);
-    renderShell(`${demoBanner()}${emptyState('info','Notifications unavailable','Please try again.')}`,{wide:true,right:false});
+    renderShell('<section class="social-empty"><h2>Notifications unavailable</h2><p>Please try again.</p></section>',{right:false});
   }
 }
-
 function renderPrivateMessagingUnavailable() {
   const content=`${demoBanner()}
     <section class="messages22-retired">
@@ -3735,149 +3488,29 @@ function renderLeaderboardRetired() {
 async function renderProfile(userId = '') {
   let profile = state.profile;
   if (userId && userId !== state.user.uid) {
-    profile = await getUserById(state.mode, userId).catch(() => null);
-    profile = profile || { uid:userId, fullName:'Tefsen User', role:'Student' };
+    profile = await getUserById(state.mode,userId).catch(()=>null);
+    profile ||= {uid:userId,fullName:'Tefsen User',role:'Student'};
   }
-
   const own = !userId || userId === state.user.uid;
-  const posts = state.posts.filter(p =>
-    postBelongsToUser(p, profile?.uid || '') && isPublicProfileActivity(p)
-  );
-
-  let passport = null;
-  let journeys = [];
-  if (own) {
-    [passport, journeys] = await Promise.all([
-      getStudentPassport(state.mode, state.user.uid).catch(() => emptyStudentPassport(state.user.uid)),
-      listJourneyStates(state.mode, state.user.uid).catch(() => [])
-    ]);
-  }
-
-  const completeness = own ? studentPassportCompleteness(passport || {}) : 0;
-  const activeJourneys = own
-    ? journeys.filter(row => row.started && !['accepted','rejected','withdrawn'].includes(row.status))
-    : [];
-  const savedOpportunities = own ? journeys.filter(row => row.saved).length : 0;
-
-  const model = buildPublicProfileModel({
-    profile,
-    own,
-    posts,
-    passportCompleteness:completeness,
-    activeJourneys:activeJourneys.length,
-    savedOpportunities
-  });
-
-  const ownActions = `<div class="profile13-actions">
-    <button class="btn btn-primary" type="button" data-edit-profile>${icon('edit',17)} Edit public profile</button>
-    <button class="btn btn-secondary" type="button" data-route="passport">Student Passport</button>
-  </div>`;
-
-  const otherActions = `<div class="profile13-actions profile14-visitor-actions">
-    <button class="btn btn-primary" type="button" data-profile-activity-jump>${icon('comment',17)} View public activity</button>
-  </div>`;
-
-  const photo = own
-    ? `<div class="profile13-photo-block">
-        <button class="profile13-photo-button" type="button" data-profile-photo-edit aria-label="${model.hasPhoto ? 'Change profile photo' : 'Add profile photo'}">
-          <span class="profile13-avatar">${avatar(profile,'lg')}</span>
-          <span class="profile13-photo-edit">${icon('edit',15)}</span>
-        </button>
-        <div class="profile13-photo-links">
-          <button type="button" data-profile-photo-edit>${model.hasPhoto ? 'Change photo' : 'Add photo'}</button>
-          ${model.hasPhoto ? '<button class="danger" type="button" data-profile-photo-remove>Remove</button>' : ''}
-        </div>
-      </div>`
-    : `<div class="profile13-photo-block public"><span class="profile13-avatar">${avatar(profile,'lg')}</span></div>`;
-
-  const publicStats = `<div class="profile13-public-stats profile14-public-stats">
-    <div><strong>${formatCount(model.publicStats.posts)}</strong><span>Public posts</span></div>
-    <div><strong>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</strong><span>Community role</span></div>
-  </div>`;
-
-  const identityGuide = own ? `<section class="profile13-completion">
-    <div class="profile13-completion-head">
-      <div><span>PUBLIC PROFILE QUALITY</span><strong>${model.identity.percent}%</strong></div>
-      <div class="profile13-completion-track"><i style="width:${model.identity.percent}%"></i></div>
+  const posts = state.posts.filter(p=>postBelongsToUser(p,profile?.uid||'') && isPublicProfileActivity(p));
+  const displayName=profile?.fullName || profile?.displayName || 'Tefsen User';
+  const handle=profile?.username ? '@'+String(profile.username).replace(/^@/,'') : '';
+  const content = `${demoBanner()}<section class="social-profile">
+    <div class="social-section-heading"><h1>${own?'Your profile':'Profile'}</h1>${own?`<button class="social-icon-button" type="button" data-route="settings" aria-label="Settings">${icon('settings',22)}</button>`:''}</div>
+    <div class="social-profile-overview"><div class="social-profile-top">${avatar(profile,'lg')}<div>${own?'<button class="social-secondary" type="button" data-edit-profile>Edit profile</button>':'<button class="social-secondary" type="button" data-profile-activity-jump>View posts</button>'}</div></div>
+    <h2>${escapeHTML(displayName)} ${verifiedMark(profile?.verified,profile?.role)}</h2>
+    ${handle?`<p class="social-handle">${escapeHTML(handle)}</p>`:''}
+    ${profile?.bio?`<p class="social-bio">${escapeHTML(profile.bio)}</p>`:''}
+    ${profile?.school||profile?.university?`<p class="social-school">${escapeHTML(profile.school||profile.university)}</p>`:''}
+    <div class="social-profile-stats"><span><strong>${posts.length}</strong> Posts</span><span>${escapeHTML(normalizeRole(profile?.role||'Student'))}</span></div>
+    ${profile?.verified ? '<p class="social-verification">✓ Academic verified</p>' : ''}
     </div>
-    <div class="profile13-completion-items">
-      ${model.identity.checks.map(item => `<button type="button" class="${item.complete ? 'complete' : ''}" data-edit-profile>
-        <span>${item.complete ? '✓' : '+'}</span><b>${escapeHTML(item.label)}</b>
-      </button>`).join('')}
-    </div>
-    <p>This score only reflects your public profile completeness. It is not an eligibility, admission or reputation score.</p>
-  </section>` : '';
-
-  const privateWorkspace = own ? `<section class="profile13-private-workspace">
-    <header>
-      <div><span class="opportunity-kicker">PRIVATE WORKSPACE</span><h2>Your student planning stays separate from your public identity.</h2><p>Student Passport, saved opportunities and application Journeys are private account data unless you explicitly publish a community story.</p></div>
-      <span class="profile13-private-chip">${icon('check',14)} Private to you</span>
-    </header>
-    <div class="profile13-private-grid">
-      <button type="button" data-route="passport">
-        <span class="profile13-private-icon">${icon('user',18)}</span>
-        <div><small>STUDENT PASSPORT</small><strong>${model.privateWorkspace.passportCompleteness}% complete</strong><p>Improve the private profile used for opportunity matching.</p></div>
-        <span>→</span>
-      </button>
-      <button type="button" data-route="journeys">
-        <span class="profile13-private-icon">${icon('check',18)}</span>
-        <div><small>ACTIVE JOURNEYS</small><strong>${model.privateWorkspace.activeJourneys || 'No active application'}</strong><p>${model.privateWorkspace.activeJourneys ? 'Continue application preparation and next steps.' : 'Start from a saved opportunity when you are ready.'}</p></div>
-        <span>→</span>
-      </button>
-      <button type="button" data-route="opportunities">
-        <span class="profile13-private-icon">${icon('bookmark',18)}</span>
-        <div><small>SAVED OPPORTUNITIES</small><strong>${model.privateWorkspace.savedOpportunities || 'Nothing saved yet'}</strong><p>Review opportunities privately before starting an application Journey.</p></div>
-        <span>→</span>
-      </button>
-    </div>
-  </section>` : `<section class="profile13-public-privacy-note profile14-public-boundary">
-    ${icon('info',16)}
-    <div><b>Public information only</b><p>This view contains public name, username, bio, photo, role and explicitly public community posts. Email, subscription details, Student Passport, saved opportunities, Journeys and private planning are not part of this profile view.</p></div>
+    ${own?`<button type="button" data-route="subscription" class="social-plus-card"><span>${icon('check',24)}</span><span><strong>Discover Student Plus</strong><small>Optional features and more room to write.</small></span>${icon('chevron-right',20)}</button>`:''}
+    <div class="social-profile-tabs"><span>Posts</span>${own?'<button type="button" data-route="saved">Saved posts →</button>':''}</div>
+    <div class="social-feed-list" id="profile-public-activity">${posts.length ? posts.map(postCard).join('') : `<section class="social-empty"><h2>No posts yet.</h2>${own?'<button class="social-secondary" type="button" data-action="compose">Create your first post</button>':''}</section>`}</div>
   </section>`;
-
-  const activity = posts.length
-    ? posts.map(postCard).join('')
-    : `<section class="profile13-empty">
-        <div class="profile13-empty-mark">${icon('comment',22)}</div>
-        <h3>${own ? 'No public activity yet.' : 'No public posts yet.'}</h3>
-        <p>${own ? 'Your profile does not need filler content. Share only useful discussions, success stories or selected Journey experiences when you want them public.' : 'This student has not shared any public community posts yet.'}</p>
-        ${own ? '<div><button class="btn btn-primary" type="button" data-route="explore">Open Community</button><button class="btn btn-secondary" type="button" data-share-success>Share a success</button></div>' : ''}
-      </section>`;
-
-  const content = `${demoBanner()}<div class="profile13-page">
-    <section class="profile13-hero">
-      <div class="profile13-hero-glow"></div>
-      <div class="profile13-identity">
-        ${photo}
-        <div class="profile13-copy">
-          <div class="profile13-eyebrow">
-            <span>${escapeHTML(normalizeRole(profile?.role || 'Student'))}</span>
-            ${profile?.verified ? '<span class="profile13-verified">Verified</span>' : ''}
-          </div>
-          <h1>${escapeHTML(model.fullName)} ${verifiedMark(profile?.verified, profile?.role)}</h1>
-          <button class="profile13-handle ${model.username ? '' : 'missing'}" type="button" ${own ? 'data-edit-profile' : 'disabled'}>${escapeHTML(model.handleLabel)}</button>
-          <p class="profile13-bio ${model.bio ? '' : 'missing'}">${escapeHTML(model.bioLabel)}</p>
-          ${own ? ownActions : otherActions}
-          ${publicStats}
-        </div>
-      </div>
-      ${identityGuide}
-    </section>
-
-    ${privateWorkspace}
-
-    <section class="profile13-activity" id="profile-public-activity">
-      <header class="profile13-section-head">
-        <div><span class="opportunity-kicker">COMMUNITY</span><h2>${own ? 'Your public activity' : 'Public activity'}</h2><p>${own ? 'Only things you intentionally share with the Tefsen community appear here.' : 'Public discussions and outcomes shared by this student.'}</p></div>
-        ${own ? '<button class="btn btn-secondary" type="button" data-route="explore">Open Community</button>' : ''}
-      </header>
-      <div class="feed-list">${activity}</div>
-    </section>
-  </div>`;
-
-  renderShell(content,{wide:true,right:false});
+  renderShell(content,{right:false});
 }
-
 async function renderSubscription() {
   const p = state.profile || {};
   const policy = getWebPostingPolicy(p, { admin:adminCapability });
@@ -4567,17 +4200,17 @@ function openCommunityComposer(context = {}) {
 }
 
 function openComposer() {
-  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
-  const mb = Math.round(policy.maxTotalImageBytes / 1024 / 1024);
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="compose-title"><header class="modal-head"><h2 id="compose-title">Ask a question or share knowledge</h2><button class="close-btn" type="button" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-compose-form>
-    <div class="composer-plan ${policy.subscribed ? 'subscribed' : ''}"><b>${escapeHTML(policy.name)}</b><span>${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} · ${mb} MB total · ${Number.isFinite(policy.dailyImagePosts) ? `${policy.dailyImagePosts} image posts/day` : 'Unlimited image posts'} · ${Number.isFinite(policy.dailyTextPosts) ? `${policy.dailyTextPosts} text posts/day` : 'Unlimited text posts'}</span></div>
-    <div class="field"><label>Title / question</label><input class="input" name="title" maxlength="180" required placeholder="What would you like to ask or explain?"></div>
-    <div class="field"><label>Details</label><textarea class="textarea" name="content" maxlength="8000" required placeholder="Add context, what you tried, or a useful explanation…"></textarea></div>
-    <div class="input-row"><div class="field"><label>Subject</label><input class="input" name="subject" maxlength="60" placeholder="e.g. Physics"></div><div class="field"><label>Tags</label><input class="input" name="tags" maxlength="150" placeholder="circuits, electricity"></div></div>
-    <div class="file-drop">${icon('image',24)}<br><b>Add ${policy.maxImagesPerPost > 1 ? 'images' : 'an image'}</b><br><span class="form-help">PNG, JPG or WebP · max ${policy.maxImagesPerPost} · ${mb} MB total</span><input type="file" name="images" accept="image/png,image/jpeg,image/webp" ${policy.maxImagesPerPost > 1 ? 'multiple' : ''}></div>
-    <div class="image-preview image-preview-grid hidden" data-image-preview></div><div class="form-error" data-compose-error></div><div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn btn-ghost" type="button" data-close-modal>Cancel</button><button class="btn btn-primary" type="submit">Publish</button></div></form></div></section></div>`;
+  const policy = getWebPostingPolicy(state.profile || {}, {admin:adminCapability});
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal social-compose-modal" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+    <header class="modal-head"><h2 id="compose-title">New post</h2><button class="close-btn" type="button" data-close-modal aria-label="Close">${icon('close',20)}</button></header>
+    <div class="modal-body"><div class="social-compose-author">${avatar(state.profile,'sm')}<div><b>${escapeHTML(state.profile?.fullName || 'Tefsen User')}</b><small>Sharing with everyone</small></div></div>
+    <form class="form-grid" data-compose-form><label class="sr-only" for="social-compose-text">Your public post</label><textarea class="textarea social-compose-text" id="social-compose-text" name="content" maxlength="1000" required placeholder="An idea, a lesson, or news worth sharing…"></textarea>
+    <div class="social-compose-meta"><span>Only text. All your ideas.</span><span data-compose-count>0/1000</span></div>
+    <p class="social-compose-rule">Keep it respectful. Add a source link when sharing news.</p>
+    <div class="form-error" data-compose-error role="status"></div>
+    <div class="social-compose-submit"><span>${Number.isFinite(policy.dailyTextPosts)?`${policy.dailyTextPosts} text posts per day on your plan`:'Public text post'}</span><button class="btn btn-primary" type="submit">Post</button></div>
+    </form></div></section></div>`;
 }
-
 function openReportModal(postId) {
   const options=REPORT_REASONS.map(reason=>`<option value="${escapeHTML(reason)}">${escapeHTML(reason)}</option>`).join('');
   modalRoot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><header class="modal-head"><h2>Report content</h2><button class="close-btn" data-close-modal>${icon('close',19)}</button></header><div class="modal-body"><form class="form-grid" data-report-form="${escapeHTML(postId)}"><div class="community-banner"><b>Reports are private.</b> They go to authorized Tefsen moderation review and are not shown to the post author or Community.</div><div class="field"><label>Reason</label><select class="select" name="reason" required><option value="">Choose a reason</option>${options}</select></div><div class="field"><label>Details (optional)</label><textarea class="textarea" name="details" maxlength="1000" placeholder="Add only information needed to explain the concern."></textarea></div><button class="btn btn-danger" type="submit">Submit private report</button></form></div></section></div>`;
@@ -4953,23 +4586,26 @@ async function handleForgot() {
 }
 
 async function handleCompose(form) {
-  const fd = new FormData(form), errorEl = form.querySelector('[data-compose-error]'), submit = form.querySelector('button[type="submit"]');
-  const imageFiles = fd.getAll('images').filter(file => file && file.size);
-  const payload = {
-    title: String(fd.get('title')||'').trim(), content: String(fd.get('content')||'').trim(), subject: String(fd.get('subject')||'General').trim() || 'General',
-    tags: String(fd.get('tags')||'').split(',').map(x=>x.trim().replace(/^#/,'')).filter(Boolean).slice(0,8), imageFiles
-  };
-  if (!payload.title || !payload.content) return;
-  const policy = getWebPostingPolicy(state.profile || {}, { admin:adminCapability });
-  const totalBytes = imageFiles.reduce((sum, file) => sum + Number(file.size || 0), 0);
-  if (imageFiles.length > policy.maxImagesPerPost) { errorEl.textContent = `Your plan allows ${policy.maxImagesPerPost} image${policy.maxImagesPerPost === 1 ? '' : 's'} per post.`; return; }
-  if (totalBytes > policy.maxTotalImageBytes) { errorEl.textContent = `Your plan allows ${Math.round(policy.maxTotalImageBytes/1024/1024)} MB total images per post.`; return; }
-  await withButton(submit, async()=>{
-    try { const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability}); modalRoot.innerHTML=''; toast('Published successfully','success'); if (state.mode==='demo') { state.posts=[post,...state.posts]; } go(`post/${post.id}`); }
-    catch(e){ errorEl.textContent=humanError(e); }
+  const errorEl = form.querySelector('[data-compose-error]');
+  const submit = form.querySelector('button[type="submit"]');
+  const content = String(new FormData(form).get('content') || '').trim();
+  if (!content || content.length > 1000) {
+    errorEl.textContent = 'Write between 1 and 1000 characters.';
+    return;
+  }
+  const payload = { title:content.slice(0, 100), content, subject:'General', tags:[], imageFiles:[] };
+  await withButton(submit, async () => {
+    try {
+      const post = await createPost(state.mode,state.user,state.profile,payload,{admin:adminCapability});
+      modalRoot.innerHTML = '';
+      toast('Your post is public.','success');
+      if(state.mode === 'demo') state.posts = [post,...state.posts];
+      go('home');
+    } catch(error) {
+      errorEl.textContent = humanError(error);
+    }
   });
 }
-
 function syncLikeButtons(postId, active, count, pending = false) {
   document.querySelectorAll('[data-like]').forEach((button) => {
     if (button.dataset.like !== postId) return;
@@ -5809,6 +5445,11 @@ async function withButton(button, task) {
 }
 
 function handleInput(event) {
+  if (event.target.matches('[data-compose-form] textarea[name="content"]')) {
+    const counter = event.target.form?.querySelector('[data-compose-count]');
+    if (counter) counter.textContent = event.target.value.length + '/1000';
+    return;
+  }
   const passportForm = event.target.closest?.('[data-student-passport-form]');
   if (passportForm) {
     updateStudentPassportFormQuality(passportForm);
