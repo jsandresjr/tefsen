@@ -259,9 +259,9 @@ function resolveSubscription(raw = {}) {
   const statusActive = ['active', 'trialing', 'trial', 'subscribed', 'premium', 'paid'].includes(status);
   const notExpired = expiresDate ? expiresDate.getTime() > Date.now() : false;
   return {
-    active: Boolean(direct || statusActive || notExpired),
+    active: Boolean((direct || statusActive || notExpired) && (!expiresAt || notExpired)),
     status: status || (direct ? 'active' : ''),
-    plan: plan || (direct || statusActive || notExpired ? 'Subscribed Student' : 'Free Student'),
+    plan: plan || ((direct || statusActive || notExpired) && (!expiresAt || notExpired) ? 'Subscribed Student' : 'Free Student'),
     expiresAt
   };
 }
