@@ -27,5 +27,7 @@ jobs:
           node --check app/js/services/data-service.js
           node --check app/js/services/auth-service.js
           node --check app/js/services/profile-photo-callable.js
+          node --check app/js/services/avatar-cropper.js
+          node --check app/js/services/avatar-crop-math.mjs
           node --check app/js/services/text-first-workflow.mjs
           node --check app/js/services/profile-photo-policy.mjs
