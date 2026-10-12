@@ -1,4 +1,6 @@
 import { initFirebase, appCheck, auth } from './firebase-client.js';
+import {mountAvatarCropper} from './services/avatar-cropper.js';
+import {validatePhotoSource} from './services/profile-photo-policy.mjs';
 import {postLimits, validateTextPost, loadDraft, saveDraft, clearDraft, chooseSearchMode, rankPeople, filterPosts, normalizeSearch} from './services/text-first-workflow.mjs';
 import { state, setState } from './store.js';
 import { observeAuth, signIn, register, signInGoogle, resetPassword, logout, sendConfirmationEmail, refreshConfirmationStatus } from './services/auth-service.js';
@@ -4057,7 +4059,7 @@ function openEditProfile() {
             <div class="v4-photo-preview" data-profile-photo-preview>${avatar(p,'lg')}</div>
             <div class="v4-photo-editor-copy">
               <b>Profile photo</b>
-              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. A selected image stays a preview until you save.</p>
+              <p>This image is public. Choose JPG, PNG or WebP up to 5 MB. Drag to position, zoom, and confirm the preview before saving.</p>
               <input class="sr-only" type="file" name="profileImage" accept="image/jpeg,image/png,image/webp" data-profile-photo-input>
               <div class="v4-photo-editor-actions">
                 <button class="btn btn-secondary" type="button" data-profile-photo-choose>${hasPhoto ? 'Choose a new photo' : 'Choose photo'}</button>
@@ -4276,8 +4278,8 @@ async function handleClick(event) {
   if (shareJourneyStory) { openJourneyStoryModal({ subject:shareJourneyStory.dataset.prefillSubject||'', university:shareJourneyStory.dataset.prefillUniversity||'', intake:shareJourneyStory.dataset.prefillIntake||'' }); return; }
   const communityDiscussion = event.target.closest('[data-community-discussion]');
   if (communityDiscussion) { openCommunityComposer({ subject:communityDiscussion.dataset.communitySubject||'', university:communityDiscussion.dataset.communityUniversity||'', intake:communityDiscussion.dataset.communityIntake||'' }); return; }
-  if (event.target.closest('[data-close-modal]')) { modalRoot.innerHTML=''; return; }
-  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.innerHTML=''; return; }
+  if (event.target.closest('[data-close-modal]')) { modalRoot.querySelector('[data-profile-form]')?.__avatarCrop?.dispose?.(); modalRoot.innerHTML=''; return; }
+  if (event.target.matches('[data-modal-backdrop]')) { modalRoot.querySelector('[data-profile-form]')?.__avatarCrop?.dispose?.(); modalRoot.innerHTML=''; return; }
   const searchModeButton=event.target.closest('[data-search-mode]');
   if(searchModeButton){activeSearchMode=searchModeButton.dataset.searchMode==='posts'?'posts':'people';renderSearch(state.searchQuery);return;}
   if(event.target.closest('[data-search-retry]')){renderSearch(state.searchQuery);return;}
@@ -4934,20 +4936,26 @@ async function handleProfileSave(form) {
 
   const submit = form.querySelector('button[type="submit"]');
   const selectedPhoto = fd.get('profileImage');
+  if(form.dataset.photoCropBusy==='true'){
+    toast('Wait for the photo preview to finish loading.','error');return;
+  }
   await withButton(submit, async () => {
     try {
+      const outputPhoto=(selectedPhoto instanceof File && selectedPhoto.size)
+        ? (form.__avatarCrop ? await form.__avatarCrop.toFile() : null) : null;
+      if(selectedPhoto instanceof File && selectedPhoto.size && !outputPhoto)
+        throw new Error('Crop the selected image before saving.');
       const profile = await updateUserProfile(state.mode, state.user.uid, {
         fullName:draft.fullName,
         username:draft.username,
         bio:draft.bio,
-        profileImageFile:selectedPhoto instanceof File && selectedPhoto.size ? selectedPhoto : null
+        profileImageFile:outputPhoto
       });
       state.profile = { ...state.profile, ...profile };
       state.posts = state.posts.map(post => post.authorId === state.user.uid
         ? { ...post, authorName:profile.fullName, authorPhotoUrl:profile.photoUrl || '' }
         : post);
-      const input = form.querySelector('[data-profile-photo-input]');
-      if (input?.dataset?.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
+      form.__avatarCrop?.dispose?.();
       modalRoot.innerHTML = '';
       toast(selectedPhoto instanceof File && selectedPhoto.size ? 'Public profile and photo updated.' : 'Public profile updated.', 'success');
       renderRoute();
@@ -5321,26 +5329,29 @@ function handleInput(event) {
     const preview = input.form?.querySelector('[data-profile-photo-preview]');
     if (!file) return;
 
-    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    if (!allowed.has(String(file.type || '').toLowerCase())) {
-      toast('Profile photo must be JPG, PNG or WebP.', 'error');
-      input.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast('Profile photo must be 5 MB or smaller.', 'error');
-      input.value = '';
-      return;
-    }
-
-    if (input.dataset.previewUrl) URL.revokeObjectURL(input.dataset.previewUrl);
-    const url = URL.createObjectURL(file);
-    input.dataset.previewUrl = url;
-    if (preview) {
-      preview.innerHTML = `<div class="avatar lg has-photo v4-modal-avatar"><img class="protected-avatar-image" src="${url}" alt="New profile photo preview"></div>`;
-    }
-    const stateEl = input.form?.querySelector('[data-profile-photo-state]');
-    if (stateEl) stateEl.textContent = 'Preview selected — save profile to publish this photo';
+    const form=input.form;
+    try{ validatePhotoSource(file); }
+    catch(error){toast(error.message,'error');input.value='';return;}
+    const changeId=Number(form.dataset.photoCropChange||0)+1;
+    form.dataset.photoCropChange=String(changeId);
+    form.dataset.photoCropBusy='true';
+    form.__avatarCrop?.dispose?.();
+    form.__avatarCrop=null;
+    const stateEl=form.querySelector('[data-profile-photo-state]');
+    if(stateEl)stateEl.textContent='Preparing the crop preview…';
+    void mountAvatarCropper(file,preview).then(editor=>{
+      if(form.dataset.photoCropChange!==String(changeId) || !form.isConnected){
+        editor.dispose();return;
+      }
+      form.__avatarCrop=editor;
+      delete form.dataset.photoCropBusy;
+      if(stateEl)stateEl.textContent='Drag or use arrow keys to position. Save the profile to upload.';
+    }).catch(error=>{
+      delete form.dataset.photoCropBusy;
+      if(stateEl)stateEl.textContent='Photo crop could not be prepared. Select another image.';
+      toast(error.message||'Photo preparation failed.','error');
+      input.value='';
+    });
     return;
   }
 
