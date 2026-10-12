@@ -281,3 +281,20 @@ html.tefsen-v2 .tefsen-text-social .btn-primary{background:var(--social-text)!im
 html.tefsen-v2 .tefsen-text-social .panel{box-shadow:none!important}
 html.tefsen-v2 .tefsen-text-social .social-main .widget,
 html.tefsen-v2 .tefsen-text-social .section-card{border-color:var(--social-border)!important}
+
+/* Android-parity controls: character drafts, search modes, keyboard safety. */
+html.tefsen-v2 .social-compose-modal .social-compose-draft{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#aaa;font-size:12px}
+html.tefsen-v2 .social-compose-modal .social-compose-draft button{border:1px solid #484848;border-radius:999px;background:#191919;color:#f0f0f0;min-height:36px;padding:0 15px;cursor:pointer}
+html.tefsen-v2 .social-compose-modal .social-compose-submit button:disabled{opacity:.45;cursor:not-allowed}
+html.tefsen-v2 .tefsen-text-social .social-search-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0}
+html.tefsen-v2 .tefsen-text-social .social-search-tabs button{border:1px solid var(--social-border);background:transparent;color:var(--social-muted);padding:12px;border-radius:13px;cursor:pointer}
+html.tefsen-v2 .tefsen-text-social .social-search-tabs button.active{background:var(--social-raised);border-color:var(--social-text);color:var(--social-text)}
+html.tefsen-v2 .tefsen-text-social .social-search-form input[type="search"]{min-height:48px}
+@media (max-width:900px){
+  html.tefsen-v2 body:has(input:focus,textarea:focus,[contenteditable="true"]:focus) .tefsen-text-social .mobile-bottom{display:none!important}
+  html.tefsen-v2 body:has(input:focus,textarea:focus,[contenteditable="true"]:focus) .tefsen-text-social .main-area{padding-bottom:env(safe-area-inset-bottom)!important}
+  html.tefsen-v2 .social-compose-modal{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px)!important}
+}
+@media (prefers-reduced-motion: reduce){
+  html.tefsen-v2 .social-compose-modal *, html.tefsen-v2 .tefsen-text-social .social-search *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
