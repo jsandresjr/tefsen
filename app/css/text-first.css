@@ -214,3 +214,43 @@ html.tefsen-v2 .tefsen-text-social .mobile-bottom{display:none}
 @media(prefers-reduced-motion:reduce){
   html.tefsen-v2 .tefsen-text-social *,html.tefsen-v2 .social-compose-modal *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+
+/* Text-first search, saved-post library and plan view */
+html.tefsen-v2 .tefsen-text-social .social-subtle{font-size:13px;line-height:1.6;color:var(--social-muted);padding:0 4px}
+html.tefsen-v2 .tefsen-text-social .social-search-form{display:flex;gap:10px;margin:24px 0 12px}
+html.tefsen-v2 .tefsen-text-social .social-search-form .input{min-width:0;flex:1;background:var(--social-surface)!important;border:1px solid var(--social-border)!important;color:var(--social-text)!important;border-radius:13px!important;min-height:45px}
+html.tefsen-v2 .tefsen-text-social .social-search h2{font-size:18px;color:var(--social-text);margin:28px 4px 15px}
+html.tefsen-v2 .tefsen-text-social .social-people{display:grid;gap:6px}
+html.tefsen-v2 .tefsen-text-social .social-person-row{display:flex;align-items:center;gap:12px;text-align:left;padding:11px;border:1px solid var(--social-border);background:var(--social-surface);border-radius:13px;color:var(--social-text);cursor:pointer}
+html.tefsen-v2 .tefsen-text-social .social-person-row .avatar{width:43px;height:43px;border-radius:50%}
+html.tefsen-v2 .tefsen-text-social .social-person-row>span{display:grid;gap:4px;flex:1;min-width:0}
+html.tefsen-v2 .tefsen-text-social .social-person-row small{font-size:12px;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-plan{margin:24px 0;background:var(--social-surface);border:1px solid var(--social-border);border-radius:18px;padding:28px}
+html.tefsen-v2 .tefsen-text-social .social-plan-kicker{font-size:11px;letter-spacing:.18em;color:var(--social-muted);font-weight:740}
+html.tefsen-v2 .tefsen-text-social .social-plan h2{font-size:30px;letter-spacing:-.035em;line-height:1.2;color:var(--social-text);margin:12px 0}
+html.tefsen-v2 .tefsen-text-social .social-plan p{color:var(--social-muted);font-size:14px;line-height:1.7}
+html.tefsen-v2 .tefsen-text-social .social-plan-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:23px 0}
+html.tefsen-v2 .tefsen-text-social .social-plan-metrics span{background:var(--social-bg);border:1px solid var(--social-border);border-radius:14px;padding:18px;display:grid;gap:6px;font-size:13px;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-plan-metrics strong{font-size:25px;color:var(--social-text)}
+html.tefsen-v2 .tefsen-text-social .social-plan-action{display:inline-flex;align-items:center;justify-content:center;background:var(--social-text);color:var(--social-inverse);border-radius:999px;min-height:44px;padding:0 22px;font-weight:700;margin:15px 0;text-decoration:none}
+html.tefsen-v2 .tefsen-text-social .social-plan>small{display:block;color:var(--social-muted);font-size:11px;margin-top:10px}
+/* Login visual parity. Auth operations are intentionally unchanged. */
+html.tefsen-v2 .auth-page{color:#f6f6f6;background:#080808!important}
+html.tefsen-v2 .auth-page .auth-art{background:#080808!important;border-right:1px solid #252525!important}
+html.tefsen-v2 .auth-page .auth-panel{background:#080808!important;border-left:1px solid #252525!important}
+html.tefsen-v2 .auth-page .auth-card{background:#141414!important;border:1px solid #303030!important;box-shadow:none!important;color:#f6f6f6!important}
+html.tefsen-v2 .auth-page .auth-message h1,
+html.tefsen-v2 .auth-page .auth-message h1 span,
+html.tefsen-v2 .auth-page .auth-brand span{background:none!important;color:#f6f6f6!important;-webkit-text-fill-color:#f6f6f6!important}
+html.tefsen-v2 .auth-page .auth-message p{color:#a6a6a6!important}
+html.tefsen-v2 .auth-page .auth-proof span{background:#1a1a1a!important;border:1px solid #333!important;color:#dedede!important}
+html.tefsen-v2 .auth-page .btn-primary{background:#fff!important;color:#111!important;border:1px solid #fff!important}
+html.tefsen-v2 .auth-page .auth-card input{background:#080808!important;color:#fff!important;border:1px solid #3a3a3a!important}
+html.tefsen-v2 .auth-page .auth-card label{color:#dedede!important}
+@media(max-width:520px){
+  html.tefsen-v2 .tefsen-text-social .social-plan{padding:19px}
+  html.tefsen-v2 .tefsen-text-social .social-plan h2{font-size:25px}
+  html.tefsen-v2 .tefsen-text-social .social-search-form{flex-wrap:wrap}
+  html.tefsen-v2 .tefsen-text-social .social-search-form .social-secondary{width:100%}
+}
