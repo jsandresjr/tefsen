@@ -1,0 +1,216 @@
+/* Tefsen text-first 2026.10: presentation layer only; Firebase and account controls remain unchanged. */
+html.tefsen-v2 .tefsen-text-social {
+  --social-bg:#070707;
+  --social-surface:#111111;
+  --social-raised:#242424;
+  --social-border:#303030;
+  --social-text:#f6f6f6;
+  --social-muted:#a4a4a4;
+  --social-inverse:#070707;
+  --social-accent:#fff;
+  --top:78px;
+  --left:240px;
+  --right:0px;
+  min-height:100dvh;
+  background:var(--social-bg)!important;
+  color:var(--social-text)!important;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+html.tefsen-v2[data-appearance="light"] .tefsen-text-social{
+  --social-bg:#ffffff;
+  --social-surface:#f7f7f7;
+  --social-raised:#eeeeee;
+  --social-border:#e4e4e4;
+  --social-text:#111111;
+  --social-muted:#696969;
+  --social-inverse:#ffffff;
+  --social-accent:#171717;
+}
+html.tefsen-v2 body:has(.tefsen-text-social){background:#070707!important;color:#f6f6f6!important}
+html.tefsen-v2[data-appearance="light"] body:has(.tefsen-text-social){background:#fff!important;color:#111!important}
+html.tefsen-v2 .tefsen-text-social button,
+html.tefsen-v2 .tefsen-text-social input,
+html.tefsen-v2 .tefsen-text-social textarea{font-family:inherit}
+html.tefsen-v2 .tefsen-text-social button:focus-visible,
+html.tefsen-v2 .tefsen-text-social a:focus-visible{outline:2px solid var(--social-text);outline-offset:3px}
+html.tefsen-v2 .tefsen-text-social .topbar{
+  height:var(--top)!important;
+  grid-template-columns:var(--left) minmax(0,1fr) 178px!important;
+  background:var(--social-bg)!important;
+  border-bottom:1px solid var(--social-border)!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+}
+html.tefsen-v2 .tefsen-text-social .topbar-brand{
+  border:0;background:transparent;color:var(--social-text);cursor:pointer;display:flex;align-items:center;
+  gap:13px;padding:0 26px;font-size:23px;font-weight:780;letter-spacing:-.04em;
+}
+html.tefsen-v2 .tefsen-text-social .topbar-brand span{color:var(--social-text)!important;background:none!important;-webkit-text-fill-color:currentColor!important}
+html.tefsen-v2 .tefsen-text-social .topbar-brand img{width:34px;height:34px;border-radius:10px;object-fit:cover}
+html.tefsen-v2 .tefsen-text-social .topbar-center{padding:0 28px!important}
+html.tefsen-v2 .tefsen-text-social .global-search{max-width:660px}
+html.tefsen-v2 .tefsen-text-social .global-search input{
+  height:43px!important;border-radius:99px!important;
+  border:1px solid var(--social-border)!important;background:var(--social-surface)!important;
+  color:var(--social-text)!important;box-shadow:none!important;
+}
+html.tefsen-v2 .tefsen-text-social .global-search input::placeholder{color:var(--social-muted)!important}
+html.tefsen-v2 .tefsen-text-social .global-search .search-icon{color:var(--social-muted)!important}
+html.tefsen-v2 .tefsen-text-social .topbar-actions{gap:5px;padding:0 16px!important}
+html.tefsen-v2 .tefsen-text-social .topbar-actions .icon-button,
+html.tefsen-v2 .tefsen-text-social .top-avatar{
+  background:transparent!important;border:0!important;color:var(--social-text)!important;box-shadow:none!important;border-radius:50%!important;
+}
+html.tefsen-v2 .tefsen-text-social .top-avatar .avatar{width:34px;height:34px;border-radius:50%}
+html.tefsen-v2 .tefsen-text-social .social-search-trigger{display:none!important}
+html.tefsen-v2 .tefsen-text-social .sidebar{
+  width:var(--left)!important;top:var(--top)!important;padding:27px 15px!important;
+  background:var(--social-bg)!important;border-right:1px solid var(--social-border)!important;
+}
+html.tefsen-v2 .tefsen-text-social .nav-list{gap:9px}
+html.tefsen-v2 .tefsen-text-social .nav-item{
+  border:0!important;background:transparent!important;color:var(--social-muted)!important;min-height:52px;
+  font-weight:620;border-radius:13px!important;font-size:16px;padding:0 18px;
+}
+html.tefsen-v2 .tefsen-text-social .nav-item:hover,
+html.tefsen-v2 .tefsen-text-social .nav-item.active{
+  background:var(--social-raised)!important;color:var(--social-text)!important;
+}
+html.tefsen-v2 .tefsen-text-social .social-sidebar-compose,
+html.tefsen-v2 .tefsen-text-social .social-write{
+  border:1px solid var(--social-text);color:var(--social-inverse);background:var(--social-text);
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  font-weight:720;cursor:pointer;border-radius:99px;min-height:46px;padding:0 22px;
+}
+html.tefsen-v2 .tefsen-text-social .social-sidebar-compose{width:100%;margin-top:24px}
+html.tefsen-v2 .tefsen-text-social .social-sidebar-footer{display:grid;gap:7px;border-top:1px solid var(--social-border);margin-top:35px;padding:18px 14px}
+html.tefsen-v2 .tefsen-text-social .social-sidebar-footer a,
+html.tefsen-v2 .tefsen-text-social .social-sidebar-footer button{border:0;background:none;text-align:left;color:var(--social-muted);font-size:13px;padding:7px 0;display:flex;align-items:center;gap:9px;cursor:pointer}
+html.tefsen-v2 .tefsen-text-social .main-area{padding-top:var(--top)!important;padding-left:var(--left)!important;padding-right:0!important;min-width:0!important;background:var(--social-bg)!important}
+html.tefsen-v2 .tefsen-text-social .content-wrap,
+html.tefsen-v2 .tefsen-text-social .content-wrap.wide{
+  width:min(100%,800px)!important;padding:0 24px 140px!important;
+  margin:0 auto!important;
+}
+html.tefsen-v2 .tefsen-text-social .social-feed-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:36px 6px 28px}
+html.tefsen-v2 .tefsen-text-social .social-feed-header small{font-size:10px;font-weight:750;letter-spacing:.17em;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-feed-header h1{font-size:clamp(26px,3.3vw,38px);line-height:1.14;letter-spacing:-.045em;margin:10px 0 12px;font-weight:760;color:var(--social-text)}
+html.tefsen-v2 .tefsen-text-social .social-feed-header p{margin:0;color:var(--social-muted);font-size:14px}
+html.tefsen-v2 .tefsen-text-social .social-write{white-space:nowrap;min-height:44px}
+html.tefsen-v2 .tefsen-text-social .social-feed-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 0 12px}
+html.tefsen-v2 .tefsen-text-social .social-feed-tabs button{min-height:48px;border:1px solid var(--social-border);border-radius:13px;background:transparent;color:var(--social-muted);text-align:left;padding:0 20px;cursor:pointer}
+html.tefsen-v2 .tefsen-text-social .social-feed-tabs button.active{background:var(--social-raised);color:var(--social-text);border-color:var(--social-raised)}
+html.tefsen-v2 .tefsen-text-social .social-feed-list{display:grid;gap:0}
+html.tefsen-v2 .tefsen-text-social .social-post-card{
+  background:transparent!important;border:0!important;border-bottom:1px solid var(--social-border)!important;
+  border-radius:0!important;box-shadow:none!important;padding:22px 5px 20px!important;color:var(--social-text)!important;
+}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-head{display:flex;align-items:center;gap:12px}
+html.tefsen-v2 .tefsen-text-social .social-avatar-button{border:0;background:none;padding:0;cursor:pointer;display:grid;place-items:center}
+html.tefsen-v2 .tefsen-text-social .social-avatar-button .avatar{width:46px;height:46px;border-radius:50%}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-head-main b{font-size:15px;color:var(--social-text)}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-head-main small{font-size:12px;color:var(--social-muted)!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-menu{color:var(--social-text)!important;background:none!important;border:0!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-body{margin:19px 0 4px;color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-body h3{font-size:17px!important;font-weight:700;line-height:1.45;color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-body p{font-size:15px!important;line-height:1.75;color:var(--social-text)!important;white-space:pre-wrap;overflow-wrap:anywhere}
+html.tefsen-v2 .tefsen-text-social .social-read-more{color:var(--social-muted);font-size:13px;display:inline-block;margin-top:9px}
+html.tefsen-v2 .tefsen-text-social .social-post-card .post-actions{grid-template-columns:repeat(4,minmax(0,1fr))!important;border:0!important;gap:6px;margin:14px 0 0;padding:0!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .action-btn{
+  display:flex!important;align-items:center;justify-content:center;gap:7px;
+  background:transparent!important;color:var(--social-muted)!important;border:0!important;box-shadow:none!important;padding:12px 0!important;border-radius:10px!important;
+}
+html.tefsen-v2 .tefsen-text-social .social-post-card .action-btn:hover{background:var(--social-raised)!important;color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .action-btn.active{color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .social-post-card .action-count{color:inherit!important}
+html.tefsen-v2 .tefsen-text-social .social-notifications,
+html.tefsen-v2 .tefsen-text-social .social-profile{min-height:calc(100dvh - 200px)}
+html.tefsen-v2 .tefsen-text-social .social-section-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:1px solid var(--social-border);padding:25px 4px}
+html.tefsen-v2 .tefsen-text-social .social-section-heading h1{font-size:28px;font-weight:740;letter-spacing:-.035em;margin:0;color:var(--social-text)!important}
+html.tefsen-v2 .tefsen-text-social .social-empty{text-align:center;padding:76px 18px 66px;color:var(--social-muted);margin:0 auto;max-width:570px}
+html.tefsen-v2 .tefsen-text-social .social-empty>div:first-child{color:var(--social-text);margin-bottom:15px}
+html.tefsen-v2 .tefsen-text-social .social-empty h2{font-size:24px;font-weight:700;letter-spacing:-.025em;color:var(--social-text);margin:0 0 12px}
+html.tefsen-v2 .tefsen-text-social .social-empty p{font-size:15px;line-height:1.7;margin:0 0 20px;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-secondary,
+html.tefsen-v2 .tefsen-text-social .social-icon-button{
+  min-height:40px;border:1px solid var(--social-border);border-radius:999px;
+  background:transparent;color:var(--social-text);padding:0 17px;cursor:pointer;font-size:13px;
+}
+html.tefsen-v2 .tefsen-text-social .social-icon-button{width:42px;display:grid;place-items:center;padding:0}
+html.tefsen-v2 .tefsen-text-social .social-alert-empty{padding-top:100px}
+html.tefsen-v2 .tefsen-text-social .social-notification-list{display:grid;gap:8px;margin-top:22px}
+html.tefsen-v2 .tefsen-text-social .social-notification-list .notification21-item{
+  background:var(--social-surface)!important;color:var(--social-text)!important;
+  border:1px solid var(--social-border)!important;box-shadow:none!important;border-radius:15px!important;
+}
+html.tefsen-v2 .tefsen-text-social .social-profile-overview{padding:26px 6px 30px;border-bottom:1px solid var(--social-border)}
+html.tefsen-v2 .tefsen-text-social .social-profile-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+html.tefsen-v2 .tefsen-text-social .social-profile-top>.avatar{width:104px;height:104px;border-radius:50%}
+html.tefsen-v2 .tefsen-text-social .social-profile h2{font-size:30px;letter-spacing:-.035em;color:var(--social-text);margin:0 0 9px;display:flex;align-items:center;gap:8px}
+html.tefsen-v2 .tefsen-text-social .social-handle{font-size:14px;color:var(--social-muted);margin:0 0 18px}
+html.tefsen-v2 .tefsen-text-social .social-bio{color:var(--social-text);margin:0 0 18px;line-height:1.6}
+html.tefsen-v2 .tefsen-text-social .social-school{color:var(--social-muted);font-size:14px}
+html.tefsen-v2 .tefsen-text-social .social-profile-stats{display:flex;gap:22px;color:var(--social-muted);align-items:center;font-size:14px;margin-top:28px}
+html.tefsen-v2 .tefsen-text-social .social-profile-stats strong{color:var(--social-text);font-size:18px;margin-right:4px}
+html.tefsen-v2 .tefsen-text-social .social-verification{font-size:13px;margin-top:16px;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-plus-card{width:100%;margin:24px 0;display:flex;gap:17px;align-items:center;text-align:left;background:transparent;color:var(--social-text);border:1px solid var(--social-border);border-radius:16px;padding:20px;cursor:pointer}
+html.tefsen-v2 .tefsen-text-social .social-plus-card span:nth-child(2){display:grid;gap:5px;flex:1}
+html.tefsen-v2 .tefsen-text-social .social-plus-card small{font-size:13px;color:var(--social-muted)}
+html.tefsen-v2 .tefsen-text-social .social-profile-tabs{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--social-border);padding:12px 8px;color:var(--social-text);font-weight:700}
+html.tefsen-v2 .tefsen-text-social .social-profile-tabs button{border:0;background:transparent;color:var(--social-muted);cursor:pointer}
+html.tefsen-v2 .social-compose-modal{background:#101010!important;color:#f7f7f7!important;border:1px solid #303030!important;max-width:610px!important}
+html.tefsen-v2 .social-compose-modal .modal-head{background:#101010!important;color:#fff!important;border-bottom:1px solid #303030!important}
+html.tefsen-v2 .social-compose-modal .modal-body{padding:22px!important}
+html.tefsen-v2 .social-compose-modal .social-compose-author{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+html.tefsen-v2 .social-compose-modal .social-compose-author .avatar{width:46px;height:46px;border-radius:50%}
+html.tefsen-v2 .social-compose-modal .social-compose-author b{font-size:15px;display:block}
+html.tefsen-v2 .social-compose-modal .social-compose-author small{display:block;color:#aaa;margin-top:4px}
+html.tefsen-v2 .social-compose-modal .social-compose-text{min-height:230px!important;resize:vertical;padding:20px!important;border:1px solid #666!important;border-radius:20px!important;background:#141414!important;color:#fff!important;font-size:16px;line-height:1.7}
+html.tefsen-v2 .social-compose-modal .social-compose-text::placeholder{color:#999}
+html.tefsen-v2 .social-compose-modal .social-compose-meta{display:flex;justify-content:space-between;color:#aaa;font-size:12px;gap:12px}
+html.tefsen-v2 .social-compose-modal .social-compose-rule{color:#aaa;font-size:13px;line-height:1.6;margin:18px 0}
+html.tefsen-v2 .social-compose-modal .social-compose-submit{display:flex;justify-content:space-between;align-items:center;gap:14px}
+html.tefsen-v2 .social-compose-modal .social-compose-submit>span{font-size:12px;color:#aaa}
+html.tefsen-v2 .social-compose-modal .btn-primary{background:#fff!important;color:#111!important;border-color:#fff!important;border-radius:99px!important;padding:11px 25px!important;box-shadow:none!important}
+html.tefsen-v2 .tefsen-text-social .mobile-bottom{display:none}
+@media(max-width:900px){
+  html.tefsen-v2 .tefsen-text-social{--left:0px;--top:72px}
+  html.tefsen-v2 .tefsen-text-social .topbar{grid-template-columns:minmax(0,1fr) auto!important}
+  html.tefsen-v2 .tefsen-text-social .topbar-brand{padding:0 15px;font-size:23px}
+  html.tefsen-v2 .tefsen-text-social .topbar-center{display:none!important}
+  html.tefsen-v2 .tefsen-text-social .topbar-actions{padding:0 10px!important}
+  html.tefsen-v2 .tefsen-text-social .social-search-trigger{display:grid!important}
+  html.tefsen-v2 .tefsen-text-social .top-avatar{display:none!important}
+  html.tefsen-v2 .tefsen-text-social .sidebar{display:none!important}
+  html.tefsen-v2 .tefsen-text-social .main-area{padding:var(--top) 0 85px!important}
+  html.tefsen-v2 .tefsen-text-social .content-wrap,
+  html.tefsen-v2 .tefsen-text-social .content-wrap.wide{max-width:720px!important;padding:0 17px 100px!important}
+  html.tefsen-v2 .tefsen-text-social .mobile-bottom{
+    display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    position:fixed!important;bottom:0!important;left:0!important;right:0!important;height:calc(70px + env(safe-area-inset-bottom))!important;
+    padding:7px 10px calc(7px + env(safe-area-inset-bottom))!important;z-index:50!important;
+    background:var(--social-bg)!important;border-top:1px solid var(--social-border)!important;box-shadow:none!important;
+  }
+  html.tefsen-v2 .tefsen-text-social .mobile-bottom button{position:relative;min-width:0;border:0!important;background:transparent!important;color:var(--social-muted)!important;border-radius:12px!important;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:5px!important;cursor:pointer}
+  html.tefsen-v2 .tefsen-text-social .mobile-bottom button.active{color:var(--social-text)!important}
+  html.tefsen-v2 .tefsen-text-social .mobile-bottom button span{font-size:11px;font-weight:600}
+  html.tefsen-v2 .tefsen-text-social .mobile-bottom button small{position:absolute;top:0;right:20%;border-radius:99px;background:#f3acaf;color:#1a1010;font-size:10px;padding:0 5px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-header{padding:25px 5px 23px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-header h1{font-size:28px}
+  html.tefsen-v2 .tefsen-text-social .social-write{min-width:44px;width:44px;padding:0}
+  html.tefsen-v2 .tefsen-text-social .social-write span{display:none}
+  html.tefsen-v2 .tefsen-text-social .social-post-card{padding:20px 5px!important}
+}
+@media(max-width:520px){
+  html.tefsen-v2 .tefsen-text-social .social-feed-header small{font-size:9px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-header h1{font-size:24px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-header p{font-size:12px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-tabs{gap:8px}
+  html.tefsen-v2 .tefsen-text-social .social-feed-tabs button{min-height:43px;padding:0 16px}
+  html.tefsen-v2 .tefsen-text-social .social-post-card .post-body p{font-size:14px!important}
+  html.tefsen-v2 .tefsen-text-social .social-section-heading h1{font-size:24px}
+  html.tefsen-v2 .tefsen-text-social .social-empty{padding:60px 15px}
+}
+@media(prefers-reduced-motion:reduce){
+  html.tefsen-v2 .tefsen-text-social *,html.tefsen-v2 .social-compose-modal *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
