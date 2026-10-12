@@ -1,13 +1,18 @@
 {
-  "name": "Tefsen — Student Opportunities & Journey",
+  "name": "Tefsen — Public Thoughts & Community",
   "short_name": "Tefsen",
-  "description": "Discover student opportunities, prepare applications, track your journey, and learn from student outcomes.",
+  "description": "Share public text posts, reply to others and learn through community experiences.",
   "start_url": "./#/home",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#041316",
-  "theme_color": "#041316",
+  "background_color": "#080808",
+  "theme_color": "#080808",
   "icons": [
-    {"src": "assets/favicon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable"}
+    {
+      "src": "assets/favicon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
