@@ -25,8 +25,8 @@ source and complete production Firestore/Storage rules are not available here.
   `{action:'upload',imageBase64}` or `{action:'remove'}`. No client
   direct-Storage photo uploads/deletions. If the callable is absent, the
   operation fails closed instead of bypassing the quota.
-- Existing owner profile fields remain editable. Current UI lacks an advanced
-  movable crop preview; image is currently optimized into a centered square JPEG.
+- Existing owner profile fields remain editable. The profile editor now provides drag, arrow-key positioning, zoom,
+  reset and optimized JPEG output; Android crop parity still needs a device test.
 - The browser shell has a focus/keyboard-aware mobile navigation rule and
   scroll restoration.
 
