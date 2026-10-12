@@ -221,6 +221,9 @@ let currentUserSettings = defaultUserSettings();
 const GOOGLE_PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.tefsen.app';
 const GOOGLE_PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
 let appStarted = false;
+let feedHasLoaded=false;
+let lastRenderedRoute='';
+const scrollByRoute=new Map();
 let activeSearchMode = 'people';
 let activeSearchGeneration = 0;
 let likeHydrationKey = '';
@@ -288,73 +291,49 @@ function humanError(error) {
 }
 
 async function boot() {
-  if (appStarted) return;
-  appStarted = true;
-  root.innerHTML = loadingScreen();
-  try {
-    const env = await initFirebase();
-    setState({ mode: env.mode, initialized: true });
-    stopAuth = observeAuth(env.mode, handleAuthChange);
-  } catch (error) {
+  if(appStarted)return;
+  appStarted=true;
+  root.innerHTML=loadingScreen();
+  try{
+    const env=await initFirebase();
+    if(env.mode==='demo' && window.TEFSEN_FORCE_DEMO_MODE!==true)
+      throw new Error('Production Firebase is unavailable.');
+    setState({mode:env.mode,initialized:true});
+    stopAuth=observeAuth(env.mode,handleAuthChange);
+  }catch(error){
     console.error(error);
-    setState({ mode: 'demo', initialized: true });
-    toast('Firebase could not initialize. Opening preview mode.', 'error');
-    stopAuth = observeAuth('demo', handleAuthChange);
+    appStarted=false;
+    root.innerHTML='<main id="app-main" class="app-error-screen"><div><h1>Tefsen is unavailable</h1><p>Unable to connect to Firebase. Check your internet connection and try again.</p><button class="btn btn-primary" type="button" data-retry-boot>Retry</button></div></main>';
   }
 }
-
 async function handleAuthChange(user) {
-  stopPosts?.(); stopPosts = null;
-  stopComments?.(); stopComments = null;
-  reactionState = { saved: new Set(), liked: new Set() };
-  currentStudentPassport = null;
-  passportOnboardingJustCompleted = false;
-  currentSavedWorkspace = null;
-  savedOpportunityCompareIds = new Set();
-  adminCapability = false;
-  currentAdminOpportunities = [];
-  currentAdminReports = [];
-  adminPreviewRows = [];
-  adminImportSource = '';
-  currentUserSettings = defaultUserSettings({ timeZone: browserTimeZone() });
+  stopPosts?.();stopPosts=null;
+  stopComments?.();stopComments=null;
+  reactionState={saved:new Set(),liked:new Set()};
+  feedHasLoaded=false;
+  adminCapability=false;
+  currentUserSettings=defaultUserSettings({timeZone:browserTimeZone()});
   applyRuntimeSettings(currentUserSettings);
-  setState({ user, profile: null, posts: [], notifications: [], unreadCount: 0 });
-
-  if (!user) {
-    renderAuth('login');
-    return;
+  setState({user,profile:null,posts:[],notifications:[],unreadCount:0});
+  if(!user){renderAuth('login');return;}
+  if(state.mode==='firebase' && user.email && user.emailVerified!==true && !(user.providerData||[]).some(p=>p.providerId==='google.com')){
+    renderEmailConfirmation();return;
   }
-  if (state.mode==='firebase' && user.email && user.emailVerified!==true && !(user.providerData||[]).some(p=>p.providerId==='google.com')) {
-    renderEmailConfirmation();
-    return;
-  }
-
-  root.innerHTML = loadingScreen('Loading your Tefsen space…');
-  try {
-    const [profile, userSettings, reactions, activityNotifications, notificationReadIds] = await Promise.all([
-      getProfile(state.mode, user).catch(() => normalizeUser({ uid: user.uid, fullName: user.displayName || user.email || 'Tefsen User', email: user.email || '' }, user.uid)),
-      getUserSettings(state.mode, user.uid).catch(() => defaultUserSettings({ timeZone: browserTimeZone() })),
-      getReactionIds(state.mode, user.uid).catch(() => ({ saved: new Set(), liked: new Set() })),
-      getNotifications(state.mode, user.uid).catch(() => []),
-      getSyncedNotificationReadIds(state.mode, user.uid).catch(() => getNotificationReadIds(user.uid))
-    ]);
-    currentUserSettings = normalizeUserSettings(userSettings, { timeZone: browserTimeZone() });
-    applyRuntimeSettings(currentUserSettings);
-    const notificationModel = applyNotificationPreferences(buildNotificationCenterModel({
-      activityNotifications,
-      journeys:[],
-      opportunities:[],
-      readIds:notificationReadIds,
-      now:new Date()
-    }), currentUserSettings);
-    reactionState = reactions;
-    setState({
-      profile,
-      notifications:notificationModel.items,
-      unreadCount:notificationModel.unreadCount
-    });
-    adminCapability = await getAdminCapability(state.mode, user, profile).catch(() => false);
+  root.innerHTML=loadingScreen('Opening your Tefsen space…');
+  const userId=user.uid;
+  try{
+    const profile=await getProfile(state.mode,user).catch(()=>normalizeUser({
+      uid:user.uid,fullName:user.displayName||user.email||'Tefsen User',email:user.email||''
+    },user.uid));
+    if(state.user?.uid!==userId)return;
+    setState({profile});
+    // Auth + essential profile are sufficient to render. Other account calls
+    // are optional and must never leave the app on a perpetual spinner.
+    if(!location.hash||location.hash==='#/')go('home');
+    else renderRoute();
     stopPosts = subscribePosts(state.mode, posts => {
+      if(state.user?.uid!==userId)return;
+      feedHasLoaded=true;
       setState({ posts });
       renderRoute();
 
@@ -369,7 +348,7 @@ async function handleAuthChange(user) {
         likeHydrationAt = now;
         const run = ++likeHydrationRun;
         void hydratePostLikeState(state.mode, state.user.uid, visibleIds).then(result => {
-          if (run !== likeHydrationRun) return;
+          if (run !== likeHydrationRun || state.user?.uid!==userId) return;
           reactionState.liked = result.liked;
           let changed = false;
           for (const post of posts) {
@@ -382,15 +361,35 @@ async function handleAuthChange(user) {
         }).catch(error => console.warn('Like-state reconciliation failed:', error));
       }
     }, error => {
+      if(state.user?.uid!==userId)return;
+      feedHasLoaded=true;
       console.error(error);
       toast('Could not load posts. Check Firestore rules and collection mapping.', 'error');
       renderRoute();
     });
-    if (!location.hash || location.hash === '#/') go('home'); else renderRoute();
-  } catch (error) {
+
+    void Promise.all([
+      getUserSettings(state.mode,userId).catch(()=>defaultUserSettings({timeZone:browserTimeZone()})),
+      getReactionIds(state.mode,userId).catch(()=>({saved:new Set(),liked:new Set()})),
+      getNotifications(state.mode,userId).catch(()=>[]),
+      getSyncedNotificationReadIds(state.mode,userId).catch(()=>getNotificationReadIds(userId)),
+      getAdminCapability(state.mode,user,profile).catch(()=>false)
+    ]).then(([settings,reactions,activityNotifications,readIds,isAdmin])=>{
+      if(state.user?.uid!==userId)return;
+      currentUserSettings=normalizeUserSettings(settings,{timeZone:browserTimeZone()});
+      applyRuntimeSettings(currentUserSettings);
+      reactionState.saved=reactions.saved;
+      adminCapability=isAdmin===true;
+      const model=applyNotificationPreferences(buildNotificationCenterModel({
+        activityNotifications,journeys:[],opportunities:[],readIds,now:new Date()
+      }),currentUserSettings);
+      setState({notifications:model.items,unreadCount:model.unreadCount});
+      renderRoute();
+    }).catch(error=>console.warn('Optional account data unavailable',error));
+  }catch(error){
+    if(state.user?.uid!==userId)return;
     console.error(error);
-    toast(humanError(error), 'error');
-    renderRoute();
+    root.innerHTML='<main id="app-main" class="app-error-screen"><div><h1>Unable to open your account</h1><p>Account information could not load.</p><button class="btn btn-primary" type="button" data-retry-profile>Try again</button></div></main>';
   }
 }
 
@@ -452,6 +451,9 @@ function demoBanner() {
 
 function renderShell(content, options = {}) {
   const route = currentRoute();
+  const targetScroll=lastRenderedRoute===route?window.scrollY:(scrollByRoute.get(route)||0);
+  if(lastRenderedRoute && lastRenderedRoute!==route)scrollByRoute.set(lastRenderedRoute,window.scrollY);
+  lastRenderedRoute=route;
   const p = state.profile || {};
   root.innerHTML = `
     <div class="app-shell tefsen-text-social">
@@ -499,6 +501,7 @@ function renderShell(content, options = {}) {
     </div>
     ${state.ui.profileMenu ? renderProfileDropdown() : ''}`;
   normalizeRenderedAccessibility(root);
+  requestAnimationFrame(()=>{if(currentRoute()===route)window.scrollTo(0,targetScroll);});
 }
 function navButton(id, label, ic, route) {
   const active = id === route || (id === 'saved' && state.activeFeedTab === 'saved' && route === 'home');
@@ -634,7 +637,9 @@ async function renderHome() {
   const following = state.activeFeedTab === 'following';
   const cards = following
     ? `<section class="social-empty"><div>${icon('users',28)}</div><h2>Following feed on Android</h2><p>Posts from people you follow are not synced into the Web following feed yet. Choose Everyone to read public posts here.</p><button class="social-secondary" type="button" data-feed-tab="recent">See everyone</button></section>`
-    : state.posts.length
+    : !feedHasLoaded
+      ? `<section class="social-empty" role="status"><h2>Loading public posts…</h2></section>`
+      : state.posts.length
       ? getFilteredPosts(state.activeFeedTab === 'trending' ? 'trending' : 'recent').map(postCard).join('')
       : `<section class="social-empty"><div>${icon('message',28)}</div><h2>Nothing posted yet</h2><p>Share the first idea, question or useful experience with everyone.</p><button class="social-secondary" type="button" data-action="compose">Write a post</button></section>`;
   const content = `${demoBanner()}<section class="social-feed-header"><div><small>PUBLIC THOUGHTS. REAL PEOPLE.</small><h1>Everyone has something worth sharing.</h1><p>Thoughts, lessons and experiences — in words.</p></div><button type="button" class="social-write" data-action="compose">${icon('edit',18)}<span>Write a post</span></button></section>
@@ -4237,6 +4242,8 @@ async function handleClick(event) {
   if (event.target.closest('[data-demo-login]')) { await signIn(state.mode,'demo@tefsen.com','demo123'); return; }
   if (event.target.closest('[data-demo-info]')) { event.preventDefault(); openDemoInfo(); return; }
   if (event.target.closest('[data-forgot]')) { handleForgot(); return; }
+  if(event.target.closest('[data-retry-boot]')){appStarted=false;await boot();return;}
+  if(event.target.closest('[data-retry-profile]')){if(state.user)await handleAuthChange(state.user);return;}
   const confirmation=event.target.closest('[data-verify-check]');
   if(confirmation) {
     await withButton(confirmation,async()=>{
