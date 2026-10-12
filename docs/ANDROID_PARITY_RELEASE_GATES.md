@@ -100,3 +100,20 @@ Production deployment requires explicit owner approval, matching Android
 backend source, verified security rules/indexes/functions, test evidence and a
 nonproduction preview. Merging this branch into `main` may auto-deploy via
 GitHub Pages, so leave the pull request as draft until all gates pass.
+
+## Latest automated CI review (2026-10-12)
+
+- **Tefsen Web PR checks:** passed, including Node pure-helper tests and source syntax.
+- **Tefsen Web V1 Firebase Security:** FAILED 14 / 374 checks on this branch.
+  The failed assertions include previous app-shell semantics, search/static
+  wording, retired messages/leaderboard navigation, notification startup/
+  preferences, subscription UI and some public-page canonical route tests.
+  This workflow includes older source-contract assertions from the prior Web
+  design. Do not discard them blindly or loosen any Firestore rules to get
+  a green check; compare with the current Android requirements, reconcile
+  accurate new contracts, and rerun the emulator tests before release.
+  Run: https://github.com/jsandresjr/tefsen/actions/runs/38244109806
+
+The presence of these failures is an **explicit release blocker**. This PR
+must remain draft until the owner supplies current Android/backend sources
+and all appropriate checks pass.
