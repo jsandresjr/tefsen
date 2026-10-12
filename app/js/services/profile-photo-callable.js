@@ -1,17 +1,7 @@
 import { firebaseApp } from '../firebase-client.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-functions.js';
 
-export const MAX_PROFILE_SOURCE_BYTES = 5 * 1024 * 1024;
-
-/** Preflight before image decoding. Unknown sizes are not accepted. */
-export function validatePhotoSource(file) {
-  const allowed=new Set(['image/jpeg','image/png','image/webp']);
-  if (!file || !Number.isFinite(file.size) || file.size < 1 || file.size > MAX_PROFILE_SOURCE_BYTES)
-    throw new Error('Select an image smaller than or equal to 5 MB.');
-  if (!allowed.has(String(file.type||'').toLowerCase()))
-    throw new Error('Choose a JPG, PNG or WebP image.');
-  return true;
-}
+import { validatePhotoSource } from './profile-photo-policy.mjs';
 
 function readDataUrl(blob) {
   return new Promise((resolve,reject)=>{
